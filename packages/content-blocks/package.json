@@ -1,0 +1,31 @@
+{
+  "name": "@torny/content-blocks",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "echo ok",
+    "clean": "rm -rf .turbo"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "dependencies": {
+    "@torny/design-tokens": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.3",
+    "vue": "^3.5.13",
+    "vue-tsc": "^2.1.10"
+  }
+}

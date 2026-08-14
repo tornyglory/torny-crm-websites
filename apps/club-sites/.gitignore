@@ -1,0 +1,11 @@
+node_modules/
+.nuxt/
+.output/
+.nitro/
+.wrangler/
+.turbo/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+.dev.vars

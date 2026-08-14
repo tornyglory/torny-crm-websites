@@ -1,0 +1,26 @@
+{
+  "name": "@torny/design-tokens",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "sideEffects": ["*.css"],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./tokens.css": "./src/tokens.css",
+    "./fonts.css": "./src/fonts.css"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "echo ok",
+    "clean": "rm -rf .turbo"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.3"
+  }
+}

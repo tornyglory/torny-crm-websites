@@ -1,0 +1,94 @@
+:root {
+  /* Neutrals */
+  --color-ground: #FFFFFF;
+  --color-white: #FFFFFF;
+  --color-surface: #F5F5F2;
+  --color-hairline: #E7E7E1;
+  --color-ink: #0A0A0B;
+  --color-graphite: #2E2E33;
+  --color-fog: #6B6B72;
+  --color-mute: #A3A39B;
+
+  /* Accent */
+  --color-accent: #2563EB;
+  --color-accent-ink: #FFFFFF;
+  --color-accent-strong: #1E40AF;
+  --color-accent-soft: #DBEAFE;
+
+  /* Sky palette (used on public sites) */
+  --color-sky-1: #87CEEB;
+  --color-sky-2: #98D8E8;
+  --color-sky-3: #B0E0E6;
+  --color-sky-4: #E0F6FF;
+
+  /* Feature */
+  --color-feature-mint: #16A34A;
+  --color-feature-tangerine: #EA580C;
+  --color-feature-violet: #7C3AED;
+
+  /* Semantic */
+  --color-success: #2E5D3C;
+  --color-danger: #DC2F3B;
+
+  /* Type */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --text-label: 11px;
+  --text-caption: 12px;
+  --text-body-sm: 14px;
+  --text-body: 16px;
+  --text-title-sm: 20px;
+  --text-title: 24px;
+  --text-display-sm: 32px;
+  --text-display: 44px;
+  --text-display-lg: 56px;
+  --text-hero: 88px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --track-tight: -0.02em;
+  --track-normal: 0em;
+  --track-label: 0.08em;
+
+  --leading-tight: 100%;
+  --leading-heading: 105%;
+  --leading-body: 150%;
+
+  /* Layout */
+  --bp-sm: 390px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1440px;
+  --container-mobile: 390px;
+  --container-content: 1200px;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radii */
+  --radius-none: 0px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(10, 10, 11, 0.04);
+  --shadow-md: 0 4px 12px rgba(10, 10, 11, 0.06);
+  --shadow-lg: 0 12px 32px rgba(10, 10, 11, 0.10);
+}

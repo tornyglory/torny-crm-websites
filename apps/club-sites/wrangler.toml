@@ -1,0 +1,17 @@
+name = "torny-club-sites"
+compatibility_date = "2024-10-01"
+pages_build_output_dir = ".output/public"
+
+# ── KV: host → clubId mapping for fast edge tenant resolution ─────────────
+# Create with: wrangler kv namespace create TORNY_KV
+# Paste the id below and the CRM writes to it whenever a club adds a domain.
+# [[kv_namespaces]]
+# binding = "TORNY_KV"
+# id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# ── Secrets (set via `wrangler pages secret put ...` or the Pages dashboard) ──
+# NUXT_TORNY_API_BASE_URL
+# NUXT_REVALIDATE_SECRET
+
+[vars]
+NUXT_PUBLIC_SITE_URL = "https://sites.torny.club"

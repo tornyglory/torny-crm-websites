@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
-import { useAuthStore, isPlatformAdminEmail } from '@/stores/auth'
+import { auth as authApi, AuthError } from '@torny/api-client'
+import { useAuthStore, fromApiUser } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
 
 const router = useRouter()
@@ -16,48 +17,47 @@ const showPassword = ref(false)
 const submitting = ref(false)
 const error = ref<string | null>(null)
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL
+
+function landingFor(user: ReturnType<typeof fromApiUser>): string {
+  if (user.isPlatformAdmin) return '/admin'
+  switch (user.role) {
+    case 'owner':
+    case 'admin':
+    case 'committee':
+      return '/crm/dashboard'
+    case 'player':
+    default:
+      // No CRM access yet — send them to the claim flow. Will become the
+      // majority case for CRM sign-ins until M3 populates clubs[].
+      return '/claim'
+  }
+}
+
 async function submit(e: Event) {
   e.preventDefault()
   submitting.value = true
   error.value = null
   try {
-    // TODO: wire to real /auth/login endpoint via useApi().
-    // For scaffold, drop a fake session so we can walk the UI. If the email
-    // matches a known platform admin, route to the Torny admin dashboard.
-    const platformAdmin = isPlatformAdminEmail(email.value)
-    if (platformAdmin) {
-      auth.setSession('dev-token', {
-        id: 'u_platform',
-        firstName: 'Neville',
-        lastName: 'Rodda',
-        email: email.value,
-        role: 'platform',
-      })
-      club.clear()
-      const redirect = (route.query.redirect as string | undefined) ?? '/admin'
-      await router.push(redirect)
-      return
-    }
+    const { token, user: apiUser } = await authApi.login(email.value.trim(), password.value, {
+      baseURL: API_BASE,
+    })
+    const user = fromApiUser(apiUser)
+    auth.setSession(token, user)
+    // We don't know a club yet in M1 (clubs[] is always empty). Clear any
+    // stale mock club so the shell doesn't pretend they belong somewhere.
+    club.clear()
 
-    auth.setSession('dev-token', {
-      id: 'u_dev',
-      firstName: 'Grace',
-      lastName: 'Whittaker',
-      email: email.value,
-      role: 'owner',
-    })
-    club.setCurrent({
-      id: 'c_naenae',
-      slug: 'naenae',
-      name: 'Naenae Bowling',
-      domain: null,
-      brandPrimary: null,
-      logoUrl: null,
-    })
-    const redirect = (route.query.redirect as string | undefined) ?? '/crm/dashboard'
+    const redirect = (route.query.redirect as string | undefined) ?? landingFor(user)
     await router.push(redirect)
   } catch (err) {
-    error.value = (err as Error).message
+    if (err instanceof AuthError && err.status === 401) {
+      error.value = 'Email or password is incorrect.'
+    } else if (err instanceof AuthError) {
+      error.value = err.message
+    } else {
+      error.value = (err as Error).message
+    }
   } finally {
     submitting.value = false
   }
@@ -119,7 +119,7 @@ async function submit(e: Event) {
         <label class="field">
           <div class="field__row">
             <span class="field__label">Password</span>
-            <a href="#" class="field__link">Forgot password</a>
+            <RouterLink to="/forgot-password" class="field__link">Forgot password</RouterLink>
           </div>
           <div class="field__with-icon">
             <input
@@ -165,8 +165,8 @@ async function submit(e: Event) {
         <p v-if="error" class="alert">{{ error }}</p>
 
         <div class="card__foot">
-          <span class="card__foot-muted">No club yet?</span>
-          <RouterLink to="/claim" class="card__foot-link">
+          <span class="card__foot-muted">No account yet?</span>
+          <RouterLink to="/register" class="card__foot-link">
             Register your club
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
               <path d="M5 12h14" />

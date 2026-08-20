@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
-import { requireOwner, requireOwnerAndOnboarded, requirePlatformAdmin } from './guards'
+import { requireAuthOrRegister, requireOwner, requireOwnerAndOnboarded, requirePlatformAdmin } from './guards'
 
 const CrmShell = () => import('@/layouts/CrmShell.vue')
 const AuthShell = () => import('@/layouts/AuthShell.vue')
@@ -12,7 +12,10 @@ const routes: RouteRecordRaw[] = [
     component: AuthShell,
     children: [
       { path: '', name: 'sign-in', component: () => import('@/views/auth/SignInView.vue') },
-      { path: 'claim', name: 'claim-club', component: () => import('@/views/auth/ClaimClubView.vue') },
+      { path: 'register', name: 'register', component: () => import('@/views/auth/RegisterView.vue') },
+      { path: 'forgot-password', name: 'forgot-password', component: () => import('@/views/auth/ForgotPasswordView.vue') },
+      { path: 'reset-password', name: 'reset-password', component: () => import('@/views/auth/ResetPasswordView.vue') },
+      { path: 'claim', name: 'claim-club', component: () => import('@/views/auth/ClaimClubView.vue'), beforeEnter: requireAuthOrRegister },
       { path: 'forbidden', name: 'forbidden', component: () => import('@/views/auth/ForbiddenView.vue') },
     ],
   },

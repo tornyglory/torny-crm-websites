@@ -10,6 +10,17 @@ export const requireAuth: NavigationGuard = (to) => {
   return true
 }
 
+// Same as requireAuth, but bounces to /register instead of /sign-in. Used on
+// the claim wizard — someone arriving there without an account probably wants
+// to make one, not sign in.
+export const requireAuthOrRegister: NavigationGuard = (to) => {
+  const auth = useAuthStore()
+  if (!auth.isAuthenticated) {
+    return { name: 'register', query: { redirect: to.fullPath } }
+  }
+  return true
+}
+
 export const requireOwner: NavigationGuard = (to) => {
   const auth = useAuthStore()
   if (!auth.isAuthenticated) {

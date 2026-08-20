@@ -26,12 +26,26 @@ export const requireOwnerAndOnboarded: NavigationGuard = (to) => {
   if (!auth.isAuthenticated) {
     return { name: 'sign-in', query: { redirect: to.fullPath } }
   }
+  if (auth.isPlatformAdmin) {
+    return { name: 'admin-dashboard' }
+  }
   if (!auth.canManageClub) {
     return { name: 'forbidden' }
   }
   const onboarding = useOnboardingStore()
   if (!onboarding.completed) {
     return { name: 'onboarding-welcome' }
+  }
+  return true
+}
+
+export const requirePlatformAdmin: NavigationGuard = (to) => {
+  const auth = useAuthStore()
+  if (!auth.isAuthenticated) {
+    return { name: 'sign-in', query: { redirect: to.fullPath } }
+  }
+  if (!auth.isPlatformAdmin) {
+    return { name: 'forbidden' }
   }
   return true
 }

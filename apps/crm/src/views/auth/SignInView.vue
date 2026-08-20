@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore, isPlatformAdminEmail } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
 
 const router = useRouter()
@@ -22,7 +22,23 @@ async function submit(e: Event) {
   error.value = null
   try {
     // TODO: wire to real /auth/login endpoint via useApi().
-    // For scaffold, drop a fake owner session so we can walk the UI.
+    // For scaffold, drop a fake session so we can walk the UI. If the email
+    // matches a known platform admin, route to the Torny admin dashboard.
+    const platformAdmin = isPlatformAdminEmail(email.value)
+    if (platformAdmin) {
+      auth.setSession('dev-token', {
+        id: 'u_platform',
+        firstName: 'Neville',
+        lastName: 'Rodda',
+        email: email.value,
+        role: 'platform',
+      })
+      club.clear()
+      const redirect = (route.query.redirect as string | undefined) ?? '/admin'
+      await router.push(redirect)
+      return
+    }
+
     auth.setSession('dev-token', {
       id: 'u_dev',
       firstName: 'Grace',

@@ -1,9 +1,10 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
-import { requireOwner, requireOwnerAndOnboarded } from './guards'
+import { requireOwner, requireOwnerAndOnboarded, requirePlatformAdmin } from './guards'
 
 const CrmShell = () => import('@/layouts/CrmShell.vue')
 const AuthShell = () => import('@/layouts/AuthShell.vue')
 const OnboardingShell = () => import('@/layouts/OnboardingShell.vue')
+const AdminShell = () => import('@/layouts/AdminShell.vue')
 
 const routes: RouteRecordRaw[] = [
   {
@@ -13,6 +14,18 @@ const routes: RouteRecordRaw[] = [
       { path: '', name: 'sign-in', component: () => import('@/views/auth/SignInView.vue') },
       { path: 'claim', name: 'claim-club', component: () => import('@/views/auth/ClaimClubView.vue') },
       { path: 'forbidden', name: 'forbidden', component: () => import('@/views/auth/ForbiddenView.vue') },
+    ],
+  },
+  {
+    path: '/admin',
+    component: AdminShell,
+    beforeEnter: requirePlatformAdmin,
+    children: [
+      { path: '', name: 'admin-dashboard', component: () => import('@/views/admin/AdminDashboardView.vue') },
+      { path: 'claims', name: 'admin-claims', component: () => import('@/views/admin/AdminClaimsView.vue') },
+      { path: 'clubs', name: 'admin-clubs', component: () => import('@/views/admin/AdminClubsView.vue') },
+      { path: 'members', name: 'admin-members', component: () => import('@/views/admin/AdminMembersView.vue') },
+      { path: 'users', name: 'admin-users', component: () => import('@/views/admin/AdminUsersView.vue') },
     ],
   },
   {

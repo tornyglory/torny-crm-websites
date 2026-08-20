@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
-export type Role = 'owner' | 'admin' | 'committee' | 'player'
+export type Role = 'platform' | 'owner' | 'admin' | 'committee' | 'player'
 
 interface AuthUser {
   id: string
@@ -9,6 +9,16 @@ interface AuthUser {
   lastName: string
   email: string
   role: Role
+}
+
+// Anyone signing in with one of these emails becomes a platform admin in the
+// mock. The real backend will drive this off a users table flag.
+const PLATFORM_ADMIN_EMAILS = new Set([
+  'nev@torny.co',
+])
+
+export function isPlatformAdminEmail(email: string): boolean {
+  return PLATFORM_ADMIN_EMAILS.has(email.toLowerCase().trim())
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -23,6 +33,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!token.value)
   const role = computed(() => user.value?.role ?? null)
   const canManageClub = computed(() => role.value === 'owner' || role.value === 'admin')
+  const isPlatformAdmin = computed(() => role.value === 'platform')
 
   function setSession(nextToken: string, nextUser: AuthUser) {
     token.value = nextToken
@@ -38,5 +49,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('torny.user')
   }
 
-  return { token, user, isAuthenticated, role, canManageClub, setSession, clearSession }
+  return { token, user, isAuthenticated, role, canManageClub, isPlatformAdmin, setSession, clearSession }
 })

@@ -723,7 +723,8 @@ function sendInvite() {
 
 /* ── Membership types ────────────────────────────────────────── */
 .member-controls { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin: 16px 0 20px; }
-.field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); margin-bottom: 8px; display: block; }
+.field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); display: block; }
+.member-controls .field__label { margin-bottom: 8px; }
 .segmented { display: inline-flex; padding: 4px; background: var(--color-surface); border-radius: 999px; }
 .segmented button { padding: 8px 16px; background: transparent; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-fog); cursor: pointer; }
 .segmented button.is-on { background: #fff; color: var(--color-ink); font-weight: 600; box-shadow: var(--shadow-sm); }
@@ -771,9 +772,10 @@ function sendInvite() {
 
 /* ── Brand ───────────────────────────────────────────────────── */
 .brand-grid { display: grid; grid-template-columns: 1fr 260px; gap: 12px; margin-top: 16px; }
-.brand-card { padding: 18px 20px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 14px; }
-.brand-card--preview { display: flex; flex-direction: column; gap: 10px; }
-.logo { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+.brand-card { padding: 20px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 14px; display: flex; flex-direction: column; gap: 12px; }
+.brand-card--preview { display: flex; flex-direction: column; gap: 12px; }
+.brand-grid + .brand-card { margin-top: 12px; }
+.logo { display: flex; align-items: center; gap: 14px; }
 .logo__drop { width: 72px; height: 72px; border-radius: 14px; background: #fff; border: 1px dashed var(--color-hairline); display: inline-flex; align-items: center; justify-content: center; color: var(--color-mute); cursor: pointer; flex-shrink: 0; }
 .logo__drop:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .logo__body { flex: 1; min-width: 0; }
@@ -781,12 +783,12 @@ function sendInvite() {
 .logo__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 3px; }
 .logo__btn { margin-top: 8px; padding: 7px 12px; background: var(--color-ink); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
 .logo__btn:hover { background: var(--color-graphite); }
-.preview { height: 78px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; width: 100%; gap: 10px; border: 1px solid; margin-top: 4px; }
+.preview { height: 78px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; width: 100%; gap: 10px; border: 1px solid; }
 .preview__mark { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; }
 .preview__mark-dot { width: 8px; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.7); }
 .preview__wordmark { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--color-ink); }
 
-.accent-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 12px; }
+.accent-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .accent-sub { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
 .hex { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 8px; flex-shrink: 0; }
 .hex__swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0, 0, 0, 0.06); }

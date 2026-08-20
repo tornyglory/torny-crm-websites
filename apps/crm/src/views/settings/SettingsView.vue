@@ -11,7 +11,6 @@ type SectionKey =
   | 'club'
   | 'membership'
   | 'hours'
-  | 'brand'
   | 'billing'
   | 'team'
   | 'security'
@@ -19,10 +18,9 @@ type SectionKey =
   | 'danger'
 
 const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
-  { key: 'club', label: 'Club profile', hint: 'Name, legal, address, contact.' },
+  { key: 'club', label: 'Club & brand', hint: 'Logo, colour, tagline, contact, address.' },
   { key: 'membership', label: 'Membership types', hint: 'Tiers, pricing, cadence.' },
   { key: 'hours', label: 'Opening hours', hint: 'Weekly schedule for the clubrooms.' },
-  { key: 'brand', label: 'Brand', hint: 'Logo, accent colour, tagline.' },
   { key: 'billing', label: 'Billing', hint: 'Torny subscription + invoices.' },
   { key: 'team', label: 'Team access', hint: 'Who else can manage the CRM.' },
   { key: 'security', label: 'Security', hint: 'Sign-in, sessions, 2FA.' },
@@ -239,6 +237,81 @@ function sendInvite() {
       <section class="pane">
         <!-- Club profile -->
         <template v-if="active === 'club'">
+          <!-- Brand — sits above the profile fields as the visual anchor -->
+          <div class="card">
+            <div class="card__head">
+              <div>
+                <div class="card__eyebrow">Visual identity</div>
+                <h2 class="card__title">Brand</h2>
+              </div>
+              <button class="btn btn--outline" @click="saveBrand">Save changes</button>
+            </div>
+            <p class="card__sub">A logo, an accent colour, and a short tagline. Rendered across the CRM, the public site, and Torny apps.</p>
+
+            <div class="brand-grid">
+              <div class="brand-card">
+                <div class="field__label">Logo</div>
+                <div class="logo">
+                  <div class="logo__drop" @click="openLogoPicker" role="button" tabindex="0">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M12 5v14M5 12h14" /></svg>
+                  </div>
+                  <div class="logo__body">
+                    <div class="logo__title">{{ onboarding.data.logoName ? 'Change logo' : 'Upload logo' }}</div>
+                    <div class="logo__hint">{{ onboarding.data.logoName || 'PNG or SVG · square works best · at least 400×400' }}</div>
+                    <button type="button" class="logo__btn" @click="openLogoPicker">Choose file</button>
+                    <input ref="logoFileInput" type="file" accept="image/png,image/svg+xml" hidden @change="onLogoFile" />
+                  </div>
+                </div>
+              </div>
+              <div class="brand-card brand-card--preview">
+                <div class="field__label">Preview</div>
+                <div class="preview" :style="{ background: onboarding.data.accentColour + '14', borderColor: onboarding.data.accentColour + '33' }">
+                  <span class="preview__mark" :style="{ background: onboarding.data.accentColour }">
+                    <span class="preview__mark-dot" />
+                  </span>
+                  <span class="preview__wordmark">{{ brandWordmark }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="brand-card">
+              <div class="accent-head">
+                <div>
+                  <div class="field__label">Accent colour</div>
+                  <div class="accent-sub">Used on buttons, links, and highlights across your site.</div>
+                </div>
+                <div class="hex">
+                  <span class="hex__swatch" :style="{ background: onboarding.data.accentColour }" />
+                  <span class="hex__code">{{ onboarding.data.accentColour.toUpperCase() }}</span>
+                </div>
+              </div>
+              <div class="swatches">
+                <button
+                  v-for="c in brandSwatches"
+                  :key="c"
+                  type="button"
+                  class="swatch-btn"
+                  :class="{ 'is-on': onboarding.data.accentColour.toLowerCase() === c.toLowerCase() }"
+                  :style="{ background: c, '--ring': c } as any"
+                  @click="onboarding.data.accentColour = c"
+                />
+                <label class="swatch-btn swatch-btn--custom">
+                  <span>#</span>
+                  <input type="color" v-model="onboarding.data.accentColour" />
+                </label>
+              </div>
+            </div>
+
+            <label class="field">
+              <div class="field-head">
+                <span class="field__label">Tagline</span>
+                <span class="field__count">{{ onboarding.data.tagline.length }} / 80</span>
+              </div>
+              <input v-model="onboarding.data.tagline" maxlength="80" class="tagline" placeholder="Wellington's home for social bowls since 1898." />
+              <span class="field__hint">One short line. Appears under your club name on the public site.</span>
+            </label>
+          </div>
+
           <div class="card">
             <div class="card__head">
               <div>
@@ -278,6 +351,7 @@ function sendInvite() {
               </div>
             </div>
           </div>
+
         </template>
 
         <!-- Billing -->
@@ -399,83 +473,6 @@ function sendInvite() {
                 <span v-else class="hour-row__closed">Closed</span>
               </div>
             </div>
-          </div>
-        </template>
-
-        <!-- Brand -->
-        <template v-else-if="active === 'brand'">
-          <div class="card">
-            <div class="card__head">
-              <div>
-                <div class="card__eyebrow">Visual identity</div>
-                <h2 class="card__title">Brand</h2>
-              </div>
-              <button class="btn btn--outline" @click="saveBrand">Save changes</button>
-            </div>
-            <p class="card__sub">A logo, an accent colour, one short tagline. Rendered across the CRM, the public site, and Torny apps.</p>
-
-            <div class="brand-grid">
-              <div class="brand-card">
-                <div class="field__label">Logo</div>
-                <div class="logo">
-                  <div class="logo__drop" @click="openLogoPicker" role="button" tabindex="0">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M12 5v14M5 12h14" /></svg>
-                  </div>
-                  <div class="logo__body">
-                    <div class="logo__title">{{ onboarding.data.logoName ? 'Change logo' : 'Upload logo' }}</div>
-                    <div class="logo__hint">{{ onboarding.data.logoName || 'PNG or SVG · square works best · at least 400×400' }}</div>
-                    <button type="button" class="logo__btn" @click="openLogoPicker">Choose file</button>
-                    <input ref="logoFileInput" type="file" accept="image/png,image/svg+xml" hidden @change="onLogoFile" />
-                  </div>
-                </div>
-              </div>
-              <div class="brand-card brand-card--preview">
-                <div class="field__label">Preview</div>
-                <div class="preview" :style="{ background: onboarding.data.accentColour + '14', borderColor: onboarding.data.accentColour + '33' }">
-                  <span class="preview__mark" :style="{ background: onboarding.data.accentColour }">
-                    <span class="preview__mark-dot" />
-                  </span>
-                  <span class="preview__wordmark">{{ brandWordmark }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="brand-card">
-              <div class="accent-head">
-                <div>
-                  <div class="field__label">Accent colour</div>
-                  <div class="accent-sub">Used on buttons, links, and highlights across your site.</div>
-                </div>
-                <div class="hex">
-                  <span class="hex__swatch" :style="{ background: onboarding.data.accentColour }" />
-                  <span class="hex__code">{{ onboarding.data.accentColour.toUpperCase() }}</span>
-                </div>
-              </div>
-              <div class="swatches">
-                <button
-                  v-for="c in brandSwatches"
-                  :key="c"
-                  type="button"
-                  class="swatch-btn"
-                  :class="{ 'is-on': onboarding.data.accentColour.toLowerCase() === c.toLowerCase() }"
-                  :style="{ background: c, '--ring': c } as any"
-                  @click="onboarding.data.accentColour = c"
-                />
-                <label class="swatch-btn swatch-btn--custom">
-                  <span>#</span>
-                  <input type="color" v-model="onboarding.data.accentColour" />
-                </label>
-              </div>
-            </div>
-
-            <label class="field">
-              <div class="field-head">
-                <span class="field__label">Tagline</span>
-                <span class="field__count">{{ onboarding.data.tagline.length }} / 80</span>
-              </div>
-              <input v-model="onboarding.data.tagline" maxlength="80" class="tagline" placeholder="Wellington's home for social bowls since 1898." />
-              <span class="field__hint">One short line. Appears under your club name on the public site.</span>
-            </label>
           </div>
         </template>
 

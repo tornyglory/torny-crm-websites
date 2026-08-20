@@ -13,3 +13,17 @@ export type { DirectoryClub, ClubSearchParams, ClubSearchResult } from './resour
 export * as auth from './resources/auth'
 export { AuthError } from './resources/auth'
 export type { AuthUser, LoginResponse, RegisterInput, Role, UserClub } from './resources/auth'
+export * as claims from './resources/claims'
+export type {
+  ClaimStatus,
+  Sport,
+  RejectionCode,
+  MyClaim,
+  AdminClaim,
+  SubmitClaimInput,
+  SubmitClaimResponse,
+  ApproveClaimResponse,
+  RejectClaimResponse,
+} from './resources/claims'
+export { SAM_BASE, CRM_BASE } from './config'
+export { ApiError, authedFetch, TOKEN_STORAGE_KEY } from './http'

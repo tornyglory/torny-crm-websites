@@ -1,23 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { RouterLink } from 'vue-router'
-import { directory, type DirectoryClub } from '@torny/api-client'
+import { RouterLink, useRouter } from 'vue-router'
+import { directory, claims as claimsApi, ApiError, type DirectoryClub, type MyClaim } from '@torny/api-client'
+import { useAuthStore } from '@/stores/auth'
+
+const router = useRouter()
+const auth = useAuthStore()
 
 type Step = 1 | 2 | 3
-
-// Cached shape of a submitted claim. Persists in localStorage so refresh /
-// return-visit lands the user back on the "pending review" state. Mirrors the
-// GET /claims/mine response shape (brief 04 §2) — swap-in when M4 lands.
-interface PendingClaim {
-  clubId: number
-  clubName: string
-  region: string
-  role: string
-  evidence: string
-  submittedAt: string
-}
-
-const PENDING_KEY = 'torny.pendingClaim'
 
 const step = ref<Step>(1)
 const query = ref('')
@@ -32,7 +22,8 @@ const roleAtClub = ref('')
 const evidence = ref('')
 const submitting = ref(false)
 const submitError = ref<string | null>(null)
-const pending = ref<PendingClaim | null>(null)
+const pending = ref<MyClaim | null>(null)
+const loadingMine = ref(true)
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let abortCtrl: AbortController | null = null
@@ -90,31 +81,60 @@ async function submitClaim(e: Event) {
   submitting.value = true
   submitError.value = null
   try {
-    // MOCK — backend endpoint POST /claims lands in M4. See
-    // docs/backend-briefs/04-claim-flow-m4-punchlist.md. When it lands, replace
-    // this block with `await claims.submit({ directoryClubId: selected.value.club_id, role: roleAtClub.value, evidence: evidence.value })`.
-    await new Promise((resolve) => setTimeout(resolve, 600))
-
-    const claim: PendingClaim = {
-      clubId: selected.value.club_id,
-      clubName: selected.value.name,
-      region: [selected.value.region, selected.value.state].filter(Boolean).join(', ') || 'Region unknown',
+    const submitted = await claimsApi.submit({
+      directoryClubId: selected.value.club_id,
       role: roleAtClub.value.trim(),
       evidence: evidence.value.trim(),
-      submittedAt: new Date().toISOString(),
+    })
+    // Populate the pending-review view from the response + selected club data,
+    // then let onMounted-style refresh happen on next visit via /claims/mine.
+    pending.value = {
+      id: submitted.id,
+      directoryClubId: submitted.directoryClubId,
+      clubName: selected.value.name,
+      region: [selected.value.region, selected.value.state].filter(Boolean).join(', ') || 'Region unknown',
+      sport: 'bowls',
+      role: roleAtClub.value.trim(),
+      status: 'pending',
+      submittedAt: submitted.submittedAt,
+      decidedAt: null,
+      rejectionReason: null,
+      rejectionCode: null,
     }
-    localStorage.setItem(PENDING_KEY, JSON.stringify(claim))
-    pending.value = claim
     step.value = 3
   } catch (err) {
-    submitError.value = (err as Error).message
+    if (err instanceof ApiError) {
+      submitError.value = submitErrorCopy(err)
+    } else {
+      submitError.value = (err as Error).message
+    }
   } finally {
     submitting.value = false
   }
 }
 
+function submitErrorCopy(err: ApiError): string {
+  switch (err.code) {
+    case 'claim_pending_exists':
+      return "You've already got a pending claim for this club — check your existing claim below."
+    case 'club_already_claimed':
+      return 'Someone else has already claimed this club. If that\'s a mistake, get in touch with hello@torny.club.'
+    case 'unknown_club':
+      return "That club isn't in the Torny directory. Try another search."
+    case 'evidence_too_short':
+      return 'Give us a bit more evidence — at least 20 characters.'
+    case 'evidence_too_long':
+      return 'Trim the evidence down — keep it under 2000 characters.'
+    case 'role_too_long':
+      return 'Keep your role short (under 120 characters).'
+    case 'rate_limited':
+      return "You've submitted too many claims in the last hour. Give it a minute."
+    default:
+      return err.message
+  }
+}
+
 function submitAnother() {
-  localStorage.removeItem(PENDING_KEY)
   pending.value = null
   selected.value = null
   roleAtClub.value = ''
@@ -122,6 +142,7 @@ function submitAnother() {
   query.value = ''
   results.value = []
   hasSearched.value = false
+  submitError.value = null
   step.value = 1
 }
 
@@ -147,14 +168,33 @@ function waitingLabel(iso: string): string {
   return `${days} days ago`
 }
 
-onMounted(() => {
-  const raw = localStorage.getItem(PENDING_KEY)
-  if (!raw) return
+onMounted(async () => {
+  loadingMine.value = true
   try {
-    pending.value = JSON.parse(raw) as PendingClaim
-    step.value = 3
-  } catch {
-    localStorage.removeItem(PENDING_KEY)
+    const rows = await claimsApi.mine()
+    // If they landed here but a claim was approved since they last visited,
+    // refresh the session (fresh clubs[]) and route to their CRM dashboard.
+    const approved = rows.find((c) => c.status === 'approved')
+    if (approved) {
+      await auth.refresh()
+      router.replace('/crm/dashboard')
+      return
+    }
+    // Pending claim → jump to step 3. Otherwise stay on step 1 (user may want
+    // to submit a fresh claim after a rejection).
+    const p = rows.find((c) => c.status === 'pending')
+    if (p) {
+      pending.value = p
+      step.value = 3
+    }
+  } catch (err) {
+    // 401 means the guard failed; router already handles it. Anything else,
+    // proceed with the empty wizard — user can still try to submit.
+    if (!(err instanceof ApiError) || err.status !== 401) {
+      console.error('Failed to load /claims/mine', err)
+    }
+  } finally {
+    loadingMine.value = false
   }
 })
 

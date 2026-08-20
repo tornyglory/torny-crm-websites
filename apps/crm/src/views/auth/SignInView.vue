@@ -17,7 +17,7 @@ const showPassword = ref(false)
 const submitting = ref(false)
 const error = ref<string | null>(null)
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL
+const API_BASE = import.meta.env.VITE_SAM_BASE_URL
 
 function landingFor(user: ReturnType<typeof fromApiUser>): string {
   if (user.isPlatformAdmin) return '/admin'

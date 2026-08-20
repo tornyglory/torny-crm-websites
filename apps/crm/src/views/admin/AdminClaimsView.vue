@@ -1,30 +1,29 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 import { useClaimsStore, type Claim, type ClaimStatus, type Sport } from '@/stores/claims'
+import { ApiError } from '@torny/api-client'
 import { useToast } from '@/composables/useToast'
 import CrmModal from '@/components/modals/CrmModal.vue'
 
-const auth = useAuthStore()
 const claims = useClaimsStore()
 const toast = useToast()
 const route = useRoute()
 
 const activeTab = ref<ClaimStatus>('pending')
-const expandedId = ref<string | null>(null)
-const rejectingId = ref<string | null>(null)
+const expandedId = ref<number | null>(null)
+const rejectingId = ref<number | null>(null)
 const rejectionReason = ref('')
 const search = ref('')
 
-// Anchor "now" to a fixed point so waiting-days values stay stable in the mock.
-const NOW = new Date('2026-08-20T10:00:00Z')
-
 const filtered = computed<Claim[]>(() => {
   const q = search.value.trim().toLowerCase()
-  const base = claims.claims.filter((c) => c.status === activeTab.value)
+  const src =
+    activeTab.value === 'pending'  ? claims.pending  :
+    activeTab.value === 'approved' ? claims.approved :
+                                     claims.rejected
   const searched = q
-    ? base.filter((c) =>
+    ? src.filter((c) =>
         c.clubName.toLowerCase().includes(q) ||
         c.region.toLowerCase().includes(q) ||
         c.sport.toLowerCase().includes(q) ||
@@ -32,23 +31,17 @@ const filtered = computed<Claim[]>(() => {
         c.claimant.email.toLowerCase().includes(q) ||
         c.claimant.role.toLowerCase().includes(q),
       )
-    : base
+    : src
   return activeTab.value === 'pending'
     ? [...searched].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
     : [...searched].sort((a, b) => (b.decidedAt ?? '').localeCompare(a.decidedAt ?? ''))
-})
-
-const decidedBy = computed(() => {
-  if (!auth.user) return 'Platform admin'
-  return `${auth.user.firstName ?? ''} ${auth.user.lastName ?? ''}`.trim() || auth.user.email
 })
 
 const rejectingClaim = computed(() => claims.claims.find((c) => c.id === rejectingId.value) ?? null)
 
 // ── Urgency + summary ─────────────────────────────────────────
 function daysWaiting(iso: string): number {
-  const d = new Date(iso)
-  return Math.floor((NOW.getTime() - d.getTime()) / (1000 * 60 * 60 * 24))
+  return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24))
 }
 function isUrgent(c: Claim): boolean {
   return c.status === 'pending' && daysWaiting(c.submittedAt) >= 2
@@ -87,14 +80,15 @@ const sportColour: Record<Sport, string> = {
   croquet: 'var(--color-graphite)',
 }
 
-onMounted(() => {
-  const hash = route.hash.replace(/^#/, '')
+onMounted(async () => {
+  await claims.fetchAll()
+  const hash = route.hash.replace(/^#claim-/, '').replace(/^#/, '')
   if (hash) {
     nextTick(() => {
-      const claim = claims.claims.find((c) => c.id === hash)
+      const claim = claims.claims.find((c) => String(c.id) === hash)
       if (claim) {
         activeTab.value = claim.status
-        expandedId.value = hash
+        expandedId.value = claim.id
       }
     })
   }
@@ -108,26 +102,50 @@ function initials(name: string): string {
   return name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 }
 
-function approve(claim: Claim) {
-  // MOCK — real approve hits POST /admin/claims/:id/approve (brief 04 §6.2).
-  // The side effects (create clubs row, create club_members owner, auto-reject
-  // siblings, fire notification) all happen server-side. Frontend just marks
-  // local state and shows a toast until then.
-  claims.approve(claim.id, decidedBy.value)
-  toast.success(`Approved ${claim.clubName}`)
+async function approve(claim: Claim) {
+  try {
+    await claims.approve(claim.id)
+    toast.success(`Approved ${claim.clubName}`)
+  } catch (err) {
+    toast.error(approveErrorCopy(err))
+  }
 }
 
-function openReject(id: string) {
+function approveErrorCopy(err: unknown): string {
+  if (err instanceof ApiError) {
+    switch (err.code) {
+      case 'already_decided':      return 'Someone else already decided this claim. Refreshed the queue.'
+      case 'club_already_claimed': return 'Another admin got there first. Auto-rejected the sibling claim.'
+      case 'forbidden':            return "You don't have permission to approve claims."
+      case 'not_found':            return "This claim no longer exists. Refreshed the queue."
+      default:                     return err.message
+    }
+  }
+  return (err as Error).message
+}
+
+function openReject(id: number) {
   rejectingId.value = id
   rejectionReason.value = ''
 }
-function confirmReject() {
-  if (!rejectingId.value || !rejectionReason.value.trim()) return
-  const claim = claims.claims.find((c) => c.id === rejectingId.value)
-  claims.reject(rejectingId.value, decidedBy.value, rejectionReason.value.trim())
-  if (claim) toast.info(`Rejected ${claim.clubName}`)
-  rejectingId.value = null
-  rejectionReason.value = ''
+async function confirmReject() {
+  if (!rejectingId.value || rejectionReason.value.trim().length < 10) return
+  const id = rejectingId.value
+  const reason = rejectionReason.value.trim()
+  const claim = claims.claims.find((c) => c.id === id)
+  try {
+    await claims.reject(id, reason)
+    if (claim) toast.info(`Rejected ${claim.clubName}`)
+  } catch (err) {
+    if (err instanceof ApiError && err.code === 'already_decided') {
+      toast.info('Someone else already decided this claim.')
+    } else {
+      toast.error(`Reject failed — ${(err as Error).message}`)
+    }
+  } finally {
+    rejectingId.value = null
+    rejectionReason.value = ''
+  }
 }
 function cancelReject() {
   rejectingId.value = null
@@ -219,7 +237,7 @@ const emptyMessage = computed(() => {
       <li
         v-for="c in filtered"
         :key="c.id"
-        :id="c.id"
+        :id="`claim-${c.id}`"
         class="row"
         :class="{ 'is-open': expandedId === c.id, 'is-urgent': isUrgent(c) }"
       >

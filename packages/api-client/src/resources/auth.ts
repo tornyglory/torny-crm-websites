@@ -91,21 +91,17 @@ export async function register(
   input: RegisterInput,
   opts: { baseURL: string; signal?: AbortSignal },
 ): Promise<{ userId?: number }> {
-  // The endpoint on prod (as of 2026-08-20) also accepts a combined `name`
-  // field alongside firstName/lastName — sending both maximises compatibility
-  // while the backend team confirms the canonical shape. See brief 03 §2.
-  const name = `${input.firstName.trim()} ${input.lastName.trim()}`.trim()
   const res = await fetch(`${opts.baseURL}/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...input, name, account_type: 'player' }),
+    body: JSON.stringify(input),
     signal: opts.signal,
   })
   const json = await readJson<AuthErrorBody & { userId?: number }>(res)
   if (!res.ok || json.status === 'error') {
     // 409 = duplicate email today; M2 will make this a generic 201. Treat the
-    // same as success from the UI's perspective (see brief 03 §Errors) so the
-    // move to M2 doesn't require a client change.
+    // same as success from the UI's perspective (see brief 08 §What's still
+    // coming) so the M2 move requires no client change.
     if (res.status === 409) return {}
     throw new AuthError(res.status, json.message ?? 'Registration failed', json.code)
   }

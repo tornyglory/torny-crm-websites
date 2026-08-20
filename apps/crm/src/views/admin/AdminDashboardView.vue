@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useClaimsStore } from '@/stores/claims'
@@ -19,6 +19,11 @@ const firstName = computed(() => auth.user?.firstName || 'there')
 const stats = computed(() => platform.stats)
 const topPending = computed(() => claims.pending.slice(0, 3))
 
+onMounted(() => {
+  // Pull the current pending queue so the "3 top pending" card is live.
+  claims.fetchStatus('pending').catch(() => { /* store surfaces error */ })
+})
+
 const chart = computed(() => {
   const values = stats.value.weeklySignups
   const max = Math.max(...values, 1)
@@ -33,14 +38,13 @@ const actionLabels: Record<string, string> = {
   member_bulk_import: 'Bulk imported members',
 }
 
-const decidedBy = computed(() => {
-  if (!auth.user) return 'Platform admin'
-  return `${auth.user.firstName ?? ''} ${auth.user.lastName ?? ''}`.trim() || auth.user.email
-})
-
-function approve(id: string, name: string) {
-  claims.approve(id, decidedBy.value)
-  toast.success(`Approved ${name}`)
+async function approve(id: number, name: string) {
+  try {
+    await claims.approve(id)
+    toast.success(`Approved ${name}`)
+  } catch (err) {
+    toast.error(`Couldn't approve ${name} — ${(err as Error).message}`)
+  }
 }
 
 function timeAgo(iso: string): string {
@@ -70,7 +74,7 @@ function timeAgo(iso: string): string {
         </p>
       </div>
       <div class="head__actions">
-        <button class="btn-ghost" @click="claims.reset()">Reset demo data</button>
+        <button class="btn-ghost" @click="claims.fetchAll()">Refresh</button>
         <button class="btn-primary" @click="router.push('/admin/claims')">
           Review claims
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M5 12h14M13 5l7 7-7 7" /></svg>
@@ -118,7 +122,7 @@ function timeAgo(iso: string): string {
             </div>
             <div class="claim__actions">
               <button class="btn-approve" @click="approve(c.id, c.clubName)">Approve</button>
-              <RouterLink :to="`/admin/claims#${c.id}`" class="btn-review">Review</RouterLink>
+              <RouterLink :to="`/admin/claims#claim-${c.id}`" class="btn-review">Review</RouterLink>
             </div>
           </li>
         </ul>

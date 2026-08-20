@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { AuthUser as ApiUser, Role, UserClub } from '@torny/api-client'
+import { claims as claimsApi, ApiError, type AuthUser as ApiUser, type Role, type UserClub } from '@torny/api-client'
 
 export type { Role }
 
@@ -77,6 +77,25 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('torny.user')
   }
 
+  /**
+   * Refresh the local user from GET /me. Call after actions that may have
+   * mutated the caller's role/clubs server-side (e.g. their claim was
+   * approved). Silent on 401 — router will handle re-authing.
+   */
+  async function refresh(): Promise<void> {
+    if (!token.value) return
+    try {
+      const apiUser = await claimsApi.me()
+      user.value = fromApiUser(apiUser)
+      localStorage.setItem('torny.user', JSON.stringify(user.value))
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearSession()
+      }
+      // Non-401 errors: leave stored user in place, keep going.
+    }
+  }
+
   return {
     token,
     user,
@@ -87,5 +106,6 @@ export const useAuthStore = defineStore('auth', () => {
     hasClubAccess,
     setSession,
     clearSession,
+    refresh,
   }
 })

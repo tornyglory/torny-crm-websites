@@ -8,7 +8,7 @@ const submitting = ref(false)
 const sent = ref(false)
 const error = ref<string | null>(null)
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL
+const API_BASE = import.meta.env.VITE_SAM_BASE_URL
 const canSubmit = computed(() => /.+@.+\..+/.test(email.value.trim()))
 
 async function submit(e: Event) {

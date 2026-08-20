@@ -9,7 +9,7 @@ export function useApi(): TornyClient {
   const auth = useAuthStore()
   const club = useClubStore()
   client = createTornyClient({
-    baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
+    baseURL: import.meta.env.VITE_CRM_BASE_URL,
     getAuthToken: () => auth.token,
     getClubId: () => club.current?.id ?? null,
   })

@@ -14,7 +14,7 @@ const submitting = ref(false)
 const done = ref(false)
 const error = ref<string | null>(null)
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL
+const API_BASE = import.meta.env.VITE_SAM_BASE_URL
 
 onMounted(() => {
   const t = route.query.token

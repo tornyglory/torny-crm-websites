@@ -3,11 +3,24 @@ import { computed, ref } from 'vue'
 import { RouterView, RouterLink, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
+import NotificationsDropdown from '@/components/NotificationsDropdown.vue'
+import NewMenu from '@/components/NewMenu.vue'
 
 const auth = useAuthStore()
 const club = useClubStore()
 const route = useRoute()
 const moreOpen = ref(false)
+const notifsOpen = ref(false)
+const newMenuOpen = ref(false)
+
+function toggleNotifs() {
+  notifsOpen.value = !notifsOpen.value
+  if (notifsOpen.value) newMenuOpen.value = false
+}
+function toggleNewMenu() {
+  newMenuOpen.value = !newMenuOpen.value
+  if (newMenuOpen.value) notifsOpen.value = false
+}
 
 const initials = computed(() => {
   if (!auth.user) return '—'
@@ -99,7 +112,12 @@ const bottomTabs: TabItem[] = [
             <path d="m7 10 5 5 5-5" />
           </svg>
         </button>
-        <button class="mobile-top__bell" aria-label="Notifications">
+        <button
+          class="mobile-top__bell"
+          data-notif-anchor
+          aria-label="Notifications"
+          @click="toggleNotifs"
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
             <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
             <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
@@ -124,16 +142,35 @@ const bottomTabs: TabItem[] = [
           <span class="topbar__search-kbd">⌘K</span>
         </div>
         <div class="topbar__actions">
-          <button class="topbar__bell" aria-label="Notifications">
+          <button
+            class="topbar__bell"
+            data-notif-anchor
+            aria-label="Notifications"
+            @click="toggleNotifs"
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
               <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
               <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
             </svg>
             <span class="topbar__bell-dot" />
           </button>
-          <button class="topbar__new">+ New</button>
+          <button
+            class="topbar__new"
+            data-newmenu-anchor
+            :aria-expanded="newMenuOpen"
+            @click="toggleNewMenu"
+          >
+            + New
+            <span class="topbar__new-kbd" aria-hidden="true">⌘N</span>
+          </button>
         </div>
       </header>
+
+      <!-- Shared notifications dropdown — mounted at shell level so both
+           the mobile bell and the desktop bell can open it. -->
+      <NotificationsDropdown v-model:open="notifsOpen" />
+      <!-- Quick-create menu anchored to the "+ New" button. -->
+      <NewMenu v-model:open="newMenuOpen" />
 
       <div class="page">
         <RouterView />
@@ -224,7 +261,9 @@ const bottomTabs: TabItem[] = [
 .topbar__actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .topbar__bell { position: relative; width: 34px; height: 34px; background: transparent; border: 1px solid var(--color-hairline); border-radius: 10px; color: var(--color-ink); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .topbar__bell-dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 999px; background: var(--color-danger); border: 2px solid #fff; }
-.topbar__new { padding: 9px 14px; background: var(--color-ink); color: #fff; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
+.topbar__new { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; background: var(--color-ink); color: #fff; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color 0.15s ease; }
+.topbar__new:hover { background: var(--color-graphite); }
+.topbar__new-kbd { font-family: var(--font-mono); font-size: 10px; padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.7); letter-spacing: 0.02em; }
 
 /* -------- Mobile top nav -------- */
 .mobile-top { display: none; padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--color-hairline); align-items: center; gap: 12px; position: sticky; top: 0; z-index: 5; }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import CrmModal from '@/components/modals/CrmModal.vue'
 
 type Category = 'championship' | 'service' | 'milestone' | 'special'
 
@@ -77,6 +78,40 @@ const categoryMeta: Record<Category, { label: string; tint: string }> = {
 function achievementFor(id: string): Achievement | null {
   return achievements.value.find((a) => a.id === id) ?? null
 }
+
+// ── New achievement modal ──────────────────────────────────────
+const createOpen = ref(false)
+const emptyForm = () => ({
+  name: '',
+  category: 'championship' as Category,
+  criteria: '',
+  autoAward: false,
+})
+const form = reactive(emptyForm())
+
+function openCreate() {
+  Object.assign(form, emptyForm())
+  createOpen.value = true
+}
+function closeCreate() { createOpen.value = false }
+
+const canSubmit = computed(
+  () => form.name.trim().length > 0 && form.criteria.trim().length > 0,
+)
+
+function submit() {
+  if (!canSubmit.value) return
+  achievements.value.unshift({
+    id: `ach-${Date.now()}`,
+    name: form.name.trim(),
+    category: form.category,
+    criteria: form.criteria.trim(),
+    issuedCount: 0,
+    activeMembersHolding: 0,
+    isRetired: false,
+  })
+  closeCreate()
+}
 </script>
 
 <template>
@@ -87,8 +122,48 @@ function achievementFor(id: string): Achievement | null {
         <h1 class="ach__heading">Achievements</h1>
         <p class="ach__sub">The trophies, badges, and milestones you recognise. {{ achievements.length }} in the catalogue.</p>
       </div>
-      <button class="btn btn--primary">+ New achievement</button>
+      <button class="btn btn--primary" @click="openCreate">+ New achievement</button>
     </header>
+
+    <CrmModal
+      :open="createOpen"
+      eyebrow="Awards catalogue"
+      title="New achievement"
+      width="md"
+      @close="closeCreate"
+    >
+      <form class="form" @submit.prevent="submit">
+        <label class="field">
+          <span class="field__label">Name</span>
+          <input v-model="form.name" type="text" placeholder="Junior Development" autofocus />
+        </label>
+        <label class="field">
+          <span class="field__label">Category</span>
+          <select v-model="form.category">
+            <option value="championship">Championship</option>
+            <option value="service">Service</option>
+            <option value="milestone">Milestone</option>
+            <option value="special">Special award</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field__label">Criteria</span>
+          <textarea v-model="form.criteria" rows="3" placeholder="What does a player have to do to earn this?" />
+        </label>
+        <div class="switch-row">
+          <div>
+            <div class="switch-row__label">Auto-suggest awardees</div>
+            <div class="switch-row__hint">Torny will flag members who match this criteria as a notification.</div>
+          </div>
+          <button type="button" class="switch" :class="{ 'is-on': form.autoAward }" @click="form.autoAward = !form.autoAward"><span class="switch__knob" /></button>
+        </div>
+      </form>
+
+      <template #footer>
+        <button type="button" class="modal-btn modal-btn--outline" @click="closeCreate">Cancel</button>
+        <button type="button" class="modal-btn modal-btn--primary" :disabled="!canSubmit" @click="submit">Add achievement</button>
+      </template>
+    </CrmModal>
 
     <div class="ach__toolbar">
       <div class="ach__tabs">
@@ -211,6 +286,25 @@ function achievementFor(id: string): Achievement | null {
 .timeline__member { font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; color: var(--color-ink); margin: 2px 0; }
 .timeline__year { color: var(--color-fog); font-weight: 400; }
 .timeline__note { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); margin-top: 2px; }
+
+/* Modal form */
+.form { display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.field input, .field select, .field textarea { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; resize: vertical; }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--color-ink); }
+.switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--color-hairline); }
+.switch-row__label { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
+.switch-row__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
+.switch { width: 40px; height: 24px; padding: 3px; border-radius: 999px; background: var(--color-hairline); border: 0; display: flex; cursor: pointer; flex-shrink: 0; }
+.switch.is-on { background: var(--color-ink); }
+.switch__knob { width: 18px; height: 18px; border-radius: 999px; background: #fff; transition: transform 0.15s ease; }
+.switch.is-on .switch__knob { transform: translateX(16px); }
+.modal-btn { padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; }
+.modal-btn--primary { background: var(--color-ink); color: #fff; }
+.modal-btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
+.modal-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.modal-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 
 @media (max-width: 767px) {
   .ach__toolbar { flex-direction: column; align-items: stretch; }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
+import CrmModal from '@/components/modals/CrmModal.vue'
 
 type ViewMode = 'timeline' | 'table' | 'by-player'
 
@@ -28,7 +29,7 @@ interface Decade {
   cards: WinnerCard[]
 }
 
-const categories: Category[] = [
+const categories = ref<Category[]>([
   { id: 'cc', name: 'Champion of Champions', count: 42 },
   { id: 'ms', name: "Men's Singles", count: 38 },
   { id: 'mp', name: "Men's Pairs", count: 35 },
@@ -40,13 +41,47 @@ const categories: Category[] = [
   { id: 'mx', name: 'Mixed Pairs', count: 6 },
   { id: 'jc', name: 'Junior Champion', count: 2 },
   { id: 'lm', name: 'Life Members', count: 'Draft', status: 'draft' },
-]
+])
 
 const activeCategoryId = ref<string>('cc')
 const viewMode = ref<ViewMode>('timeline')
 const filter = ref('')
 
-const activeCategory = computed(() => categories.find(c => c.id === activeCategoryId.value)!)
+const activeCategory = computed(
+  () => categories.value.find(c => c.id === activeCategoryId.value)!,
+)
+
+// ── New category modal ─────────────────────────────────────────
+const createOpen = ref(false)
+const emptyForm = () => ({
+  name: '',
+  format: 'singles' as 'singles' | 'pairs' | 'triples' | 'fours' | 'other',
+  gender: 'open' as 'mens' | 'ladies' | 'mixed' | 'open',
+  startYear: '',
+  saveAsDraft: true,
+})
+const form = reactive(emptyForm())
+
+function openCreate() {
+  Object.assign(form, emptyForm())
+  createOpen.value = true
+}
+function closeCreate() { createOpen.value = false }
+
+const canSubmit = computed(() => form.name.trim().length > 0)
+
+function submit() {
+  if (!canSubmit.value) return
+  const id = `cat-${Date.now()}`
+  categories.value.push({
+    id,
+    name: form.name.trim(),
+    count: form.saveAsDraft ? 'Draft' : 0,
+    status: form.saveAsDraft ? 'draft' : undefined,
+  })
+  activeCategoryId.value = id
+  closeCreate()
+}
 
 const decades: Decade[] = [
   {
@@ -88,9 +123,61 @@ const decades: Decade[] = [
       </div>
       <div class="hb__actions">
         <button class="btn btn--ghost">Preview site</button>
-        <button class="btn btn--primary">+ Add category</button>
+        <button class="btn btn--primary" @click="openCreate">+ Add category</button>
       </div>
     </header>
+
+    <CrmModal
+      :open="createOpen"
+      eyebrow="Honour board"
+      title="Add a category"
+      width="md"
+      @close="closeCreate"
+    >
+      <form class="form" @submit.prevent="submit">
+        <label class="field">
+          <span class="field__label">Name</span>
+          <input v-model="form.name" type="text" placeholder="Champion of Champions" autofocus />
+        </label>
+        <div class="form__row">
+          <label class="field">
+            <span class="field__label">Format</span>
+            <select v-model="form.format">
+              <option value="singles">Singles</option>
+              <option value="pairs">Pairs</option>
+              <option value="triples">Triples</option>
+              <option value="fours">Fours</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field__label">Grade</span>
+            <select v-model="form.gender">
+              <option value="mens">Men's</option>
+              <option value="ladies">Ladies</option>
+              <option value="mixed">Mixed</option>
+              <option value="open">Open</option>
+            </select>
+          </label>
+        </div>
+        <label class="field">
+          <span class="field__label">First year contested (optional)</span>
+          <input v-model="form.startYear" type="text" placeholder="1968" />
+        </label>
+        <div class="switch-row">
+          <div>
+            <div class="switch-row__label">Save as draft</div>
+            <div class="switch-row__hint">Hidden from the public site until you add entries and publish.</div>
+          </div>
+          <button type="button" class="switch" :class="{ 'is-on': form.saveAsDraft }" @click="form.saveAsDraft = !form.saveAsDraft"><span class="switch__knob" /></button>
+        </div>
+      </form>
+
+      <template #footer>
+        <button type="button" class="modal-btn modal-btn--outline" @click="closeCreate">Cancel</button>
+        <button type="button" class="modal-btn modal-btn--primary" :disabled="!canSubmit" @click="submit">Add category</button>
+      </template>
+    </CrmModal>
 
     <div class="grid">
       <!-- Categories rail -->
@@ -401,4 +488,24 @@ const decades: Decade[] = [
   .year-grid { grid-template-columns: repeat(2, 1fr); }
   .hero__stats { grid-template-columns: 1fr 1fr; }
 }
+
+/* Modal form */
+.form { display: flex; flex-direction: column; gap: 14px; }
+.form__row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.field input, .field select { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; }
+.field input:focus, .field select:focus { outline: none; border-color: var(--color-ink); }
+.switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--color-hairline); }
+.switch-row__label { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
+.switch-row__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
+.switch { width: 40px; height: 24px; padding: 3px; border-radius: 999px; background: var(--color-hairline); border: 0; display: flex; cursor: pointer; flex-shrink: 0; }
+.switch.is-on { background: var(--color-ink); }
+.switch__knob { width: 18px; height: 18px; border-radius: 999px; background: #fff; transition: transform 0.15s ease; }
+.switch.is-on .switch__knob { transform: translateX(16px); }
+.modal-btn { padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; }
+.modal-btn--primary { background: var(--color-ink); color: #fff; }
+.modal-btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
+.modal-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.modal-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 </style>

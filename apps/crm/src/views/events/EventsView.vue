@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
+import CrmModal from '@/components/modals/CrmModal.vue'
 
 type Tab = 'upcoming' | 'past'
 type Format = 'singles' | 'pairs' | 'triples' | 'fours' | 'social'
@@ -44,6 +45,50 @@ const formatColour: Record<Format, string> = {
 function fillPct(e: EventRow): number {
   return Math.min(100, Math.round(((e.rsvpYes + e.rsvpMaybe) / e.capacity) * 100))
 }
+
+// ── New event modal ────────────────────────────────────────────
+const createOpen = ref(false)
+const emptyForm = () => ({
+  title: '',
+  format: 'social' as Format,
+  date: '',
+  startTime: '',
+  endTime: '',
+  location: '',
+  capacity: 24,
+  publishNow: true,
+  syncCalendar: true,
+})
+const form = reactive(emptyForm())
+
+function openCreate() {
+  Object.assign(form, emptyForm())
+  createOpen.value = true
+}
+function closeCreate() { createOpen.value = false }
+
+const canSubmit = computed(
+  () => form.title.trim().length > 0 && form.date.length > 0 && form.startTime.length > 0,
+)
+
+function submit() {
+  if (!canSubmit.value) return
+  const startsAt = `${form.date} · ${form.startTime}`
+  const endsAt = form.endTime ? form.endTime : 'TBC'
+  events.value.unshift({
+    id: `e${Date.now()}`,
+    title: form.title.trim(),
+    format: form.format,
+    startsAt,
+    endsAt,
+    location: form.location.trim() || 'TBC',
+    rsvpYes: 0,
+    rsvpMaybe: 0,
+    capacity: Number(form.capacity) || 0,
+    isPublished: form.publishNow,
+  })
+  closeCreate()
+}
 </script>
 
 <template>
@@ -56,7 +101,7 @@ function fillPct(e: EventRow): number {
       </div>
       <div class="events__actions">
         <button class="btn btn--ghost">View calendar</button>
-        <button class="btn btn--primary">+ New event</button>
+        <button class="btn btn--primary" @click="openCreate">+ New event</button>
       </div>
     </header>
 
@@ -67,6 +112,75 @@ function fillPct(e: EventRow): number {
       </div>
       <input class="search" placeholder="Filter events…" />
     </div>
+
+    <CrmModal
+      :open="createOpen"
+      eyebrow="Events"
+      title="Create an event"
+      width="md"
+      @close="closeCreate"
+    >
+      <form class="form" @submit.prevent="submit">
+        <label class="field">
+          <span class="field__label">Title</span>
+          <input v-model="form.title" type="text" placeholder="Twilight Triples" autofocus />
+        </label>
+        <div class="form__row">
+          <label class="field">
+            <span class="field__label">Format</span>
+            <select v-model="form.format">
+              <option value="singles">Singles</option>
+              <option value="pairs">Pairs</option>
+              <option value="triples">Triples</option>
+              <option value="fours">Fours</option>
+              <option value="social">Social roll-up</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field__label">Capacity</span>
+            <input v-model.number="form.capacity" type="number" min="1" />
+          </label>
+        </div>
+        <div class="form__row form__row--three">
+          <label class="field">
+            <span class="field__label">Date</span>
+            <input v-model="form.date" type="text" placeholder="Sat 13 Sep" />
+          </label>
+          <label class="field">
+            <span class="field__label">Starts</span>
+            <input v-model="form.startTime" type="text" placeholder="9:00 AM" />
+          </label>
+          <label class="field">
+            <span class="field__label">Ends</span>
+            <input v-model="form.endTime" type="text" placeholder="1:00 PM" />
+          </label>
+        </div>
+        <label class="field">
+          <span class="field__label">Location</span>
+          <input v-model="form.location" type="text" placeholder="Green 1 & 2" />
+        </label>
+
+        <div class="switch-row">
+          <div>
+            <div class="switch-row__label">Publish to public site immediately</div>
+            <div class="switch-row__hint">Off = save as draft. You can still add fields.</div>
+          </div>
+          <button type="button" class="switch" :class="{ 'is-on': form.publishNow }" @click="form.publishNow = !form.publishNow"><span class="switch__knob" /></button>
+        </div>
+        <div class="switch-row">
+          <div>
+            <div class="switch-row__label">Sync to club calendar</div>
+            <div class="switch-row__hint">Requires the Google Calendar integration to be connected.</div>
+          </div>
+          <button type="button" class="switch" :class="{ 'is-on': form.syncCalendar }" @click="form.syncCalendar = !form.syncCalendar"><span class="switch__knob" /></button>
+        </div>
+      </form>
+
+      <template #footer>
+        <button type="button" class="modal-btn modal-btn--outline" @click="closeCreate">Cancel</button>
+        <button type="button" class="modal-btn modal-btn--primary" :disabled="!canSubmit" @click="submit">Create event</button>
+      </template>
+    </CrmModal>
 
     <ul class="list">
       <li v-for="e in filtered" :key="e.id" class="event">
@@ -137,6 +251,27 @@ function fillPct(e: EventRow): number {
 .event__actions { flex-shrink: 0; }
 .event__btn { padding: 8px 14px; background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
 
+/* Modal form */
+.form { display: flex; flex-direction: column; gap: 14px; }
+.form__row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form__row--three { grid-template-columns: 1fr 1fr 1fr; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.field input, .field select { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; }
+.field input:focus, .field select:focus { outline: none; border-color: var(--color-ink); }
+.switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--color-hairline); }
+.switch-row__label { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
+.switch-row__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
+.switch { width: 40px; height: 24px; padding: 3px; border-radius: 999px; background: var(--color-hairline); border: 0; display: flex; cursor: pointer; flex-shrink: 0; }
+.switch.is-on { background: var(--color-ink); }
+.switch__knob { width: 18px; height: 18px; border-radius: 999px; background: #fff; transition: transform 0.15s ease; }
+.switch.is-on .switch__knob { transform: translateX(16px); }
+.modal-btn { padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; }
+.modal-btn--primary { background: var(--color-ink); color: #fff; }
+.modal-btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
+.modal-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.modal-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
+
 @media (max-width: 767px) {
   .events__header { flex-direction: column; align-items: stretch; gap: 12px; }
   .events__actions { display: none; }
@@ -154,5 +289,6 @@ function fillPct(e: EventRow): number {
   .event__rsvp-count { font-size: 18px; }
   .event__actions { flex-shrink: 0; }
   .event__btn { padding: 7px 12px; font-size: 11px; }
+  .form__row, .form__row--three { grid-template-columns: 1fr; }
 }
 </style>

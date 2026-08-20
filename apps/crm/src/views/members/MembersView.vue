@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
+import { RouterLink } from 'vue-router'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import { useToast } from '@/composables/useToast'
 
@@ -186,6 +187,10 @@ function submit() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
+        <RouterLink to="/crm/members/import" class="members__btn members__btn--outline">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Import CSV
+        </RouterLink>
         <button class="members__btn" @click="openAdd">+ Add member</button>
       </div>
     </header>
@@ -448,8 +453,10 @@ function submit() {
 .members__heading { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin: 4px 0 6px; color: var(--color-ink); }
 .members__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-fog); margin: 0; }
 .members__actions { display: flex; gap: 10px; align-items: center; }
-.members__btn { padding: 9px 14px; background: var(--color-ink); color: #fff; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.members__btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; background: var(--color-ink); color: #fff; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; text-decoration: none; }
 .members__btn:hover { background: var(--color-graphite); }
+.members__btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
+.members__btn--outline:hover { background: var(--color-surface); }
 
 /* Search field */
 .search { position: relative; display: flex; align-items: center; min-width: 320px; }

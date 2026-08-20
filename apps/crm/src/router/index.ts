@@ -55,6 +55,7 @@ const routes: RouteRecordRaw[] = [
       { path: '', redirect: { name: 'dashboard' } },
       { path: 'dashboard', name: 'dashboard', component: () => import('@/views/dashboard/DashboardView.vue') },
       { path: 'members', name: 'members', component: () => import('@/views/members/MembersView.vue') },
+      { path: 'members/import', name: 'members-import', component: () => import('@/views/members/MembersImportView.vue') },
       { path: 'members/:id', name: 'member-detail', component: () => import('@/views/members/MemberDetailView.vue') },
       { path: 'applications', name: 'applications', component: () => import('@/views/applications/ApplicationsView.vue') },
       { path: 'enquiries', name: 'enquiries', component: () => import('@/views/enquiries/EnquiriesView.vue') },

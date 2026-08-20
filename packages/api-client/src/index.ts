@@ -2,6 +2,22 @@ export { createTornyClient } from './client'
 export type { TornyClient, TornyClientOptions } from './client'
 export * from './types'
 export * as members from './resources/members'
+export type {
+  MemberStatus,
+  MemberRole,
+  MembershipCadence,
+  MembershipTone,
+  MembershipStatus,
+  PaymentStatus,
+  RosterMember,
+  RosterMembership,
+  RosterCounts,
+  RosterPagination,
+  RosterFilters,
+  RosterResponse,
+  PendingInvite,
+  ListRosterParams,
+} from './resources/members'
 export * as events from './resources/events'
 export * as teams from './resources/teams'
 export * as honourBoard from './resources/honour-board'

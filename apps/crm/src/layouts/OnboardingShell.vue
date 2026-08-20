@@ -184,15 +184,36 @@ function saveAndExit() {
 .onboarding__form { flex: 1; min-width: 0; padding: 40px 80px 60px 40px; }
 .onboarding__form--wide { padding: 40px 60px 80px; }
 
+/* Tablet: narrower rail, tighter padding, top-bar keeps everything */
+@media (max-width: 1100px) {
+  .onboarding__top { padding: 18px 28px; }
+  .rail { width: 240px; padding: 32px 24px 32px 28px; gap: 16px; }
+  .onboarding__form { padding: 32px 40px 60px 24px; }
+  .onboarding__form--wide { padding: 32px 40px 60px; }
+}
+
+/* Mobile: rail collapses to horizontal, top-bar simplifies */
 @media (max-width: 900px) {
-  .onboarding__top { padding: 16px 20px; }
-  .onboarding__right-muted, .onboarding__save { display: none; }
+  .onboarding__top { padding: 14px 16px; flex-wrap: wrap; gap: 8px 12px; }
+  .onboarding__tag { display: none; }
+  .onboarding__right { gap: 8px; font-size: 12px; }
+  .onboarding__right-muted { display: none; }
+  .onboarding__right-strong { max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .onboarding__save { padding: 6px 10px; font-size: 11px; }
   .onboarding__body { flex-direction: column; }
-  .rail { width: 100%; padding: 20px 20px 0; position: static; }
-  .rail__steps { flex-direction: row; overflow-x: auto; padding-bottom: 12px; }
-  .rail__step { flex-shrink: 0; }
+  .rail { width: 100%; padding: 16px 16px 0; position: static; gap: 12px; }
+  .rail__hint { margin-top: 0; font-size: 12px; }
+  .rail__eyebrow { display: none; }
+  .rail__steps { flex-direction: row; overflow-x: auto; padding-bottom: 12px; gap: 4px; scrollbar-width: none; }
+  .rail__steps::-webkit-scrollbar { display: none; }
+  .rail__step { flex-shrink: 0; padding: 8px 12px; }
   .rail__label { display: none; }
-  .rail__step.is-active .rail__label { display: inline; }
-  .onboarding__form { padding: 20px; }
+  .rail__step.is-active .rail__label { display: inline; font-size: 13px; }
+  .onboarding__form, .onboarding__form--wide { padding: 20px 16px 40px; }
+}
+
+@media (max-width: 480px) {
+  .onboarding__right-strong { max-width: 48vw; }
+  .onboarding__form, .onboarding__form--wide { padding: 16px 14px 40px; }
 }
 </style>

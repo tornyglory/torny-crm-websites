@@ -130,4 +130,13 @@ function goNext() {
 .counter__ctrl button { width: 32px; height: 32px; border-radius: 8px; background: #fff; border: 1px solid var(--color-hairline); font-family: var(--font-body); font-size: 16px; color: var(--color-ink); cursor: pointer; }
 .counter__ctrl button:hover { background: var(--color-ink); color: #fff; border-color: var(--color-ink); }
 .counter__value { font-family: var(--font-display); font-size: 28px; font-weight: 700; color: var(--color-ink); min-width: 32px; text-align: center; }
+
+@media (max-width: 640px) {
+  .field-row { flex-direction: column; gap: 16px; }
+  .greens { padding: 18px; gap: 16px; }
+  .greens__head { flex-direction: column; align-items: stretch; gap: 6px; }
+  .counters { grid-template-columns: 1fr; gap: 10px; }
+  .counter { padding: 14px; }
+  .counter__value { font-size: 24px; }
+}
 </style>

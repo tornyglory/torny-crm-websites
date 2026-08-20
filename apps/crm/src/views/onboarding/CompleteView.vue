@@ -137,6 +137,15 @@ function enterDashboard() {
 
 @media (max-width: 900px) {
   .cards { grid-template-columns: 1fr; }
-  .hero__title { font-size: 40px; }
+  .hero__title { font-size: clamp(28px, 6vw, 40px); }
+  .hero__lede { font-size: 15px; }
+  .hero__badge { width: 64px; height: 64px; }
+}
+
+@media (max-width: 640px) {
+  .page { gap: 28px; }
+  .card { padding: 20px; }
+  .actions { flex-direction: column; width: 100%; }
+  .actions__primary, .actions__ghost { width: 100%; justify-content: center; text-align: center; padding: 14px 18px; }
 }
 </style>

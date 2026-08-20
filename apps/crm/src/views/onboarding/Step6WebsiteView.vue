@@ -242,4 +242,19 @@ function publish() {
 .preview__desc { font-family: var(--font-body); font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 2px; line-height: 1.5; }
 .preview__desc b { color: #fff; font-weight: 600; }
 .preview__code { font-family: var(--font-mono); color: #fff; font-weight: 600; }
+
+@media (max-width: 640px) {
+  .card { padding: 16px; }
+  .dom-head { flex-direction: column; align-items: stretch; gap: 8px; }
+  .dom { flex-wrap: wrap; padding: 6px 10px; }
+  .dom__prefix { display: none; }
+  .dom__input { min-width: 0; font-size: 14px; padding: 8px 6px; }
+  .dom__suffix { font-size: 12px; padding-right: 4px; }
+  .prow { flex-wrap: wrap; gap: 10px; padding: 12px; }
+  .prow__body { flex-basis: calc(100% - 46px); min-width: 0; }
+  .prow__hint { flex-basis: 100%; margin-left: 46px; margin-top: -4px; }
+  .preview { padding: 14px 16px; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+  .preview__body { flex-basis: calc(100% - 48px); }
+  .pill--dark { flex-basis: 100%; align-self: flex-start; }
+}
 </style>

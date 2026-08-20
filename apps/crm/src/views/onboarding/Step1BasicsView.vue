@@ -80,4 +80,10 @@ function goNext() {
 .segmented { display: inline-flex; padding: 4px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; align-self: flex-start; }
 .segmented button { padding: 10px 16px; background: transparent; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-fog); cursor: pointer; }
 .segmented button.is-on { background: var(--color-ink); color: #fff; font-weight: 600; }
+
+@media (max-width: 640px) {
+  .field-row { flex-direction: column; gap: 16px; }
+  .segmented { align-self: stretch; }
+  .segmented button { flex: 1; padding: 10px 8px; text-align: center; }
+}
 </style>

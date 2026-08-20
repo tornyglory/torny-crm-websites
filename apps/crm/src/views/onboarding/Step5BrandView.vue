@@ -164,7 +164,18 @@ function goNext() {
 .tagline:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .field__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-mute); }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .brand-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .card { padding: 16px; }
+  .logo { flex-direction: column; align-items: stretch; gap: 12px; }
+  .logo__drop { width: 100%; height: 120px; }
+  .swatches { gap: 8px; }
+  .swatch { width: 36px; height: 36px; }
+  .accent-head { flex-direction: column; align-items: stretch; gap: 12px; }
+  .hex { align-self: flex-start; }
+  .preview { height: 70px; }
 }
 </style>

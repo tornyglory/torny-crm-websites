@@ -109,4 +109,15 @@ function goNext() {
 .row__time:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .row__dash { text-align: center; color: var(--color-fog); }
 .row__closed { grid-column: 3 / -1; font-family: var(--font-body); font-size: 13px; color: var(--color-fog); font-style: italic; }
+
+@media (max-width: 720px) {
+  .field-row { flex-direction: column; gap: 16px; }
+  .hours { padding: 18px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 0; }
+  .row__toggle { flex-shrink: 0; }
+  .row__day { flex: 1; min-width: 0; }
+  .row__time { flex: 1; min-width: 90px; max-width: 45%; }
+  .row__dash { color: var(--color-fog); }
+  .row__closed { flex-basis: 100%; text-align: left; margin-left: 52px; }
+}
 </style>

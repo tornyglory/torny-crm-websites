@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import { useToast } from '@/composables/useToast'
+import { useMemberSearch } from '@/composables/useMemberSearch'
+import { useClubStore } from '@/stores/club'
+import type { RosterMember } from '@torny/api-client'
 
 const toast = useToast()
+const clubStore = useClubStore()
 
 type MemberStatus = 'Active' | 'Pending' | 'Lapsed'
 type MemberRole = 'Player' | 'Committee' | 'Coach' | 'Junior' | 'Volunteer'
@@ -30,8 +34,63 @@ interface Member {
   notes?: string
 }
 
-const search = ref('')
+const {
+  query: search,
+  results: apiResults,
+  loading: searchLoading,
+  error: searchError,
+} = useMemberSearch(() => clubStore.current?.id ?? null, {
+  status: 'all',
+  limit: 20,
+  includeInvites: false,
+})
+
 const statusFilter = ref<'all' | MemberStatus>('all')
+const MIN_SEARCH_CHARS = 2
+const isSearching = computed(() => search.value.trim().length >= MIN_SEARCH_CHARS)
+
+// Map the server roster shape to the local view Member so the table /
+// card / detail templates keep working unchanged. Fields not present on
+// the roster payload fall back to safe defaults.
+function rosterToView(r: RosterMember): Member {
+  const roleMap: Record<string, MemberRole> = {
+    player: 'Player',
+    committee: 'Committee',
+    admin: 'Committee',
+    owner: 'Committee',
+  }
+  const statusMap: Record<string, MemberStatus> = {
+    active: 'Active',
+    pending: 'Pending',
+    lapsed: 'Lapsed',
+  }
+  const paymentToDues: Record<string, DuesStatus> = {
+    paid: 'Paid',
+    waived: 'Paid',
+    unpaid: 'Due',
+    partial: 'Due',
+    overdue: 'Overdue',
+  }
+  const typeName = r.membership?.type_name ?? 'Playing member'
+  const membership: MembershipType =
+    typeName === 'Life member' || typeName === 'Playing member' || typeName === 'Social member' || typeName === 'Junior'
+      ? (typeName as MembershipType)
+      : 'Playing member'
+  return {
+    id: String(r.user_id),
+    name: r.name,
+    email: r.email ?? '',
+    phone: r.phone ?? '',
+    role: roleMap[r.club_role] ?? 'Player',
+    status: statusMap[r.computed_status] ?? 'Active',
+    membership,
+    memberNumber: r.member_number != null ? `#${r.member_number}` : '—',
+    joinedAt: '—',
+    duesStatus: paymentToDues[r.membership?.payment_status ?? ''] ?? 'Paid',
+    lastActive: '—',
+    eventsAttended: 0,
+  }
+}
 
 const members = ref<Member[]>([
   { id: '1', name: 'Marcus Tuilagi', email: 'marcus@example.com', phone: '021 555 0101', role: 'Player', status: 'Active', membership: 'Playing member', memberNumber: 'NBC-042', joinedAt: 'Feb 2019', duesStatus: 'Paid', dob: '14 Mar 1988', address: '12 Riverbank Rd, Naenae, Lower Hutt 5011', lastActive: '2h ago', eventsAttended: 24, notes: 'Skips Tuesday nights during rugby season.' },
@@ -44,28 +103,22 @@ const members = ref<Member[]>([
   { id: '8', name: 'Priya Kaur', email: 'priya@example.com', phone: '022 555 0808', role: 'Player', status: 'Pending', membership: 'Playing member', memberNumber: '—', joinedAt: 'Aug 2026', duesStatus: 'Due', duesNote: 'Awaiting first payment', dob: '8 Dec 1993', address: '', lastActive: '—', eventsAttended: 0, notes: 'New applicant, referred by Marcus Tuilagi.' },
 ])
 
+const visibleSource = computed<Member[]>(() =>
+  isSearching.value ? apiResults.value.map(rosterToView) : members.value,
+)
+
 const counts = computed(() => ({
-  all: members.value.length,
-  Active: members.value.filter((m) => m.status === 'Active').length,
-  Pending: members.value.filter((m) => m.status === 'Pending').length,
-  Lapsed: members.value.filter((m) => m.status === 'Lapsed').length,
+  all: visibleSource.value.length,
+  Active: visibleSource.value.filter((m) => m.status === 'Active').length,
+  Pending: visibleSource.value.filter((m) => m.status === 'Pending').length,
+  Lapsed: visibleSource.value.filter((m) => m.status === 'Lapsed').length,
 }))
 
-const filtered = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  return members.value.filter((m) => {
-    if (statusFilter.value !== 'all' && m.status !== statusFilter.value) return false
-    if (!q) return true
-    return (
-      m.name.toLowerCase().includes(q) ||
-      m.email.toLowerCase().includes(q) ||
-      m.phone.toLowerCase().includes(q) ||
-      m.role.toLowerCase().includes(q) ||
-      m.membership.toLowerCase().includes(q) ||
-      m.memberNumber.toLowerCase().includes(q)
-    )
-  })
-})
+const filtered = computed(() =>
+  visibleSource.value.filter(
+    (m) => statusFilter.value === 'all' || m.status === statusFilter.value,
+  ),
+)
 
 function initials(m: Member) {
   return m.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
@@ -257,7 +310,15 @@ function submit() {
           <td><span class="pill" :class="`pill--${statusTone[m.status]}`">{{ m.status }}</span></td>
           <td class="row__chev" aria-hidden="true">›</td>
         </tr>
-        <tr v-if="!filtered.length"><td colspan="6" class="empty">Nothing matches. Try clearing the search or filter.</td></tr>
+        <tr v-if="isSearching && searchLoading && !filtered.length">
+          <td colspan="6" class="empty">Searching…</td>
+        </tr>
+        <tr v-else-if="isSearching && searchError && !filtered.length">
+          <td colspan="6" class="empty">Couldn't search: {{ searchError }}</td>
+        </tr>
+        <tr v-else-if="!filtered.length">
+          <td colspan="6" class="empty">Nothing matches. Try clearing the search or filter.</td>
+        </tr>
       </tbody>
     </table>
 
@@ -278,7 +339,9 @@ function submit() {
           <div class="card__contact">{{ m.email }}</div>
         </div>
       </li>
-      <li v-if="!filtered.length" class="empty">Nothing matches. Try clearing the search or filter.</li>
+      <li v-if="isSearching && searchLoading && !filtered.length" class="empty">Searching…</li>
+      <li v-else-if="isSearching && searchError && !filtered.length" class="empty">Couldn't search: {{ searchError }}</li>
+      <li v-else-if="!filtered.length" class="empty">Nothing matches. Try clearing the search or filter.</li>
     </ul>
 
     <button class="fab" @click="openAdd">+ Add member</button>

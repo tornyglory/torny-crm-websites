@@ -146,4 +146,18 @@ function goNext() {
 
 .add-tier { padding: 12px; background: transparent; border: 1px dashed var(--color-hairline); border-radius: 12px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-accent); cursor: pointer; }
 .add-tier:hover { background: var(--color-accent-soft); }
+
+@media (max-width: 640px) {
+  .cadence-row { flex-direction: column; align-items: stretch; gap: 16px; }
+  .segmented--pill { align-self: stretch; display: flex; }
+  .segmented--pill button { flex: 1; text-align: center; padding: 8px 12px; }
+  .discount { justify-content: space-between; }
+  .discount__label { font-size: 11px; }
+  .tier { flex-wrap: wrap; padding: 14px 16px; gap: 12px; }
+  .tier__body { flex-basis: calc(100% - 60px); }
+  .tier__name { font-size: 15px; }
+  .tier__price { order: 3; flex: 1; padding: 6px 10px; }
+  .tier__price-input { font-size: 18px; width: 50px; }
+  .tier__remove { order: 4; }
+}
 </style>

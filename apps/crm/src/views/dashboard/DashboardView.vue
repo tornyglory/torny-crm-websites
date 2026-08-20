@@ -32,7 +32,7 @@ interface KpiCard {
   footerTone?: 'danger' | 'muted'
   ctaLabel: string
   ctaHref: string
-  icon: 'members' | 'applications' | 'enquiries'
+  icon: 'members' | 'applications' | 'enquiries' | 'dues'
   accent: string
   iconBg: string
   iconColor: string
@@ -42,29 +42,43 @@ const kpis: KpiCard[] = [
   {
     label: 'Membership',
     value: '142',
-    meta: '+4',
+    meta: '+4 this month',
     metaTone: 'good',
-    footer: '8 unpaid · $360 outstanding',
-    footerTone: 'danger',
+    footer: '138 active · 4 pending',
     ctaLabel: 'Chase',
     ctaHref: '/crm/members',
     icon: 'members',
     accent: 'var(--color-feature-mint)',
-    iconBg: 'var(--color-accent-soft)',
-    iconColor: 'var(--color-accent)',
+    iconBg: '#DCFCE7',
+    iconColor: 'var(--color-feature-mint)',
   },
   {
     label: 'Applications',
-    value: '3',
-    meta: 'new to review',
+    value: '5',
+    meta: '2 urgent',
     metaTone: 'warn',
-    footer: 'Sarah Chen waiting 4 days',
+    footer: 'Rachel Beale waiting 5 days',
+    footerTone: 'danger',
     ctaLabel: 'Review',
     ctaHref: '/crm/applications',
     icon: 'applications',
     accent: 'var(--color-accent)',
     iconBg: 'var(--color-accent-soft)',
     iconColor: 'var(--color-accent)',
+  },
+  {
+    label: 'Dues',
+    value: '$360',
+    meta: 'outstanding',
+    metaTone: 'warn',
+    footer: '8 members overdue · 94% collected',
+    footerTone: 'danger',
+    ctaLabel: 'Chase',
+    ctaHref: '/crm/members',
+    icon: 'dues',
+    accent: '#F59E0B',
+    iconBg: '#FEF3C7',
+    iconColor: '#92400E',
   },
   {
     label: 'Enquiries',
@@ -79,6 +93,20 @@ const kpis: KpiCard[] = [
     iconBg: '#FFF1E7',
     iconColor: 'var(--color-feature-tangerine)',
   },
+]
+
+interface AttentionItem {
+  id: string
+  label: string
+  detail: string
+  href: string
+  tone: 'danger' | 'warn' | 'accent'
+}
+
+const attentionItems: AttentionItem[] = [
+  { id: 'a1', label: '2 applications',   detail: 'waiting > 5 days', href: '/crm/applications', tone: 'danger' },
+  { id: 'a2', label: '8 dues overdue',   detail: '$360 outstanding',  href: '/crm/members',      tone: 'warn' },
+  { id: 'a3', label: 'Twilight Triples', detail: 'draft — 3 days out', href: '/crm/events',     tone: 'accent' },
 ]
 
 interface UpcomingEvent {
@@ -165,6 +193,22 @@ const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
       </div>
     </header>
 
+    <!-- Attention strip -->
+    <section v-if="attentionItems.length" class="attention">
+      <div class="attention__label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+          <circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" />
+        </svg>
+        Needs attention
+      </div>
+      <div class="attention__chips">
+        <RouterLink v-for="a in attentionItems" :key="a.id" :to="a.href" class="attention-chip" :class="`attention-chip--${a.tone}`">
+          <span class="attention-chip__label">{{ a.label }}</span>
+          <span class="attention-chip__detail">{{ a.detail }}</span>
+        </RouterLink>
+      </div>
+    </section>
+
     <!-- KPI cards -->
     <section class="kpis">
       <RouterLink v-for="k in kpis" :key="k.label" :to="k.ctaHref" class="kpi">
@@ -174,6 +218,9 @@ const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
           </svg>
           <svg v-else-if="k.icon === 'applications'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" />
+          </svg>
+          <svg v-else-if="k.icon === 'dues'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+            <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
           </svg>
           <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -307,8 +354,24 @@ const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
 .btn--primary { background: var(--color-accent); color: #fff; }
 .btn--ghost { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 
+@media (max-width: 1100px) and (min-width: 768px) {
+  .kpis { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ==================== Attention strip ==================== */
+.attention { display: flex; align-items: center; gap: 16px; padding: 12px 16px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; }
+.attention__label { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-fog); flex-shrink: 0; }
+.attention__chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.attention-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; text-decoration: none; font-family: var(--font-body); font-size: 12px; transition: transform 0.12s ease; border: 1px solid transparent; }
+.attention-chip:hover { transform: translateY(-1px); }
+.attention-chip--danger { background: #FEE2E2; color: #991B1B; border-color: #FECACA; }
+.attention-chip--warn   { background: #FEF3C7; color: #92400E; border-color: #FDE68A; }
+.attention-chip--accent { background: var(--color-accent-soft); color: var(--color-accent); border-color: #BFDBFE; }
+.attention-chip__label  { font-weight: 700; }
+.attention-chip__detail { font-weight: 500; opacity: 0.9; }
+
 /* ==================== KPI cards ==================== */
-.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .kpi {
   display: flex; align-items: center; gap: 16px;
   padding: 16px 20px;
@@ -409,6 +472,9 @@ const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
   .dash__heading { font-size: 38px; letter-spacing: -0.03em; margin: 4px 0 6px; }
   .dash__sub { font-size: 14px; color: var(--color-fog); }
 
+  .attention { flex-direction: column; align-items: stretch; gap: 8px; }
+  .attention__chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+  .attention-chip { flex-shrink: 0; }
   .kpis { grid-template-columns: 1fr; gap: 10px; }
   .kpi { padding: 14px 16px; border-radius: 14px; }
   .kpi__icon { width: 40px; height: 40px; border-radius: 10px; }

@@ -12,44 +12,177 @@ interface EventRow {
   id: string
   title: string
   format: Format
-  startsAt: string
-  endsAt: string
+  startsAt: string     // ISO — source of truth
+  endsAt: string       // ISO
   location: string
+  description?: string
+  host?: string
   rsvpYes: number
   rsvpMaybe: number
+  rsvpNo: number
   capacity: number
   isPublished: boolean
 }
 
+// Anchor "now" at 2026-08-20 to keep the mock data feeling live.
+const NOW = new Date('2026-08-20T10:00:00')
+
 const activeTab = ref<Tab>('upcoming')
+const search = ref('')
+const formatFilter = ref<'all' | Format>('all')
 
 const events = ref<EventRow[]>([
-  { id: 'e1', title: "Champion of Champions — Round 1", format: 'singles', startsAt: 'Sat 22 Aug · 9:00 AM', endsAt: '1:00 PM', location: 'Green 1', rsvpYes: 24, rsvpMaybe: 4, capacity: 32, isPublished: true },
-  { id: 'e2', title: 'Twilight Triples', format: 'triples', startsAt: 'Wed 26 Aug · 5:30 PM', endsAt: '8:30 PM', location: 'Green 2 & 3', rsvpYes: 18, rsvpMaybe: 6, capacity: 24, isPublished: true },
-  { id: 'e3', title: 'Ladies Open Fours', format: 'fours', startsAt: 'Sat 5 Sep · 10:00 AM', endsAt: '4:00 PM', location: 'All greens', rsvpYes: 12, rsvpMaybe: 8, capacity: 40, isPublished: true },
-  { id: 'e4', title: 'Sunday Social Roll-up', format: 'social', startsAt: 'Sun 13 Sep · 1:00 PM', endsAt: '4:00 PM', location: 'Green 1', rsvpYes: 8, rsvpMaybe: 3, capacity: 20, isPublished: false },
-  { id: 'e5', title: 'Mid-week Mens Pairs', format: 'pairs', startsAt: 'Thu 6 Aug · 6:00 PM', endsAt: '9:00 PM', location: 'Green 2', rsvpYes: 22, rsvpMaybe: 0, capacity: 24, isPublished: true },
+  { id: 'e1', title: 'Champion of Champions — Round 1', format: 'singles', startsAt: '2026-08-22T09:00:00', endsAt: '2026-08-22T13:00:00', location: 'Green 1', description: 'Opening round of the annual singles championship. Best-of-21 ends knock-out format. Bring lunch — cafe closed until noon.', host: 'Marcus Tuilagi', rsvpYes: 24, rsvpMaybe: 4, rsvpNo: 2, capacity: 32, isPublished: true },
+  { id: 'e2', title: 'Twilight Triples', format: 'triples', startsAt: '2026-08-26T17:30:00', endsAt: '2026-08-26T20:30:00', location: 'Green 2 & 3', description: 'Casual mid-week triples. Rounds run to 12 ends. BBQ and bar open from 5pm — book a table for after.', host: 'Denise Peters', rsvpYes: 18, rsvpMaybe: 6, rsvpNo: 3, capacity: 24, isPublished: true },
+  { id: 'e3', title: 'Ladies Open Fours', format: 'fours', startsAt: '2026-09-05T10:00:00', endsAt: '2026-09-05T16:00:00', location: 'All greens', description: 'Regional open — teams from Petone, Kelburn, and Naenae. Prize-giving at the clubrooms from 4:30pm.', host: 'Jo Kirk', rsvpYes: 36, rsvpMaybe: 8, rsvpNo: 4, capacity: 40, isPublished: true },
+  { id: 'e4', title: 'Sunday Social Roll-up', format: 'social', startsAt: '2026-09-13T13:00:00', endsAt: '2026-09-13T16:00:00', location: 'Green 1', description: 'Bring anyone — members, non-members, kids. Sausages on. Suggested $5 koha to cover the bar.', host: 'Sione Vagana', rsvpYes: 8, rsvpMaybe: 3, rsvpNo: 1, capacity: 20, isPublished: false },
+  { id: 'e5', title: 'Wellington Regional Pairs', format: 'pairs', startsAt: '2026-09-19T09:00:00', endsAt: '2026-09-19T17:00:00', location: 'Away — Petone Central', description: 'Away round — pairs qualifiers. Meet at the club at 8am, van leaving 8:15 sharp.', host: 'Tama Wong', rsvpYes: 12, rsvpMaybe: 2, rsvpNo: 6, capacity: 16, isPublished: true },
+  { id: 'e6', title: 'Mid-week Mens Pairs', format: 'pairs', startsAt: '2026-08-06T18:00:00', endsAt: '2026-08-06T21:00:00', location: 'Green 2', description: 'Weekly Thursday night pairs. Consistent turnout — winners announced end of season.', rsvpYes: 22, rsvpMaybe: 0, rsvpNo: 0, capacity: 24, isPublished: true },
+  { id: 'e7', title: 'Winter Championship — Semis', format: 'singles', startsAt: '2026-07-25T09:00:00', endsAt: '2026-07-25T15:00:00', location: 'Green 1 & 2', description: 'Semi-finals of the winter singles. Best two through to the final in August.', host: 'Marcus Tuilagi', rsvpYes: 16, rsvpMaybe: 0, rsvpNo: 0, capacity: 16, isPublished: true },
+  { id: 'e8', title: 'Junior Coaching — Term 3 Week 6', format: 'social', startsAt: '2026-08-10T16:00:00', endsAt: '2026-08-10T17:30:00', location: 'Green 3', description: 'Weekly junior session. Under-14 pathway players — bring water and sunscreen.', host: 'Tama Wong', rsvpYes: 11, rsvpMaybe: 2, rsvpNo: 1, capacity: 20, isPublished: true },
 ])
 
-const filtered = computed(() =>
-  activeTab.value === 'upcoming'
-    ? events.value.filter(e => !e.title.startsWith('Mid-week'))
-    : events.value.filter(e => e.title.startsWith('Mid-week')),
-)
+// ── Filtering ─────────────────────────────────────────────────
+const byTab = computed(() => {
+  return events.value.filter((e) => {
+    const start = new Date(e.startsAt)
+    return activeTab.value === 'upcoming' ? start >= NOW : start < NOW
+  })
+})
 
-const formatColour: Record<Format, string> = {
-  singles: 'var(--color-feature-mint)',
-  pairs: 'var(--color-accent)',
-  triples: 'var(--color-feature-tangerine)',
-  fours: 'var(--color-feature-violet)',
-  social: 'var(--color-graphite)',
+const counts = computed(() => {
+  const now = NOW
+  return {
+    upcoming: events.value.filter((e) => new Date(e.startsAt) >= now).length,
+    past:     events.value.filter((e) => new Date(e.startsAt) < now).length,
+  }
+})
+
+const filtered = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  return byTab.value
+    .filter((e) => {
+      if (formatFilter.value !== 'all' && e.format !== formatFilter.value) return false
+      if (!q) return true
+      return (
+        e.title.toLowerCase().includes(q) ||
+        e.location.toLowerCase().includes(q) ||
+        (e.description ?? '').toLowerCase().includes(q) ||
+        (e.host ?? '').toLowerCase().includes(q) ||
+        e.format.toLowerCase().includes(q)
+      )
+    })
+    .sort((a, b) => {
+      const da = new Date(a.startsAt).getTime()
+      const db = new Date(b.startsAt).getTime()
+      return activeTab.value === 'upcoming' ? da - db : db - da
+    })
+})
+
+const formatCounts = computed(() => {
+  const src = byTab.value
+  return {
+    all: src.length,
+    singles: src.filter((e) => e.format === 'singles').length,
+    pairs:   src.filter((e) => e.format === 'pairs').length,
+    triples: src.filter((e) => e.format === 'triples').length,
+    fours:   src.filter((e) => e.format === 'fours').length,
+    social:  src.filter((e) => e.format === 'social').length,
+  }
+})
+
+// ── Display helpers ───────────────────────────────────────────
+const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function formatDate(iso: string) {
+  const d = new Date(iso)
+  return `${DAY_ABBR[d.getDay()]} ${d.getDate()} ${MONTH_ABBR[d.getMonth()]}`
+}
+function formatTime(iso: string) {
+  const d = new Date(iso)
+  let h = d.getHours()
+  const m = d.getMinutes()
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  h = h % 12 || 12
+  return m ? `${h}:${m.toString().padStart(2, '0')} ${ampm}` : `${h}:00 ${ampm}`
+}
+function formatRange(startIso: string, endIso: string) {
+  return `${formatDate(startIso)} · ${formatTime(startIso)} – ${formatTime(endIso)}`
+}
+
+function daysUntil(iso: string) {
+  const d = new Date(iso)
+  const diff = Math.round((d.getTime() - NOW.getTime()) / (1000 * 60 * 60 * 24))
+  return diff
+}
+
+function timeUntilLabel(iso: string) {
+  const days = daysUntil(iso)
+  if (days === 0) return 'today'
+  if (days === 1) return 'tomorrow'
+  if (days > 0 && days < 7) return `in ${days} days`
+  if (days >= 7 && days < 14) return 'next week'
+  if (days >= 14 && days < 28) return `in ${Math.floor(days / 7)} weeks`
+  if (days < 0 && days >= -1) return 'yesterday'
+  if (days < -1 && days >= -7) return `${-days} days ago`
+  if (days < -7 && days >= -14) return 'last week'
+  if (days < -14 && days >= -60) return `${Math.floor(-days / 7)} weeks ago`
+  return formatDate(iso)
 }
 
 function fillPct(e: EventRow): number {
   return Math.min(100, Math.round(((e.rsvpYes + e.rsvpMaybe) / e.capacity) * 100))
 }
 
-// ── New event modal ────────────────────────────────────────────
+const formatColour: Record<Format, string> = {
+  singles: 'var(--color-feature-mint)',
+  pairs:   'var(--color-accent)',
+  triples: 'var(--color-feature-tangerine)',
+  fours:   'var(--color-feature-violet)',
+  social:  'var(--color-graphite)',
+}
+
+const formatLabel: Record<Format, string> = {
+  singles: 'Singles',
+  pairs:   'Pairs',
+  triples: 'Triples',
+  fours:   'Fours',
+  social:  'Social',
+}
+
+function eventBadge(e: EventRow): { label: string; tone: string } | null {
+  if (!e.isPublished) return { label: 'Draft', tone: 'mute' }
+  const pct = (e.rsvpYes + e.rsvpMaybe) / e.capacity
+  if (pct >= 1) return { label: 'Full', tone: 'danger' }
+  if (pct >= 0.75) return { label: 'Nearly full', tone: 'warn' }
+  const d = daysUntil(e.startsAt)
+  if (d >= 0 && d <= 3) return { label: 'This week', tone: 'accent' }
+  return null
+}
+
+// ── Detail modal ──────────────────────────────────────────────
+const detailOpen = ref(false)
+const activeEvent = ref<EventRow | null>(null)
+
+function openDetail(e: EventRow) {
+  activeEvent.value = e
+  detailOpen.value = true
+}
+function closeDetail() {
+  detailOpen.value = false
+}
+function togglePublish() {
+  if (!activeEvent.value) return
+  activeEvent.value.isPublished = !activeEvent.value.isPublished
+  toast.success(activeEvent.value.isPublished ? 'Event published.' : 'Event moved to draft.')
+}
+function editEvent() {
+  if (!activeEvent.value) return
+  toast.info(`Editing ${activeEvent.value.title} — event editor opens next session.`)
+}
+
+// ── New event modal ───────────────────────────────────────────
 const createOpen = ref(false)
 const emptyForm = () => ({
   title: '',
@@ -76,8 +209,9 @@ const canSubmit = computed(
 
 function submit() {
   if (!canSubmit.value) return
-  const startsAt = `${form.date} · ${form.startTime}`
-  const endsAt = form.endTime ? form.endTime : 'TBC'
+  // Best-effort mock ISO — real form would use proper date/time inputs.
+  const startsAt = `${form.date}T${form.startTime}:00`
+  const endsAt = form.endTime ? `${form.date}T${form.endTime}:00` : `${form.date}T${form.startTime}:00`
   events.value.unshift({
     id: `e${Date.now()}`,
     title: form.title.trim(),
@@ -87,20 +221,31 @@ function submit() {
     location: form.location.trim() || 'TBC',
     rsvpYes: 0,
     rsvpMaybe: 0,
+    rsvpNo: 0,
     capacity: Number(form.capacity) || 0,
     isPublished: form.publishNow,
   })
   closeCreate()
+  toast.success(`Created ${form.title.trim()}.`)
 }
+
+const emptyMessage = computed(() => {
+  if (search.value.trim() || formatFilter.value !== 'all') {
+    return { title: 'No matches', hint: 'Try clearing the search or format filter.' }
+  }
+  return activeTab.value === 'upcoming'
+    ? { title: 'No events scheduled', hint: 'Click "+ New event" to get one on the calendar.' }
+    : { title: 'No past events', hint: 'Wrapped-up events land here.' }
+})
 </script>
 
 <template>
   <div class="events">
     <header class="events__header">
       <div>
-        <div class="events__eyebrow">Whats on</div>
+        <div class="events__eyebrow">What's on</div>
         <h1 class="events__heading">Events</h1>
-        <p class="events__sub">{{ events.length }} scheduled — {{ events.filter(e => e.isPublished).length }} live on your site.</p>
+        <p class="events__sub">{{ counts.upcoming }} upcoming · {{ events.filter(e => e.isPublished).length }} live on your site</p>
       </div>
       <div class="events__actions">
         <button class="btn btn--ghost" @click="toast.info('Calendar view opens next session.')">View calendar</button>
@@ -110,12 +255,150 @@ function submit() {
 
     <div class="toolbar">
       <div class="tabs">
-        <button class="tab" :class="{ 'is-active': activeTab === 'upcoming' }" @click="activeTab = 'upcoming'">Upcoming</button>
-        <button class="tab" :class="{ 'is-active': activeTab === 'past' }" @click="activeTab = 'past'">Past</button>
+        <button class="tab" :class="{ 'is-active': activeTab === 'upcoming' }" @click="activeTab = 'upcoming'; formatFilter = 'all'">
+          <span>Upcoming</span>
+          <span class="tab__count">{{ counts.upcoming }}</span>
+        </button>
+        <button class="tab" :class="{ 'is-active': activeTab === 'past' }" @click="activeTab = 'past'; formatFilter = 'all'">
+          <span>Past</span>
+          <span class="tab__count">{{ counts.past }}</span>
+        </button>
       </div>
-      <input class="search" placeholder="Filter events…" />
+      <div class="search">
+        <svg class="search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.35-4.35" />
+        </svg>
+        <input v-model="search" class="search__input" placeholder="Filter events…" />
+        <button v-if="search" class="search__clear" aria-label="Clear search" @click="search = ''">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </div>
     </div>
 
+    <div class="chips">
+      <button
+        v-for="fmt in (['all', 'singles', 'pairs', 'triples', 'fours', 'social'] as const)"
+        :key="fmt"
+        class="chip"
+        :class="{ 'is-active': formatFilter === fmt }"
+        @click="formatFilter = fmt"
+      >
+        <span v-if="fmt !== 'all'" class="chip__dot" :style="{ background: formatColour[fmt] }" />
+        <span class="chip__label">{{ fmt === 'all' ? 'All formats' : formatLabel[fmt] }}</span>
+        <span class="chip__count">{{ formatCounts[fmt] }}</span>
+      </button>
+    </div>
+
+    <ul v-if="filtered.length" class="list">
+      <li v-for="e in filtered" :key="e.id" class="event" tabindex="0" @click="openDetail(e)" @keydown.enter="openDetail(e)">
+        <div class="event__format" :style="{ background: formatColour[e.format] }" />
+        <div class="event__main">
+          <div class="event__title-row">
+            <h3 class="event__title">{{ e.title }}</h3>
+            <span v-if="eventBadge(e)" class="badge" :class="`badge--${eventBadge(e)!.tone}`">{{ eventBadge(e)!.label }}</span>
+          </div>
+          <div class="event__meta">
+            <span>{{ formatRange(e.startsAt, e.endsAt) }}</span>
+            <span class="event__sep">·</span>
+            <span>{{ e.location }}</span>
+            <span class="event__sep">·</span>
+            <span class="event__format-label">{{ formatLabel[e.format] }}</span>
+          </div>
+          <div class="event__when">{{ timeUntilLabel(e.startsAt) }}</div>
+        </div>
+        <div class="event__rsvp">
+          <div class="event__rsvp-count">{{ e.rsvpYes }}<span class="event__rsvp-cap">/{{ e.capacity }}</span></div>
+          <div class="event__rsvp-bar">
+            <div class="event__rsvp-fill" :style="{ width: fillPct(e) + '%' }" />
+          </div>
+          <div class="event__rsvp-label">{{ e.rsvpMaybe }} maybe · {{ e.capacity - e.rsvpYes }} spots</div>
+        </div>
+        <div class="event__chev" aria-hidden="true">›</div>
+      </li>
+    </ul>
+    <div v-else class="empty">
+      <div class="empty__title">{{ emptyMessage.title }}</div>
+      <div class="empty__hint">{{ emptyMessage.hint }}</div>
+      <button v-if="activeTab === 'upcoming' && !search && formatFilter === 'all'" class="btn btn--primary empty__cta" @click="openCreate">+ New event</button>
+    </div>
+
+    <!-- Detail modal -->
+    <CrmModal
+      :open="detailOpen"
+      eyebrow="Event"
+      :title="activeEvent?.title ?? ''"
+      width="lg"
+      @close="closeDetail"
+    >
+      <template v-if="activeEvent">
+        <div class="detail">
+          <div class="detail__hero" :style="{ '--hero-accent': formatColour[activeEvent.format] } as any">
+            <div class="detail__hero-body">
+              <div class="detail__hero-line">{{ formatLabel[activeEvent.format] }} · {{ activeEvent.location }}</div>
+              <div class="detail__hero-meta">{{ formatRange(activeEvent.startsAt, activeEvent.endsAt) }} · {{ timeUntilLabel(activeEvent.startsAt) }}</div>
+            </div>
+            <div class="detail__hero-badges">
+              <span v-if="!activeEvent.isPublished" class="badge badge--mute">Draft</span>
+              <span v-else class="badge badge--ok">Published</span>
+              <span v-if="eventBadge(activeEvent) && eventBadge(activeEvent)!.label !== 'Draft'" class="badge" :class="`badge--${eventBadge(activeEvent)!.tone}`">{{ eventBadge(activeEvent)!.label }}</span>
+            </div>
+          </div>
+
+          <div class="detail__stats">
+            <div class="stat">
+              <div class="stat__value">{{ activeEvent.rsvpYes }}</div>
+              <div class="stat__label">Going</div>
+            </div>
+            <div class="stat">
+              <div class="stat__value">{{ activeEvent.rsvpMaybe }}</div>
+              <div class="stat__label">Maybe</div>
+            </div>
+            <div class="stat">
+              <div class="stat__value">{{ Math.max(0, activeEvent.capacity - activeEvent.rsvpYes) }}</div>
+              <div class="stat__label">Spots left</div>
+            </div>
+            <div class="stat">
+              <div class="stat__value">{{ activeEvent.rsvpNo }}</div>
+              <div class="stat__label">Declined</div>
+            </div>
+          </div>
+
+          <div class="detail__cols">
+            <section class="detail__section">
+              <div class="detail__section-title">Details</div>
+              <dl class="dl">
+                <div class="dl__row"><dt>When</dt><dd>{{ formatRange(activeEvent.startsAt, activeEvent.endsAt) }}</dd></div>
+                <div class="dl__row"><dt>Where</dt><dd>{{ activeEvent.location }}</dd></div>
+                <div class="dl__row"><dt>Format</dt><dd>{{ formatLabel[activeEvent.format] }}</dd></div>
+                <div class="dl__row"><dt>Capacity</dt><dd>{{ activeEvent.capacity }} players</dd></div>
+              </dl>
+            </section>
+
+            <section class="detail__section">
+              <div class="detail__section-title">Organiser</div>
+              <dl class="dl">
+                <div class="dl__row"><dt>Host</dt><dd>{{ activeEvent.host ?? '—' }}</dd></div>
+                <div class="dl__row"><dt>Status</dt><dd>{{ activeEvent.isPublished ? 'Live on public site' : 'Draft (only visible to CRM)' }}</dd></div>
+                <div class="dl__row"><dt>RSVP fill</dt><dd>{{ fillPct(activeEvent) }}%</dd></div>
+              </dl>
+            </section>
+          </div>
+
+          <section v-if="activeEvent.description" class="detail__notes">
+            <div class="detail__section-title">About</div>
+            <p>{{ activeEvent.description }}</p>
+          </section>
+        </div>
+      </template>
+
+      <template #footer>
+        <button type="button" class="modal-btn modal-btn--outline" @click="togglePublish">{{ activeEvent?.isPublished ? 'Move to draft' : 'Publish' }}</button>
+        <button type="button" class="modal-btn modal-btn--primary" @click="editEvent">Edit event</button>
+      </template>
+    </CrmModal>
+
+    <!-- Create modal -->
     <CrmModal
       :open="createOpen"
       eyebrow="Events"
@@ -147,15 +430,15 @@ function submit() {
         <div class="form__row form__row--three">
           <label class="field">
             <span class="field__label">Date</span>
-            <input v-model="form.date" type="text" placeholder="Sat 13 Sep" />
+            <input v-model="form.date" type="date" />
           </label>
           <label class="field">
             <span class="field__label">Starts</span>
-            <input v-model="form.startTime" type="text" placeholder="9:00 AM" />
+            <input v-model="form.startTime" type="time" />
           </label>
           <label class="field">
             <span class="field__label">Ends</span>
-            <input v-model="form.endTime" type="text" placeholder="1:00 PM" />
+            <input v-model="form.endTime" type="time" />
           </label>
         </div>
         <label class="field">
@@ -184,75 +467,107 @@ function submit() {
         <button type="button" class="modal-btn modal-btn--primary" :disabled="!canSubmit" @click="submit">Create event</button>
       </template>
     </CrmModal>
-
-    <ul class="list">
-      <li v-for="e in filtered" :key="e.id" class="event">
-        <div class="event__format" :style="{ background: formatColour[e.format] }" />
-        <div class="event__main">
-          <div class="event__title-row">
-            <h3 class="event__title">{{ e.title }}</h3>
-            <span v-if="!e.isPublished" class="event__pill event__pill--draft">Draft</span>
-          </div>
-          <div class="event__meta">
-            <span>{{ e.startsAt }} — {{ e.endsAt }}</span>
-            <span class="event__sep">·</span>
-            <span>{{ e.location }}</span>
-            <span class="event__sep">·</span>
-            <span class="event__format-label">{{ e.format }}</span>
-          </div>
-        </div>
-        <div class="event__rsvp">
-          <div class="event__rsvp-count">{{ e.rsvpYes }}<span class="event__rsvp-cap">/{{ e.capacity }}</span></div>
-          <div class="event__rsvp-bar">
-            <div class="event__rsvp-fill" :style="{ width: fillPct(e) + '%' }" />
-          </div>
-          <div class="event__rsvp-label">{{ e.rsvpMaybe }} maybe</div>
-        </div>
-        <div class="event__actions">
-          <button class="event__btn" @click="toast.info(`Managing ${e.title} — event editor opens next session.`)">Manage</button>
-        </div>
-      </li>
-    </ul>
   </div>
 </template>
 
 <style scoped>
-.events { max-width: 1280px; }
-.events__header { display: flex; align-items: end; justify-content: space-between; margin-bottom: 24px; gap: 16px; }
+.events { max-width: 1280px; display: flex; flex-direction: column; gap: 20px; }
+.events__header { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
 .events__eyebrow { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; color: var(--color-fog); text-transform: uppercase; }
 .events__heading { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin: 4px 0 6px; color: var(--color-ink); }
-.events__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); margin: 0; }
+.events__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-fog); margin: 0; }
 .events__actions { display: flex; gap: 8px; }
 
-.btn { padding: 9px 14px; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn { padding: 9px 14px; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .btn--primary { background: var(--color-ink); color: #fff; }
+.btn--primary:hover { background: var(--color-graphite); }
 .btn--ghost { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
+.btn--ghost:hover { background: var(--color-surface); }
 
-.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; }
+/* Toolbar */
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .tabs { display: flex; gap: 6px; padding: 4px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 999px; }
-.tab { padding: 7px 16px; background: transparent; border: none; border-radius: 999px; font-family: var(--font-body); font-size: 13px; color: var(--color-fog); cursor: pointer; }
+.tab { display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px; background: transparent; border: none; border-radius: 999px; font-family: var(--font-body); font-size: 13px; color: var(--color-fog); cursor: pointer; }
 .tab.is-active { background: #fff; color: var(--color-ink); font-weight: 600; box-shadow: var(--shadow-sm); }
-.search { padding: 9px 14px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 13px; min-width: 240px; }
+.tab__count { font-family: var(--font-mono); font-size: 10px; padding: 1px 7px; background: var(--color-hairline); color: var(--color-graphite); border-radius: 999px; }
+.tab.is-active .tab__count { background: var(--color-accent-soft); color: var(--color-accent); }
 
+.search { position: relative; display: flex; align-items: center; min-width: 300px; }
+.search__icon { position: absolute; left: 12px; color: var(--color-fog); pointer-events: none; }
+.search__input { width: 100%; padding: 9px 36px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; }
+.search__input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
+.search__clear { position: absolute; right: 8px; width: 22px; height: 22px; border-radius: 999px; background: var(--color-surface); border: 0; color: var(--color-graphite); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.search__clear:hover { background: var(--color-hairline); color: var(--color-ink); }
+
+/* Format chips */
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--color-hairline); background: #fff; border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-graphite); cursor: pointer; }
+.chip:hover { border-color: var(--color-mute); }
+.chip.is-active { background: var(--color-ink); border-color: var(--color-ink); color: #fff; font-weight: 600; }
+.chip__dot { width: 8px; height: 8px; border-radius: 999px; }
+.chip__count { font-family: var(--font-mono); font-size: 10px; padding: 1px 7px; background: var(--color-surface); color: var(--color-fog); border-radius: 999px; }
+.chip.is-active .chip__count { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); }
+
+/* List */
 .list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
-.event { display: flex; align-items: center; gap: 20px; padding: 16px 20px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; }
-.event__format { width: 4px; height: 44px; border-radius: 2px; }
+.event { display: flex; align-items: center; gap: 20px; padding: 16px 20px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; cursor: pointer; transition: border-color 0.12s ease, box-shadow 0.12s ease; }
+.event:hover { border-color: var(--color-mute); box-shadow: var(--shadow-sm); }
+.event:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.event__format { width: 4px; align-self: stretch; border-radius: 2px; }
 .event__main { flex: 1; min-width: 0; }
-.event__title-row { display: flex; align-items: center; gap: 8px; }
+.event__title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .event__title { font-family: var(--font-display); font-size: 17px; font-weight: 600; color: var(--color-ink); margin: 0; }
-.event__pill { padding: 2px 8px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
-.event__pill--draft { background: var(--color-surface); color: var(--color-fog); border: 1px solid var(--color-hairline); }
 .event__meta { display: flex; gap: 8px; align-items: center; font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 4px; }
 .event__sep { opacity: 0.5; }
-.event__format-label { text-transform: capitalize; font-weight: 500; }
-.event__rsvp { min-width: 140px; text-align: right; }
-.event__rsvp-count { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--color-ink); }
+.event__format-label { font-weight: 500; }
+.event__when { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-accent); margin-top: 6px; }
+.event__rsvp { min-width: 160px; text-align: right; }
+.event__rsvp-count { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--color-ink); }
 .event__rsvp-cap { font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--color-fog); margin-left: 2px; }
 .event__rsvp-bar { height: 4px; background: var(--color-hairline); border-radius: 2px; margin: 4px 0 4px; overflow: hidden; }
 .event__rsvp-fill { height: 100%; background: var(--color-accent); border-radius: 2px; }
-.event__rsvp-label { font-family: var(--font-body); font-size: 10px; color: var(--color-fog); letter-spacing: 0.06em; text-transform: uppercase; }
-.event__actions { flex-shrink: 0; }
-.event__btn { padding: 8px 14px; background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
+.event__rsvp-label { font-family: var(--font-body); font-size: 10px; color: var(--color-fog); letter-spacing: 0.04em; text-transform: uppercase; }
+.event__chev { color: var(--color-mute); font-size: 20px; padding-left: 4px; flex-shrink: 0; }
+
+/* Badges */
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid transparent; white-space: nowrap; }
+.badge--ok       { background: #DCFCE7; color: #14532D; }
+.badge--warn     { background: #FEF3C7; color: #92400E; }
+.badge--danger   { background: #FEE2E2; color: #991B1B; }
+.badge--accent   { background: var(--color-accent-soft); color: var(--color-accent); }
+.badge--mute     { background: var(--color-surface); color: var(--color-graphite); border-color: var(--color-hairline); }
+
+/* Empty */
+.empty { padding: 48px 32px; text-align: center; font-family: var(--font-body); background: #fff; border: 1px dashed var(--color-hairline); border-radius: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.empty__title { font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--color-ink); }
+.empty__hint { font-family: var(--font-body); font-size: 13px; color: var(--color-fog); }
+.empty__cta { margin-top: 14px; }
+
+/* Detail modal */
+.detail { display: flex; flex-direction: column; gap: 20px; }
+.detail__hero { position: relative; display: flex; align-items: center; gap: 16px; padding: 20px 22px; border-radius: 14px; background: linear-gradient(135deg, var(--color-surface) 0%, #fff 100%); border: 1px solid var(--color-hairline); overflow: hidden; }
+.detail__hero::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--hero-accent, var(--color-graphite)); }
+.detail__hero-body { flex: 1; min-width: 0; }
+.detail__hero-line { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--color-ink); }
+.detail__hero-meta { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
+.detail__hero-badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; max-width: 220px; }
+
+.detail__stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.stat { background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
+.stat__value { font-family: var(--font-display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: var(--color-ink); line-height: 1.15; }
+.stat__label { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--color-fog); text-transform: uppercase; margin-top: 4px; }
+
+.detail__cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 4px 4px 0; }
+.detail__section-title { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); margin: 0 0 12px; }
+.dl { display: flex; flex-direction: column; margin: 0; }
+.dl__row { display: grid; grid-template-columns: 96px 1fr; gap: 12px; padding: 10px 0; border-top: 1px solid var(--color-hairline); align-items: baseline; }
+.dl__row:first-child { border-top: 0; padding-top: 0; }
+.dl__row:last-child { padding-bottom: 0; }
+.dl dt { font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-fog); margin: 0; }
+.dl dd { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); margin: 0; word-break: break-word; }
+
+.detail__notes { padding: 16px 18px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 12px; }
+.detail__notes p { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); line-height: 1.6; margin: 8px 0 0; }
 
 /* Modal form */
 .form { display: flex; flex-direction: column; gap: 14px; }
@@ -274,6 +589,14 @@ function submit() {
 .modal-btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
 .modal-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .modal-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
+.modal-btn--outline:hover { background: var(--color-surface); }
+
+@media (max-width: 900px) {
+  .detail__cols { grid-template-columns: 1fr; gap: 20px; }
+  .detail__stats { grid-template-columns: repeat(2, 1fr); }
+  .detail__hero { flex-wrap: wrap; }
+  .detail__hero-badges { justify-content: flex-start; max-width: none; }
+}
 
 @media (max-width: 767px) {
   .events__header { flex-direction: column; align-items: stretch; gap: 12px; }
@@ -281,17 +604,17 @@ function submit() {
   .events__heading { font-size: 28px; }
   .toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
   .search { min-width: 0; width: 100%; }
-  .tabs { width: 100%; justify-content: space-between; }
-  .tab { flex: 1; text-align: center; }
+  .tabs { width: 100%; }
+  .tab { flex: 1; justify-content: center; }
+  .chips { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
+  .chip { flex-shrink: 0; }
   .event { flex-wrap: wrap; gap: 12px; padding: 14px 16px; }
-  .event__format { height: 36px; }
   .event__main { flex-basis: calc(100% - 20px); min-width: 0; }
   .event__title { font-size: 15px; }
   .event__meta { flex-wrap: wrap; gap: 6px; font-size: 11px; }
   .event__rsvp { flex: 1; text-align: left; min-width: 0; }
   .event__rsvp-count { font-size: 18px; }
-  .event__actions { flex-shrink: 0; }
-  .event__btn { padding: 7px 12px; font-size: 11px; }
+  .event__chev { display: none; }
   .form__row, .form__row--three { grid-template-columns: 1fr; }
 }
 </style>

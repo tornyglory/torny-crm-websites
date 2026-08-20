@@ -2,12 +2,14 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { computed, ref } from 'vue'
 
 export type ClaimStatus = 'pending' | 'approved' | 'rejected'
+export type Sport = 'bowls' | 'tennis' | 'golf' | 'cricket' | 'petanque' | 'croquet'
 
 export interface Claim {
   id: string
   clubId: number
   clubName: string
   region: string
+  sport: Sport
   claimant: {
     firstName: string
     lastName: string
@@ -28,6 +30,7 @@ const seed: Claim[] = [
     clubId: 12,
     clubName: 'Kelburn Bowling Club',
     region: 'Wellington',
+    sport: 'bowls',
     claimant: {
       firstName: 'Marcus',
       lastName: 'Tuilagi',
@@ -43,6 +46,7 @@ const seed: Claim[] = [
     clubId: 47,
     clubName: 'Petone Central',
     region: 'Wellington',
+    sport: 'bowls',
     claimant: {
       firstName: 'Aroha',
       lastName: 'Wetere',
@@ -58,6 +62,7 @@ const seed: Claim[] = [
     clubId: 88,
     clubName: 'Ashburton MSA Bowls',
     region: 'Canterbury',
+    sport: 'bowls',
     claimant: {
       firstName: 'David',
       lastName: 'Chen',
@@ -73,6 +78,7 @@ const seed: Claim[] = [
     clubId: 133,
     clubName: 'Whangarei Bowling Club',
     region: 'Northland',
+    sport: 'tennis',
     claimant: {
       firstName: 'Sarah',
       lastName: 'Mitchell',
@@ -88,6 +94,7 @@ const seed: Claim[] = [
     clubId: 22,
     clubName: 'Naenae Bowling',
     region: 'Wellington',
+    sport: 'bowls',
     claimant: {
       firstName: 'Grace',
       lastName: 'Whittaker',
@@ -105,6 +112,7 @@ const seed: Claim[] = [
     clubId: 55,
     clubName: 'Waihi Beach Bowls',
     region: 'Bay of Plenty',
+    sport: 'bowls',
     claimant: {
       firstName: 'Trevor',
       lastName: 'Baker',

@@ -1,9 +1,23 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { directory, type DirectoryClub } from '@torny/api-client'
 
 type Step = 1 | 2 | 3
+
+// Cached shape of a submitted claim. Persists in localStorage so refresh /
+// return-visit lands the user back on the "pending review" state. Mirrors the
+// GET /claims/mine response shape (brief 04 §2) — swap-in when M4 lands.
+interface PendingClaim {
+  clubId: number
+  clubName: string
+  region: string
+  role: string
+  evidence: string
+  submittedAt: string
+}
+
+const PENDING_KEY = 'torny.pendingClaim'
 
 const step = ref<Step>(1)
 const query = ref('')
@@ -14,14 +28,19 @@ const searchError = ref<string | null>(null)
 const hasSearched = ref(false)
 
 const selected = ref<DirectoryClub | null>(null)
+const roleAtClub = ref('')
 const evidence = ref('')
 const submitting = ref(false)
 const submitError = ref<string | null>(null)
+const pending = ref<PendingClaim | null>(null)
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let abortCtrl: AbortController | null = null
 
 const canSearch = computed(() => query.value.trim().length >= 2)
+const canSubmitEvidence = computed(
+  () => roleAtClub.value.trim().length > 0 && evidence.value.trim().length >= 20,
+)
 
 watch(query, (q) => {
   if (debounceTimer) clearTimeout(debounceTimer)
@@ -67,12 +86,25 @@ function goBackToSearch() {
 
 async function submitClaim(e: Event) {
   e.preventDefault()
-  if (!selected.value) return
+  if (!selected.value || !canSubmitEvidence.value) return
   submitting.value = true
   submitError.value = null
   try {
-    // TODO: POST /create-claim on the SAM API once user auth is real.
-    await new Promise(resolve => setTimeout(resolve, 600))
+    // MOCK — backend endpoint POST /claims lands in M4. See
+    // docs/backend-briefs/04-claim-flow-m4-punchlist.md. When it lands, replace
+    // this block with `await claims.submit({ directoryClubId: selected.value.club_id, role: roleAtClub.value, evidence: evidence.value })`.
+    await new Promise((resolve) => setTimeout(resolve, 600))
+
+    const claim: PendingClaim = {
+      clubId: selected.value.club_id,
+      clubName: selected.value.name,
+      region: [selected.value.region, selected.value.state].filter(Boolean).join(', ') || 'Region unknown',
+      role: roleAtClub.value.trim(),
+      evidence: evidence.value.trim(),
+      submittedAt: new Date().toISOString(),
+    }
+    localStorage.setItem(PENDING_KEY, JSON.stringify(claim))
+    pending.value = claim
     step.value = 3
   } catch (err) {
     submitError.value = (err as Error).message
@@ -80,6 +112,51 @@ async function submitClaim(e: Event) {
     submitting.value = false
   }
 }
+
+function submitAnother() {
+  localStorage.removeItem(PENDING_KEY)
+  pending.value = null
+  selected.value = null
+  roleAtClub.value = ''
+  evidence.value = ''
+  query.value = ''
+  results.value = []
+  hasSearched.value = false
+  step.value = 1
+}
+
+function formatSubmittedAt(iso: string): string {
+  return new Date(iso).toLocaleString('en-NZ', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function daysWaiting(iso: string): number {
+  const d = new Date(iso).getTime()
+  return Math.floor((Date.now() - d) / (1000 * 60 * 60 * 24))
+}
+
+function waitingLabel(iso: string): string {
+  const days = daysWaiting(iso)
+  if (days === 0) return 'today'
+  if (days === 1) return 'yesterday'
+  return `${days} days ago`
+}
+
+onMounted(() => {
+  const raw = localStorage.getItem(PENDING_KEY)
+  if (!raw) return
+  try {
+    pending.value = JSON.parse(raw) as PendingClaim
+    step.value = 3
+  } catch {
+    localStorage.removeItem(PENDING_KEY)
+  }
+})
 
 function initials(club: DirectoryClub) {
   return club.name.split(/\s+/).map(w => w[0]).slice(0, 3).join('').toUpperCase()
@@ -272,6 +349,18 @@ onUnmounted(() => {
         </div>
 
         <label class="field">
+          <span class="field__label">Your role at the club</span>
+          <input
+            v-model="roleAtClub"
+            type="text"
+            required
+            placeholder="e.g. Secretary, President, Club Manager"
+            class="field__input"
+          />
+          <span class="field__hint">Whatever committee position or admin title fits — free text.</span>
+        </label>
+
+        <label class="field">
           <span class="field__label">Why should we assign this club to you?</span>
           <textarea
             v-model="evidence"
@@ -280,34 +369,87 @@ onUnmounted(() => {
             placeholder="e.g. I'm the current secretary of Naenae Bowling. Committee minutes attached below."
             class="field__textarea"
           />
-          <span class="field__hint">Include your role, how long you've been at the club, and any evidence links.</span>
+          <span class="field__hint">Min 20 characters. Include how long you've been at the club and any evidence links (Google Drive, meeting minutes, etc.).</span>
         </label>
 
         <div v-if="submitError" class="alert">{{ submitError }}</div>
 
         <div class="foot">
           <button type="button" class="foot__ghost" @click="goBackToSearch">Back</button>
-          <button type="submit" class="foot__cta" :disabled="submitting || !evidence.trim()">
+          <button type="submit" class="foot__cta" :disabled="submitting || !canSubmitEvidence">
             <span>{{ submitting ? 'Submitting…' : 'Submit claim for review' }}</span>
             <svg v-if="!submitting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
           </button>
         </div>
       </form>
 
-      <!-- STEP 3: Submitted -->
-      <div v-else-if="step === 3 && selected" class="submitted">
-        <div class="submitted__badge">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="28" height="28">
-            <path d="M20 6 9 17l-5-5" />
-          </svg>
+      <!-- STEP 3: Submitted / pending review -->
+      <div v-else-if="step === 3 && pending" class="pending">
+        <div class="pending__hero">
+          <div class="pending__badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M20 6 9 17l-5-5" /></svg>
+          </div>
+          <div class="pending__hero-body">
+            <div class="head__eyebrow">Under review</div>
+            <h1 class="pending__heading">Your claim is in.</h1>
+            <p class="pending__sub">
+              A Torny admin usually reviews claims within one working day. We'll email you the moment it's decided.
+            </p>
+          </div>
         </div>
-        <div class="head__eyebrow">Claim a club · Step 3</div>
-        <h1 class="head__heading">We got it.</h1>
-        <p class="head__sub">
-          Your claim for <strong>{{ selected.name }}</strong> has been submitted.
-          A Torny admin usually gets to these within a working day — we'll notify you by email.
-        </p>
-        <RouterLink to="/" class="foot__cta submitted__cta">Back to sign in</RouterLink>
+
+        <!-- Timeline -->
+        <div class="timeline">
+          <div class="timeline__step timeline__step--done">
+            <div class="timeline__dot">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" width="10" height="10"><path d="M20 6 9 17l-5-5" /></svg>
+            </div>
+            <div class="timeline__body">
+              <div class="timeline__label">Submitted</div>
+              <div class="timeline__time">{{ waitingLabel(pending.submittedAt) }}</div>
+            </div>
+          </div>
+          <div class="timeline__step timeline__step--active">
+            <div class="timeline__dot"><span class="timeline__spinner" /></div>
+            <div class="timeline__body">
+              <div class="timeline__label">Under review</div>
+              <div class="timeline__time">Waiting on a Torny admin</div>
+            </div>
+          </div>
+          <div class="timeline__step">
+            <div class="timeline__dot" />
+            <div class="timeline__body">
+              <div class="timeline__label">Decision</div>
+              <div class="timeline__time">Usually within 1 working day</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Summary card -->
+        <div class="summary">
+          <div class="summary__title">Claim summary</div>
+          <dl class="summary__list">
+            <div class="summary__row"><dt>Club</dt><dd>{{ pending.clubName }}</dd></div>
+            <div class="summary__row"><dt>Region</dt><dd>{{ pending.region }}</dd></div>
+            <div class="summary__row"><dt>Your role</dt><dd>{{ pending.role }}</dd></div>
+            <div class="summary__row"><dt>Submitted</dt><dd>{{ formatSubmittedAt(pending.submittedAt) }}</dd></div>
+          </dl>
+        </div>
+
+        <!-- Next steps -->
+        <div class="next">
+          <div class="next__title">What happens next</div>
+          <ul class="next__list">
+            <li><span class="next__num">1</span> A Torny platform admin reviews your evidence.</li>
+            <li><span class="next__num">2</span> If approved, you get an email with a link straight into your club's CRM.</li>
+            <li><span class="next__num">3</span> If we need more info, you'll get an email asking for it — you can re-submit.</li>
+          </ul>
+        </div>
+
+        <div class="foot">
+          <button type="button" class="foot__ghost" @click="submitAnother">Submit a different claim</button>
+          <RouterLink to="/" class="foot__cta">Back to sign in</RouterLink>
+        </div>
       </div>
     </div>
   </div>
@@ -457,8 +599,44 @@ onUnmounted(() => {
 .field__textarea:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .field__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
 
-/* Submitted */
-.submitted { text-align: center; padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.submitted__badge { width: 64px; height: 64px; border-radius: 999px; background: var(--color-feature-mint); color: #fff; display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
-.submitted__cta { margin-top: 8px; }
+/* Pending review — Step 3 */
+.pending { display: flex; flex-direction: column; gap: 24px; }
+
+.pending__hero { display: flex; align-items: flex-start; gap: 20px; padding: 24px; background: linear-gradient(135deg, #ECFDF5 0%, #fff 100%); border: 1px solid #A7F3D0; border-radius: 16px; }
+.pending__badge { width: 52px; height: 52px; border-radius: 999px; background: var(--color-feature-mint); color: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.pending__hero-body { flex: 1; min-width: 0; }
+.pending__heading { font-family: var(--font-display); font-size: clamp(28px, 3.2vw, 34px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; color: var(--color-ink); margin: 8px 0 8px; }
+.pending__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); margin: 0; line-height: 1.55; }
+
+/* Timeline */
+.timeline { display: flex; flex-direction: column; gap: 4px; padding: 20px 22px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; }
+.timeline__step { display: flex; align-items: center; gap: 14px; padding: 6px 0; position: relative; }
+.timeline__step:not(:last-child)::after { content: ''; position: absolute; left: 11px; top: 30px; bottom: -4px; width: 2px; background: var(--color-hairline); }
+.timeline__step--done:not(:last-child)::after { background: var(--color-feature-mint); }
+.timeline__dot { width: 22px; height: 22px; border-radius: 999px; background: #fff; border: 2px solid var(--color-hairline); display: inline-flex; align-items: center; justify-content: center; color: transparent; flex-shrink: 0; z-index: 1; }
+.timeline__step--done .timeline__dot { background: var(--color-feature-mint); border-color: var(--color-feature-mint); color: #fff; }
+.timeline__step--active .timeline__dot { border-color: var(--color-accent); background: #fff; }
+.timeline__spinner { width: 8px; height: 8px; border-radius: 999px; background: var(--color-accent); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 0.4; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1); } }
+.timeline__body { flex: 1; min-width: 0; }
+.timeline__label { font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--color-ink); }
+.timeline__step:not(.timeline__step--done):not(.timeline__step--active) .timeline__label { color: var(--color-fog); }
+.timeline__time { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
+
+/* Summary card */
+.summary { padding: 20px 22px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 14px; }
+.summary__title { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); margin-bottom: 12px; }
+.summary__list { display: flex; flex-direction: column; margin: 0; }
+.summary__row { display: grid; grid-template-columns: 100px 1fr; gap: 12px; padding: 10px 0; border-top: 1px solid var(--color-hairline); align-items: baseline; }
+.summary__row:first-child { border-top: 0; padding-top: 0; }
+.summary__row:last-child { padding-bottom: 0; }
+.summary__row dt { font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-fog); margin: 0; }
+.summary__row dd { font-family: var(--font-body); font-size: 14px; color: var(--color-ink); margin: 0; word-break: break-word; }
+
+/* Next steps */
+.next { padding: 20px 22px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; }
+.next__title { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); margin-bottom: 12px; }
+.next__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.next__list li { display: flex; align-items: flex-start; gap: 12px; font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); line-height: 1.55; }
+.next__num { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 999px; background: var(--color-surface); border: 1px solid var(--color-hairline); font-family: var(--font-body); font-size: 11px; font-weight: 700; color: var(--color-graphite); flex-shrink: 0; }
 </style>

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 type Tab = 'overview' | 'membership' | 'activity' | 'communications'
 
@@ -127,8 +130,8 @@ function goBack() {
         </div>
       </div>
       <div class="mem__actions">
-        <button class="btn btn--ghost">Message</button>
-        <button class="btn btn--outline">Edit</button>
+        <button class="btn btn--ghost" @click="toast.info(`Compose to ${fullName} opens in Communications.`)">Message</button>
+        <button class="btn btn--outline" @click="toast.info('Member edit form opens next session.')">Edit</button>
       </div>
     </header>
 

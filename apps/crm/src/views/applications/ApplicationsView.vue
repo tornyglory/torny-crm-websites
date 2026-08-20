@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 type Status = 'pending' | 'approved' | 'declined'
 
@@ -39,6 +42,12 @@ function initials(a: Application) {
 
 function updateStatus(a: Application, next: Status) {
   a.status = next
+  const verb = next === 'approved' ? 'Approved' : next === 'declined' ? 'Declined' : 'Reopened'
+  toast.success(`${verb} ${a.firstName} ${a.lastName}`)
+}
+
+function exportCsv() {
+  toast.info(`Exporting ${applications.value.length} applications — check your email in a minute.`)
 }
 </script>
 
@@ -50,7 +59,7 @@ function updateStatus(a: Application, next: Status) {
         <h1 class="apps__heading">Applications</h1>
         <p class="apps__sub">Review and approve people applying to join {{ counts.pending }} pending.</p>
       </div>
-      <button class="apps__btn">Export CSV</button>
+      <button class="apps__btn" @click="exportCsv">Export CSV</button>
     </header>
 
     <div class="tabs">

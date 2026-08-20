@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import CrmModal from '@/components/modals/CrmModal.vue'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 type SectionKey = 'club' | 'billing' | 'team' | 'security' | 'integrations' | 'danger'
 
@@ -59,6 +63,59 @@ const integrations = ref([
   { id: 'ses', label: 'AWS SES', description: 'Send email campaigns from your own domain.', status: 'available' },
   { id: 'xero', label: 'Xero', description: 'Export invoices to your ledger.', status: 'available' },
 ])
+
+// ── Simple button handlers ─────────────────────────────────────
+function saveClubProfile() { toast.success('Club profile saved.') }
+function signOutSession(id: string) {
+  security.value.sessions = security.value.sessions.filter((s) => s.id !== id)
+  toast.info('Session signed out.')
+}
+function toggleIntegration(id: string) {
+  const i = integrations.value.find((x) => x.id === id)
+  if (!i) return
+  if (i.status === 'connected') {
+    i.status = 'available'
+    toast.info(`Disconnected ${i.label}.`)
+  } else {
+    i.status = 'connected'
+    toast.success(`${i.label} connected.`)
+  }
+}
+function goManage(kind: 'plan' | 'seats' | 'card') {
+  const labels: Record<typeof kind, string> = { plan: 'plan', seats: 'seats', card: 'payment method' }
+  toast.info(`Managing ${labels[kind]} in a new tab…`)
+}
+function manageTeamRow(name: string) {
+  toast.info(`Managing ${name}'s role — role picker opens next session.`)
+}
+
+// ── Invite teammate modal ──────────────────────────────────────
+const inviteOpen = ref(false)
+const inviteForm = reactive({
+  email: '',
+  role: 'Committee' as 'Admin' | 'Committee',
+  message: '',
+})
+function openInvite() {
+  inviteForm.email = ''
+  inviteForm.role = 'Committee'
+  inviteForm.message = ''
+  inviteOpen.value = true
+}
+function closeInvite() { inviteOpen.value = false }
+const canInvite = computed(() => /.+@.+\..+/.test(inviteForm.email.trim()))
+function sendInvite() {
+  if (!canInvite.value) return
+  team.value.push({
+    id: `u${Date.now()}`,
+    name: inviteForm.email.split('@')[0] ?? inviteForm.email,
+    email: inviteForm.email.trim(),
+    role: inviteForm.role,
+    lastActive: '—',
+  })
+  inviteOpen.value = false
+  toast.success(`Invite sent to ${inviteForm.email.trim()}.`)
+}
 </script>
 
 <template>
@@ -96,7 +153,7 @@ const integrations = ref([
                 <div class="card__eyebrow">Public identity</div>
                 <h2 class="card__title">Club profile</h2>
               </div>
-              <button class="btn btn--outline">Save changes</button>
+              <button class="btn btn--outline" @click="saveClubProfile">Save changes</button>
             </div>
             <div class="grid">
               <div class="field">
@@ -141,8 +198,8 @@ const integrations = ref([
                 <p class="card__body">{{ billing.amount }} · {{ billing.seats }} CRM seats · next invoice {{ billing.nextInvoice }}</p>
               </div>
               <div class="card__actions">
-                <button class="btn btn--outline">Change plan</button>
-                <button class="btn btn--outline">Manage seats</button>
+                <button class="btn btn--outline" @click="goManage('plan')">Change plan</button>
+                <button class="btn btn--outline" @click="goManage('seats')">Manage seats</button>
               </div>
             </div>
           </div>
@@ -153,7 +210,7 @@ const integrations = ref([
                 <div class="card__eyebrow">Payment method</div>
                 <h2 class="card__title">{{ billing.paymentMethod }}</h2>
               </div>
-              <button class="btn btn--outline">Update card</button>
+              <button class="btn btn--outline" @click="goManage('card')">Update card</button>
             </div>
           </div>
 
@@ -165,7 +222,7 @@ const integrations = ref([
                 <div class="frow__date">{{ i.date }}</div>
                 <div class="frow__amount">{{ i.amount }}</div>
                 <div class="frow__status" :class="`frow__status--${i.status}`">{{ i.status }}</div>
-                <button class="link">Download</button>
+                <button class="link" @click="toast.info(`Downloading ${i.id.toUpperCase()}…`)">Download</button>
               </li>
             </ul>
           </div>
@@ -180,7 +237,7 @@ const integrations = ref([
                 <h2 class="card__title">Team members</h2>
                 <p class="card__body">People who can sign in and manage this club’s CRM.</p>
               </div>
-              <button class="btn btn--primary">+ Invite</button>
+              <button class="btn btn--primary" @click="openInvite">+ Invite</button>
             </div>
             <ul class="rows">
               <li v-for="u in team" :key="u.id" class="frow">
@@ -191,7 +248,7 @@ const integrations = ref([
                 </div>
                 <div class="badge" :class="`badge--${u.role.toLowerCase()}`">{{ u.role }}</div>
                 <div class="frow__time">Last active {{ u.lastActive }}</div>
-                <button class="link">Manage</button>
+                <button class="link" @click="manageTeamRow(u.name)">Manage</button>
               </li>
             </ul>
           </div>
@@ -229,7 +286,7 @@ const integrations = ref([
                   <div class="frow__name">{{ s.device }} <span v-if="s.current" class="badge badge--soft">This device</span></div>
                   <div class="frow__meta">{{ s.ip }} · {{ s.when }}</div>
                 </div>
-                <button v-if="!s.current" class="link link--danger">Sign out</button>
+                <button v-if="!s.current" class="link link--danger" @click="signOutSession(s.id)">Sign out</button>
               </li>
             </ul>
           </div>
@@ -248,7 +305,7 @@ const integrations = ref([
               <p class="intg__desc">{{ i.description }}</p>
               <div class="intg__foot">
                 <span class="badge" :class="i.status === 'connected' ? 'badge--ok' : 'badge--muted'">{{ i.status }}</span>
-                <button class="link">{{ i.status === 'connected' ? 'Manage' : 'Connect' }}</button>
+                <button class="link" @click="toggleIntegration(i.id)">{{ i.status === 'connected' ? 'Manage' : 'Connect' }}</button>
               </div>
             </article>
           </div>
@@ -263,26 +320,57 @@ const integrations = ref([
                 <h3>Transfer club ownership</h3>
                 <p>Hand this club record to another Torny member. You keep your player account.</p>
               </div>
-              <button class="btn btn--outline">Start transfer</button>
+              <button class="btn btn--outline" @click="toast.info('Transfer opens next session.')">Start transfer</button>
             </div>
             <div class="danger-row">
               <div>
                 <h3>Archive this club</h3>
                 <p>Public site goes read-only, no new members can apply. Reversible for 30 days.</p>
               </div>
-              <button class="btn btn--outline">Archive</button>
+              <button class="btn btn--outline" @click="toast.info('Archive flow opens next session.')">Archive</button>
             </div>
             <div class="danger-row danger-row--severe">
               <div>
                 <h3>Delete club record</h3>
                 <p>Permanently deletes members, events, honour board and website. This cannot be undone.</p>
               </div>
-              <button class="btn btn--danger">Delete permanently</button>
+              <button class="btn btn--danger" @click="toast.error('Delete requires committee approval. Contact support.')">Delete permanently</button>
             </div>
           </div>
         </template>
       </section>
     </div>
+
+    <CrmModal
+      :open="inviteOpen"
+      eyebrow="Team access"
+      title="Invite a teammate"
+      width="md"
+      @close="closeInvite"
+    >
+      <p class="invite__body">They'll get an email invite. Once accepted, they can sign in to the CRM with the role you pick.</p>
+      <form class="form" @submit.prevent="sendInvite">
+        <label class="field">
+          <span class="field__label">Email address</span>
+          <input v-model="inviteForm.email" type="email" placeholder="teammate@club.co.nz" autofocus />
+        </label>
+        <label class="field">
+          <span class="field__label">Role</span>
+          <select v-model="inviteForm.role">
+            <option value="Admin">Admin — same rights as you</option>
+            <option value="Committee">Committee — read-only + reply to enquiries</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field__label">Personal message (optional)</span>
+          <textarea v-model="inviteForm.message" rows="3" placeholder="Kia ora — you'll now have CRM access…" />
+        </label>
+      </form>
+      <template #footer>
+        <button type="button" class="modal-btn modal-btn--outline" @click="closeInvite">Cancel</button>
+        <button type="button" class="modal-btn modal-btn--primary" :disabled="!canInvite" @click="sendInvite">Send invite</button>
+      </template>
+    </CrmModal>
   </div>
 </template>
 
@@ -371,6 +459,19 @@ const integrations = ref([
 .danger-row--severe { border-top-color: rgba(220,47,59,0.25); }
 .danger-row h3 { font-family: var(--font-body); font-size: 14px; font-weight: 600; margin: 0 0 2px; color: var(--color-ink); }
 .danger-row p { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin: 0; max-width: 480px; line-height: 1.5; }
+
+/* Invite modal */
+.invite__body { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); line-height: 1.5; margin: 0 0 16px; }
+.form { display: flex; flex-direction: column; gap: 14px; }
+.form .field { display: flex; flex-direction: column; gap: 6px; }
+.form .field input, .form .field select, .form .field textarea { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; resize: vertical; }
+.form .field input:focus, .form .field select:focus, .form .field textarea:focus { outline: none; border-color: var(--color-ink); }
+.form .field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.modal-btn { padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; }
+.modal-btn--primary { background: var(--color-ink); color: #fff; }
+.modal-btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
+.modal-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.modal-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 
 @media (max-width: 900px) {
   .settings__grid { grid-template-columns: 1fr; }

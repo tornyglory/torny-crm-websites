@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import CrmModal from '@/components/modals/CrmModal.vue'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 type SectionKey = 'domain' | 'brand' | 'seo' | 'navigation' | 'forms' | 'analytics'
 
@@ -67,6 +71,57 @@ const analytics = ref({
   cookieBanner: false,
 })
 
+// ── Simple actions ─────────────────────────────────────────────
+function copyToClipboard(value: string) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    void navigator.clipboard.writeText(value).catch(() => { /* noop */ })
+  }
+  toast.success('Copied to clipboard.')
+}
+function replaceUpload(what: string) {
+  toast.info(`File picker for ${what} opens next session.`)
+}
+
+// ── Edit custom domain modal ──────────────────────────────────
+const editDomainOpen = ref(false)
+const domainForm = reactive({ custom: '' })
+function openEditDomain() {
+  domainForm.custom = domain.value.custom
+  editDomainOpen.value = true
+}
+function saveDomain() {
+  domain.value.custom = domainForm.custom.trim() || domain.value.custom
+  editDomainOpen.value = false
+  toast.success('Domain updated — DNS check re-runs in the background.')
+}
+
+// ── Add nav link modal (reused for header + footer) ────────────
+const addLinkOpen = ref(false)
+const addLinkTarget = ref<'header' | 'footer'>('header')
+const linkForm = reactive({ label: '', target: '', external: false })
+function openAddLink(target: 'header' | 'footer') {
+  linkForm.label = ''
+  linkForm.target = ''
+  linkForm.external = false
+  addLinkTarget.value = target
+  addLinkOpen.value = true
+}
+const canAddLink = computed(() => linkForm.label.trim().length > 0 && linkForm.target.trim().length > 0)
+function saveLink() {
+  if (!canAddLink.value) return
+  const row = {
+    id: `link-${Date.now()}`,
+    label: linkForm.label.trim(),
+    target: linkForm.target.trim(),
+    external: linkForm.external,
+    enabled: true,
+  }
+  if (addLinkTarget.value === 'header') navHeader.value.push(row)
+  else navFooter.value.push(row)
+  addLinkOpen.value = false
+  toast.success(`Added "${row.label}" to the ${addLinkTarget.value}.`)
+}
+
 const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' ? 'ok' : s === 'unset' || s === 'missing' ? 'warn' : s === 'error' || s === 'wrong' ? 'danger' : 'info')
 </script>
 
@@ -110,7 +165,7 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
                   <span class="badge" :class="`badge--${statusTone(domain.ssl)}`">SSL {{ domain.ssl }}</span>
                 </div>
               </div>
-              <button class="btn btn--outline">Edit</button>
+              <button class="btn btn--outline" @click="openEditDomain">Edit</button>
             </div>
 
             <div class="row-switch">
@@ -129,7 +184,7 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
             <p class="card__body">Every club also gets a Torny-hosted address that always works while DNS is settling.</p>
             <div class="mono-row">
               <span class="mono">{{ domain.fallback }}</span>
-              <button class="link">Copy</button>
+              <button class="link" @click="copyToClipboard(domain.fallback)">Copy</button>
             </div>
           </div>
 
@@ -188,14 +243,14 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
                 <div class="upload__label">Logo (SVG or PNG)</div>
                 <div class="upload__chip">
                   <span class="mono">{{ brand.logoName }}</span>
-                  <button class="link">Replace</button>
+                  <button class="link" @click="replaceUpload('logo')">Replace</button>
                 </div>
               </div>
               <div class="upload">
                 <div class="upload__label">Favicon (32×32 PNG)</div>
                 <div class="upload__chip">
                   <span class="mono">{{ brand.faviconName }}</span>
-                  <button class="link">Replace</button>
+                  <button class="link" @click="replaceUpload('favicon')">Replace</button>
                 </div>
               </div>
             </div>
@@ -219,7 +274,7 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
             <div class="card__eyebrow">Share card (OG image)</div>
             <div class="upload__chip">
               <span class="mono">{{ seo.ogImage }}</span>
-              <button class="link">Replace</button>
+              <button class="link" @click="replaceUpload('OG image')">Replace</button>
             </div>
           </div>
           <div class="card">
@@ -252,7 +307,7 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
                 </button>
               </li>
             </ul>
-            <button class="btn btn--ghost">+ Add link</button>
+            <button class="btn btn--ghost" @click="openAddLink('header')">+ Add link</button>
           </div>
           <div class="card">
             <div class="card__eyebrow">Footer navigation</div>
@@ -268,7 +323,7 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
                 </button>
               </li>
             </ul>
-            <button class="btn btn--ghost">+ Add link</button>
+            <button class="btn btn--ghost" @click="openAddLink('footer')">+ Add link</button>
           </div>
         </template>
 
@@ -357,6 +412,51 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
         </template>
       </section>
     </div>
+
+    <CrmModal
+      :open="editDomainOpen"
+      eyebrow="Custom domain"
+      title="Edit custom domain"
+      width="sm"
+      @close="editDomainOpen = false"
+    >
+      <p class="hint">Enter the domain you want visitors to see. DNS check runs automatically after saving.</p>
+      <label class="ss-field">
+        <span class="ss-field__label">Domain</span>
+        <input v-model="domainForm.custom" type="text" placeholder="mybowlsclub.co.nz" autofocus />
+      </label>
+      <template #footer>
+        <button type="button" class="modal-btn modal-btn--outline" @click="editDomainOpen = false">Cancel</button>
+        <button type="button" class="modal-btn modal-btn--primary" @click="saveDomain">Save</button>
+      </template>
+    </CrmModal>
+
+    <CrmModal
+      :open="addLinkOpen"
+      eyebrow="Navigation"
+      :title="`Add a ${addLinkTarget} link`"
+      width="sm"
+      @close="addLinkOpen = false"
+    >
+      <div class="ss-form">
+        <label class="ss-field">
+          <span class="ss-field__label">Label</span>
+          <input v-model="linkForm.label" type="text" placeholder="Membership" autofocus />
+        </label>
+        <label class="ss-field">
+          <span class="ss-field__label">Target (path or URL)</span>
+          <input v-model="linkForm.target" type="text" placeholder="/membership" />
+        </label>
+        <label class="ss-check">
+          <input v-model="linkForm.external" type="checkbox" />
+          <span>Opens in a new tab (external link)</span>
+        </label>
+      </div>
+      <template #footer>
+        <button type="button" class="modal-btn modal-btn--outline" @click="addLinkOpen = false">Cancel</button>
+        <button type="button" class="modal-btn modal-btn--primary" :disabled="!canAddLink" @click="saveLink">Add link</button>
+      </template>
+    </CrmModal>
   </div>
 </template>
 
@@ -441,6 +541,20 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 .provider.is-active { border-color: var(--color-ink); background: var(--color-accent-soft); }
 .provider__label { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
 .provider__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 2px; }
+
+/* Modal-scoped */
+.hint { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); line-height: 1.5; margin: 0 0 14px; }
+.ss-form { display: flex; flex-direction: column; gap: 14px; }
+.ss-field { display: flex; flex-direction: column; gap: 6px; }
+.ss-field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.ss-field input { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; }
+.ss-field input:focus { outline: none; border-color: var(--color-ink); }
+.ss-check { display: flex; align-items: center; gap: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); }
+.modal-btn { padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; }
+.modal-btn--primary { background: var(--color-ink); color: #fff; }
+.modal-btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
+.modal-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.modal-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 
 @media (max-width: 900px) {
   .site__grid { grid-template-columns: 1fr; }

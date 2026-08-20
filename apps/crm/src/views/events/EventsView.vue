@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 type Tab = 'upcoming' | 'past'
 type Format = 'singles' | 'pairs' | 'triples' | 'fours' | 'social'
@@ -100,7 +103,7 @@ function submit() {
         <p class="events__sub">{{ events.length }} scheduled — {{ events.filter(e => e.isPublished).length }} live on your site.</p>
       </div>
       <div class="events__actions">
-        <button class="btn btn--ghost">View calendar</button>
+        <button class="btn btn--ghost" @click="toast.info('Calendar view opens next session.')">View calendar</button>
         <button class="btn btn--primary" @click="openCreate">+ New event</button>
       </div>
     </header>
@@ -206,7 +209,7 @@ function submit() {
           <div class="event__rsvp-label">{{ e.rsvpMaybe }} maybe</div>
         </div>
         <div class="event__actions">
-          <button class="event__btn">Manage</button>
+          <button class="event__btn" @click="toast.info(`Managing ${e.title} — event editor opens next session.`)">Manage</button>
         </div>
       </li>
     </ul>

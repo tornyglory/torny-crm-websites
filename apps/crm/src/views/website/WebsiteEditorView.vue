@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import CrmModal from '@/components/modals/CrmModal.vue'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 type BlockKind =
   | 'hero'
@@ -121,6 +125,37 @@ function pickPage(id: string) {
 function pickBlock(id: string) {
   selectedBlockId.value = id
 }
+// ── Publish modal ──────────────────────────────────────────────
+const publishOpen = ref(false)
+const publishing = ref(false)
+const includeRelated = ref(true)
+
+const changedBlocks = computed(() => {
+  // Mock — pretend "unsaved" blocks are anything hidden or on the draft page.
+  return activePage.value.blocks.filter((b) => !b.visible).length + (activePage.value.status === 'draft' ? 2 : 1)
+})
+
+function openPreview() {
+  toast.info(`Opening preview of ${activePage.value.slug} in a new tab…`)
+}
+function openPublish() {
+  publishOpen.value = true
+}
+function closePublish() {
+  if (publishing.value) return
+  publishOpen.value = false
+}
+function confirmPublish() {
+  publishing.value = true
+  window.setTimeout(() => {
+    publishing.value = false
+    publishOpen.value = false
+    activePage.value.status = 'published'
+    activePage.value.updatedAt = 'just now'
+    toast.success(`Published ${activePage.value.slug} · cache purged`)
+  }, 800)
+}
+
 function moveBlock(idx: number, dir: -1 | 1) {
   const blocks = activePage.value.blocks
   const next = idx + dir
@@ -176,8 +211,8 @@ const kindIcon: Record<BlockKind, string> = {
           <button class="vp" :class="{ 'is-active': previewViewport === 'desktop' }" @click="previewViewport = 'desktop'">Desktop</button>
           <button class="vp" :class="{ 'is-active': previewViewport === 'mobile' }" @click="previewViewport = 'mobile'">Mobile</button>
         </div>
-        <button class="btn btn--outline">Preview</button>
-        <button class="btn btn--primary">Publish</button>
+        <button class="btn btn--outline" @click="openPreview">Preview</button>
+        <button class="btn btn--primary" @click="openPublish">Publish</button>
       </div>
     </header>
 
@@ -287,6 +322,47 @@ const kindIcon: Record<BlockKind, string> = {
         <div v-else class="insp__empty">Select a block to edit its content.</div>
       </aside>
     </div>
+
+    <CrmModal
+      :open="publishOpen"
+      eyebrow="Publish"
+      :title="`Publish ${activePage.slug}`"
+      width="md"
+      @close="closePublish"
+    >
+      <p class="pub__body">
+        {{ changedBlocks }} block{{ changedBlocks === 1 ? '' : 's' }} will be updated.
+        Cache-purge fires immediately across the fallback subdomain and any custom hostname.
+      </p>
+      <div class="pub__stats">
+        <div class="pub__stat">
+          <div class="pub__stat-val">{{ changedBlocks }}</div>
+          <div class="pub__stat-lbl">Blocks changed</div>
+        </div>
+        <div class="pub__stat">
+          <div class="pub__stat-val">3</div>
+          <div class="pub__stat-lbl">URLs to purge</div>
+        </div>
+        <div class="pub__stat">
+          <div class="pub__stat-val">~5s</div>
+          <div class="pub__stat-lbl">To go live</div>
+        </div>
+      </div>
+      <div class="switch-row">
+        <div>
+          <div class="switch-row__label">Purge related pages</div>
+          <div class="switch-row__hint">Recommended when a hero or nav block changes — sitemap included.</div>
+        </div>
+        <button type="button" class="switch" :class="{ 'is-on': includeRelated }" @click="includeRelated = !includeRelated"><span class="switch__knob" /></button>
+      </div>
+
+      <template #footer>
+        <button type="button" class="modal-btn modal-btn--outline" :disabled="publishing" @click="closePublish">Cancel</button>
+        <button type="button" class="modal-btn modal-btn--primary" :disabled="publishing" @click="confirmPublish">
+          {{ publishing ? 'Publishing…' : 'Publish now' }}
+        </button>
+      </template>
+    </CrmModal>
   </div>
 </template>
 
@@ -367,6 +443,25 @@ const kindIcon: Record<BlockKind, string> = {
 .insp__actions { margin-top: 20px; }
 .insp__empty { padding: 20px 0; text-align: center; font-family: var(--font-body); font-size: 12px; color: var(--color-mute); }
 
+/* Publish modal */
+.pub__body { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); line-height: 1.55; margin: 0 0 16px; }
+.pub__stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 4px; }
+.pub__stat { padding: 14px; background: var(--color-surface); border-radius: 10px; }
+.pub__stat-val { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.01em; }
+.pub__stat-lbl { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); margin-top: 4px; }
+.switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--color-hairline); margin-top: 12px; }
+.switch-row__label { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
+.switch-row__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
+.switch { width: 40px; height: 24px; padding: 3px; border-radius: 999px; background: var(--color-hairline); border: 0; display: flex; cursor: pointer; flex-shrink: 0; }
+.switch.is-on { background: var(--color-ink); }
+.switch__knob { width: 18px; height: 18px; border-radius: 999px; background: #fff; transition: transform 0.15s ease; }
+.switch.is-on .switch__knob { transform: translateX(16px); }
+.modal-btn { padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; }
+.modal-btn--primary { background: var(--color-ink); color: #fff; }
+.modal-btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
+.modal-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.modal-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
+
 @media (max-width: 1100px) {
   .ed__grid { grid-template-columns: 240px 1fr; }
   .panel--inspector { grid-column: 1 / -1; position: static; }
@@ -374,5 +469,6 @@ const kindIcon: Record<BlockKind, string> = {
 @media (max-width: 767px) {
   .ed__grid { grid-template-columns: 1fr; }
   .panel--inspector { position: static; }
+  .pub__stats { grid-template-columns: 1fr; }
 }
 </style>

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 type ViewMode = 'timeline' | 'table' | 'by-player'
 
@@ -50,6 +53,41 @@ const filter = ref('')
 const activeCategory = computed(
   () => categories.value.find(c => c.id === activeCategoryId.value)!,
 )
+
+// ── Reigning champion (editable) ───────────────────────────────
+const champion = ref({
+  year: '2026',
+  name: 'Marcus Tuilagi',
+  club: 'Naenae BC',
+  titlesHeld: 3,
+  finalScore: '21–14',
+  seasonsPlayed: 14,
+  awardedAt: "Mar '26",
+})
+
+const editChampionOpen = ref(false)
+const editForm = reactive({ ...champion.value })
+
+function openEditChampion() {
+  Object.assign(editForm, champion.value)
+  editChampionOpen.value = true
+}
+function closeEditChampion() { editChampionOpen.value = false }
+function saveChampion() {
+  Object.assign(champion.value, editForm)
+  editChampionOpen.value = false
+  toast.success(`Updated the ${activeCategory.value.name} champion.`)
+}
+
+function shareToSite() {
+  toast.info(`Featuring ${champion.value.name} on the public homepage.`)
+}
+function previewSite() {
+  toast.info('Opening the honour board on your public site in a new tab…')
+}
+function loadOlder() {
+  toast.info('Older decades roll in — this is where infinite scroll would fire.')
+}
 
 // ── New category modal ─────────────────────────────────────────
 const createOpen = ref(false)
@@ -122,7 +160,7 @@ const decades: Decade[] = [
         <p class="hb__sub">11 categories · 214 entries · shown on your public site</p>
       </div>
       <div class="hb__actions">
-        <button class="btn btn--ghost">Preview site</button>
+        <button class="btn btn--ghost" @click="previewSite">Preview site</button>
         <button class="btn btn--primary" @click="openCreate">+ Add category</button>
       </div>
     </header>
@@ -179,12 +217,59 @@ const decades: Decade[] = [
       </template>
     </CrmModal>
 
+    <CrmModal
+      :open="editChampionOpen"
+      eyebrow="Reigning champion"
+      title="Edit champion"
+      width="md"
+      @close="closeEditChampion"
+    >
+      <form class="form" @submit.prevent="saveChampion">
+        <div class="form__row">
+          <label class="field">
+            <span class="field__label">Year</span>
+            <input v-model="editForm.year" type="text" placeholder="2026" />
+          </label>
+          <label class="field">
+            <span class="field__label">Awarded</span>
+            <input v-model="editForm.awardedAt" type="text" placeholder="Mar '26" />
+          </label>
+        </div>
+        <label class="field">
+          <span class="field__label">Name</span>
+          <input v-model="editForm.name" type="text" autofocus />
+        </label>
+        <label class="field">
+          <span class="field__label">Club</span>
+          <input v-model="editForm.club" type="text" />
+        </label>
+        <div class="form__row form__row--three">
+          <label class="field">
+            <span class="field__label">Titles held</span>
+            <input v-model.number="editForm.titlesHeld" type="number" min="1" />
+          </label>
+          <label class="field">
+            <span class="field__label">Final score</span>
+            <input v-model="editForm.finalScore" type="text" placeholder="21–14" />
+          </label>
+          <label class="field">
+            <span class="field__label">Seasons</span>
+            <input v-model.number="editForm.seasonsPlayed" type="number" min="1" />
+          </label>
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="modal-btn modal-btn--outline" @click="closeEditChampion">Cancel</button>
+        <button type="button" class="modal-btn modal-btn--primary" @click="saveChampion">Save changes</button>
+      </template>
+    </CrmModal>
+
     <div class="grid">
       <!-- Categories rail -->
       <aside class="cats">
         <div class="cats__header">
           <div class="cats__label">Categories</div>
-          <button class="cats__new">+ New</button>
+          <button class="cats__new" @click="openCreate">+ New</button>
         </div>
         <div class="cats__list">
           <button
@@ -216,31 +301,31 @@ const decades: Decade[] = [
             </div>
           </div>
           <div class="hero__body">
-            <div class="hero__eyebrow">Reigning champion · 2026</div>
-            <div class="hero__name">Marcus Tuilagi</div>
-            <div class="hero__cat">{{ activeCategory.name }} · Naenae BC</div>
+            <div class="hero__eyebrow">Reigning champion · {{ champion.year }}</div>
+            <div class="hero__name">{{ champion.name }}</div>
+            <div class="hero__cat">{{ activeCategory.name }} · {{ champion.club }}</div>
             <div class="hero__stats">
               <div class="hero__stat">
-                <div class="hero__stat-value">3</div>
+                <div class="hero__stat-value">{{ champion.titlesHeld }}</div>
                 <div class="hero__stat-label">Titles held</div>
               </div>
               <div class="hero__stat">
-                <div class="hero__stat-value">21–14</div>
+                <div class="hero__stat-value">{{ champion.finalScore }}</div>
                 <div class="hero__stat-label">Final score</div>
               </div>
               <div class="hero__stat">
-                <div class="hero__stat-value">14</div>
+                <div class="hero__stat-value">{{ champion.seasonsPlayed }}</div>
                 <div class="hero__stat-label">Seasons played</div>
               </div>
               <div class="hero__stat">
-                <div class="hero__stat-value">Mar '26</div>
+                <div class="hero__stat-value">{{ champion.awardedAt }}</div>
                 <div class="hero__stat-label">Awarded</div>
               </div>
             </div>
           </div>
           <div class="hero__actions">
-            <button class="hero__btn hero__btn--solid">Edit champion</button>
-            <button class="hero__btn hero__btn--ghost">Share to site</button>
+            <button class="hero__btn hero__btn--solid" @click="openEditChampion">Edit champion</button>
+            <button class="hero__btn hero__btn--ghost" @click="shareToSite">Share to site</button>
           </div>
         </div>
 
@@ -305,7 +390,7 @@ const decades: Decade[] = [
               <span class="load-more__icon">+</span>
               25 more winners between <strong>1984–2009</strong>
             </div>
-            <button class="btn btn--ghost">Load earlier years</button>
+            <button class="btn btn--ghost" @click="loadOlder">Load earlier years</button>
           </div>
         </div>
 
@@ -492,6 +577,7 @@ const decades: Decade[] = [
 /* Modal form */
 .form { display: flex; flex-direction: column; gap: 14px; }
 .form__row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form__row--three { grid-template-columns: 1fr 1fr 1fr; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
 .field input, .field select { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; }

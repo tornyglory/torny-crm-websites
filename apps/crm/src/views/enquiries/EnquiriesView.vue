@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useToast } from '@/composables/useToast'
+import CrmModal from '@/components/modals/CrmModal.vue'
+
+const toast = useToast()
 
 type Status = 'new' | 'replied' | 'closed'
 type Source = 'contact_form' | 'membership_page' | 'events_page'
@@ -94,10 +98,30 @@ function selectEnquiry(e: Enquiry) {
 function markReplied() {
   if (!selected.value) return
   selected.value.status = 'replied'
+  toast.success(`Reply sent to ${selected.value.from}`)
 }
 function markClosed() {
   if (!selected.value) return
   selected.value.status = 'closed'
+  toast.info('Enquiry closed without reply.')
+}
+function exportEnquiries() {
+  toast.info(`Exporting ${enquiries.value.length} enquiries — check your email in a minute.`)
+}
+
+// ── Auto-reply modal ───────────────────────────────────────────
+const autoReplyOpen = ref(false)
+const autoReply = ref({
+  enabled: true,
+  subject: 'Thanks — we got your message',
+  body: `Kia ora,\n\nThanks for reaching out. A committee member will reply within two working days.\n\nNgā mihi,\nThe Kelburn Bowls committee`,
+})
+
+function openAutoReply() { autoReplyOpen.value = true }
+function closeAutoReply() { autoReplyOpen.value = false }
+function saveAutoReply() {
+  autoReplyOpen.value = false
+  toast.success('Auto-reply saved.')
 }
 </script>
 
@@ -110,8 +134,8 @@ function markClosed() {
         <p class="enq__sub">Site contact form + membership + event pages land here. {{ counts.new }} unread.</p>
       </div>
       <div class="enq__toolbar">
-        <button class="btn btn--outline">Auto-reply</button>
-        <button class="btn btn--outline">Export</button>
+        <button class="btn btn--outline" @click="openAutoReply">Auto-reply</button>
+        <button class="btn btn--outline" @click="exportEnquiries">Export</button>
       </div>
     </header>
 
@@ -181,6 +205,36 @@ function markClosed() {
         </div>
       </aside>
     </div>
+
+    <CrmModal
+      :open="autoReplyOpen"
+      eyebrow="Enquiries"
+      title="Auto-reply"
+      width="md"
+      @close="closeAutoReply"
+    >
+      <div class="switch-row switch-row--top">
+        <div>
+          <div class="switch-row__label">Send an instant reply</div>
+          <div class="switch-row__hint">Everyone who submits an enquiry gets this straight away.</div>
+        </div>
+        <button type="button" class="switch" :class="{ 'is-on': autoReply.enabled }" @click="autoReply.enabled = !autoReply.enabled"><span class="switch__knob" /></button>
+      </div>
+      <form class="form" @submit.prevent="saveAutoReply">
+        <label class="field">
+          <span class="field__label">Subject</span>
+          <input v-model="autoReply.subject" type="text" :disabled="!autoReply.enabled" />
+        </label>
+        <label class="field">
+          <span class="field__label">Body</span>
+          <textarea v-model="autoReply.body" rows="6" :disabled="!autoReply.enabled" />
+        </label>
+      </form>
+      <template #footer>
+        <button type="button" class="modal-btn modal-btn--outline" @click="closeAutoReply">Cancel</button>
+        <button type="button" class="modal-btn modal-btn--primary" @click="saveAutoReply">Save auto-reply</button>
+      </template>
+    </CrmModal>
   </div>
 </template>
 
@@ -242,4 +296,24 @@ function markClosed() {
   .enq__pane { grid-template-columns: 1fr; }
   .detail { position: static; }
 }
+
+/* Auto-reply modal */
+.form { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.field input, .field textarea { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; resize: vertical; }
+.field input:focus, .field textarea:focus { outline: none; border-color: var(--color-ink); }
+.field input:disabled, .field textarea:disabled { opacity: 0.5; }
+.switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--color-hairline); }
+.switch-row--top { border-top: 0; padding-top: 0; margin-bottom: 4px; }
+.switch-row__label { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
+.switch-row__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
+.switch { width: 40px; height: 24px; padding: 3px; border-radius: 999px; background: var(--color-hairline); border: 0; display: flex; cursor: pointer; flex-shrink: 0; }
+.switch.is-on { background: var(--color-ink); }
+.switch__knob { width: 18px; height: 18px; border-radius: 999px; background: #fff; transition: transform 0.15s ease; }
+.switch.is-on .switch__knob { transform: translateX(16px); }
+.modal-btn { padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; }
+.modal-btn--primary { background: var(--color-ink); color: #fff; }
+.modal-btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
+.modal-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 </style>

@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import CrmModal from '@/components/modals/CrmModal.vue'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 type Channel = 'email' | 'sms'
 type Status = 'draft' | 'scheduled' | 'sent'
@@ -113,6 +117,87 @@ const composeForm = ref({
   audience: 'Playing members',
   body: '',
 })
+
+// ── Compose actions ────────────────────────────────────────────
+const sendConfirmOpen = ref(false)
+const scheduleOpen = ref(false)
+const scheduleForm = ref({ date: '', time: '' })
+
+function audienceCount(label: string): number {
+  return audiences.find((a) => a.label === label)?.count ?? 0
+}
+
+function saveDraft() {
+  if (!composeForm.value.subject.trim()) {
+    toast.error('Give it a subject before saving a draft.')
+    return
+  }
+  campaigns.value.unshift({
+    id: `c${Date.now()}`,
+    subject: composeForm.value.subject.trim(),
+    channel: composeForm.value.channel,
+    audience: composeForm.value.audience,
+    audienceCount: audienceCount(composeForm.value.audience),
+    status: 'draft',
+    createdAt: 'just now',
+    preview: composeForm.value.body.trim() || '(no preview)',
+  })
+  composeOpen.value = false
+  toast.info('Draft saved.')
+}
+
+function openSchedule() {
+  if (!composeForm.value.subject.trim()) {
+    toast.error('Give it a subject before scheduling.')
+    return
+  }
+  scheduleForm.value = { date: '', time: '' }
+  scheduleOpen.value = true
+}
+function confirmSchedule() {
+  if (!scheduleForm.value.date || !scheduleForm.value.time) {
+    toast.error('Pick a date and time.')
+    return
+  }
+  campaigns.value.unshift({
+    id: `c${Date.now()}`,
+    subject: composeForm.value.subject.trim(),
+    channel: composeForm.value.channel,
+    audience: composeForm.value.audience,
+    audienceCount: audienceCount(composeForm.value.audience),
+    status: 'scheduled',
+    createdAt: 'just now',
+    scheduleFor: `${scheduleForm.value.date} · ${scheduleForm.value.time}`,
+    preview: composeForm.value.body.trim() || '(no preview)',
+  })
+  scheduleOpen.value = false
+  composeOpen.value = false
+  toast.success('Scheduled to send.')
+}
+
+function openSend() {
+  if (!composeForm.value.subject.trim()) {
+    toast.error('Give it a subject before sending.')
+    return
+  }
+  sendConfirmOpen.value = true
+}
+function confirmSend() {
+  campaigns.value.unshift({
+    id: `c${Date.now()}`,
+    subject: composeForm.value.subject.trim(),
+    channel: composeForm.value.channel,
+    audience: composeForm.value.audience,
+    audienceCount: audienceCount(composeForm.value.audience),
+    status: 'sent',
+    createdAt: 'just now',
+    sentAt: 'just now',
+    preview: composeForm.value.body.trim() || '(no preview)',
+  })
+  sendConfirmOpen.value = false
+  composeOpen.value = false
+  toast.success(`Sent to ${audienceCount(composeForm.value.audience)} recipients.`)
+}
 
 const audiences = [
   { key: 'all', label: 'All members', count: 142 },
@@ -256,12 +341,53 @@ function formatPct(v: number | undefined) {
         </div>
 
         <footer class="drawer__foot">
-          <button class="btn btn--outline" @click="composeOpen = false">Save draft</button>
-          <button class="btn btn--outline">Schedule…</button>
-          <button class="btn btn--primary">Send now</button>
+          <button class="btn btn--outline" @click="saveDraft">Save draft</button>
+          <button class="btn btn--outline" @click="openSchedule">Schedule…</button>
+          <button class="btn btn--primary" @click="openSend">Send now</button>
         </footer>
       </div>
     </div>
+
+    <CrmModal
+      :open="sendConfirmOpen"
+      eyebrow="Send campaign"
+      :title="`Send to ${audienceCount(composeForm.audience)} recipients?`"
+      width="sm"
+      @close="sendConfirmOpen = false"
+    >
+      <p class="confirm__body">
+        This will send <b>{{ composeForm.channel.toUpperCase() }}</b> immediately to
+        <b>{{ composeForm.audience }}</b> — {{ audienceCount(composeForm.audience) }} recipients.
+      </p>
+      <p class="confirm__hint">You can't unsend. Draft it and use Schedule if you'd like a safety window.</p>
+      <template #footer>
+        <button type="button" class="modal-btn modal-btn--outline" @click="sendConfirmOpen = false">Cancel</button>
+        <button type="button" class="modal-btn modal-btn--primary" @click="confirmSend">Send now</button>
+      </template>
+    </CrmModal>
+
+    <CrmModal
+      :open="scheduleOpen"
+      eyebrow="Schedule"
+      title="When should it go out?"
+      width="sm"
+      @close="scheduleOpen = false"
+    >
+      <div class="schedule__row">
+        <label class="field">
+          <span class="field__label">Date</span>
+          <input v-model="scheduleForm.date" type="text" placeholder="Fri 22 Aug" />
+        </label>
+        <label class="field">
+          <span class="field__label">Time</span>
+          <input v-model="scheduleForm.time" type="text" placeholder="9:00 AM" />
+        </label>
+      </div>
+      <template #footer>
+        <button type="button" class="modal-btn modal-btn--outline" @click="scheduleOpen = false">Cancel</button>
+        <button type="button" class="modal-btn modal-btn--primary" @click="confirmSchedule">Schedule</button>
+      </template>
+    </CrmModal>
   </div>
 </template>
 
@@ -333,10 +459,21 @@ function formatPct(v: number | undefined) {
 .aud.is-active { border-color: var(--color-ink); background: var(--color-accent-soft); }
 .aud__count { font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); }
 
+/* Modal-scoped */
+.confirm__body { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); line-height: 1.55; margin: 0 0 8px; }
+.confirm__body b { color: var(--color-ink); }
+.confirm__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin: 0; }
+.schedule__row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modal-btn { padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; }
+.modal-btn--primary { background: var(--color-ink); color: #fff; }
+.modal-btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
+.modal-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
+
 @media (max-width: 767px) {
   .metrics { grid-template-columns: 1fr 1fr; }
   .row { flex-direction: column; }
   .row__right { align-items: flex-start; text-align: left; }
   .row__rates { border-top: 0; padding-top: 0; }
+  .schedule__row { grid-template-columns: 1fr; }
 }
 </style>

@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
 import NotificationsDropdown from '@/components/NotificationsDropdown.vue'
 import NewMenu from '@/components/NewMenu.vue'
+import CrmToast from '@/components/CrmToast.vue'
 
 const auth = useAuthStore()
 const club = useClubStore()
@@ -171,6 +172,8 @@ const bottomTabs: TabItem[] = [
       <NotificationsDropdown v-model:open="notifsOpen" />
       <!-- Quick-create menu anchored to the "+ New" button. -->
       <NewMenu v-model:open="newMenuOpen" />
+      <!-- Global toast — any view can call useToast().success(...) etc. -->
+      <CrmToast />
 
       <div class="page">
         <RouterView />

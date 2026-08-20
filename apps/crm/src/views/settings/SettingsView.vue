@@ -97,13 +97,84 @@ const brandWordmark = computed(() => {
   return parts.map((p) => p.charAt(0)).slice(0, 4).join('').toUpperCase()
 })
 
+const logoUploading = ref(false)
+const logoError = ref<string | null>(null)
+
 function openLogoPicker() {
   logoFileInput.value?.click()
 }
-function onLogoFile(e: Event) {
+
+async function onLogoFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
-  if (file) onboarding.data.logoName = file.name
+  if (!file) return
+  logoError.value = null
+
+  // Reject anything not image/*
+  if (!file.type.startsWith('image/')) {
+    logoError.value = 'That doesn\'t look like an image. Use a PNG, JPG, or SVG.'
+    return
+  }
+  // Guard against ridiculous uploads
+  if (file.size > 5 * 1024 * 1024) {
+    logoError.value = 'Keep it under 5MB — we\'ll resize before uploading.'
+    return
+  }
+
+  logoUploading.value = true
+  try {
+    // Read the file as data URL first for preview.
+    const dataUrl = await readFileAsDataUrl(file)
+    // Downscale raster images to 512×512 max so the localStorage blob stays
+    // small. SVGs bypass canvas — they'd rasterise for no reason.
+    const finalUrl = file.type === 'image/svg+xml'
+      ? dataUrl
+      : await downscaleImage(dataUrl, 512)
+    onboarding.data.logoName = file.name
+    onboarding.data.logoDataUrl = finalUrl
+  } catch (err) {
+    logoError.value = `Couldn't read that image — ${(err as Error).message}`
+  } finally {
+    logoUploading.value = false
+    // Allow picking the same file again by clearing the input's value.
+    if (logoFileInput.value) logoFileInput.value.value = ''
+  }
 }
+
+function removeLogo() {
+  onboarding.data.logoName = null
+  onboarding.data.logoDataUrl = null
+  logoError.value = null
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(new Error('read failed'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function downscaleImage(dataUrl: string, maxSide: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height))
+      const w = Math.round(img.width * scale)
+      const h = Math.round(img.height * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return reject(new Error('canvas not supported'))
+      ctx.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/png'))
+    }
+    img.onerror = () => reject(new Error('image decode failed'))
+    img.src = dataUrl
+  })
+}
+
 function saveBrand() {
   toast.success('Brand saved.')
 }
@@ -252,21 +323,30 @@ function sendInvite() {
               <div class="brand-card">
                 <div class="field__label">Logo</div>
                 <div class="logo">
-                  <div class="logo__drop" @click="openLogoPicker" role="button" tabindex="0">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M12 5v14M5 12h14" /></svg>
+                  <div class="logo__drop" :class="{ 'has-image': !!onboarding.data.logoDataUrl }" @click="openLogoPicker" role="button" tabindex="0">
+                    <img v-if="onboarding.data.logoDataUrl" :src="onboarding.data.logoDataUrl" alt="Club logo" class="logo__drop-img" />
+                    <span v-else-if="logoUploading" class="logo__drop-spin" />
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M12 5v14M5 12h14" /></svg>
                   </div>
                   <div class="logo__body">
                     <div class="logo__title">{{ onboarding.data.logoName ? 'Change logo' : 'Upload logo' }}</div>
-                    <div class="logo__hint">{{ onboarding.data.logoName || 'PNG or SVG · square works best · at least 400×400' }}</div>
-                    <button type="button" class="logo__btn" @click="openLogoPicker">Choose file</button>
-                    <input ref="logoFileInput" type="file" accept="image/png,image/svg+xml" hidden @change="onLogoFile" />
+                    <div class="logo__hint">{{ onboarding.data.logoName || 'PNG, JPG or SVG · square works best · under 5MB' }}</div>
+                    <div class="logo__actions">
+                      <button type="button" class="logo__btn" @click="openLogoPicker" :disabled="logoUploading">{{ logoUploading ? 'Reading…' : 'Choose file' }}</button>
+                      <button v-if="onboarding.data.logoDataUrl" type="button" class="logo__remove" @click="removeLogo">Remove</button>
+                    </div>
+                    <input ref="logoFileInput" type="file" accept="image/png,image/jpeg,image/svg+xml" hidden @change="onLogoFile" />
                   </div>
                 </div>
+                <div v-if="logoError" class="logo__error">{{ logoError }}</div>
               </div>
               <div class="brand-card brand-card--preview">
                 <div class="field__label">Preview</div>
                 <div class="preview" :style="{ background: onboarding.data.accentColour + '14', borderColor: onboarding.data.accentColour + '33' }">
-                  <span class="preview__mark" :style="{ background: onboarding.data.accentColour }">
+                  <span v-if="onboarding.data.logoDataUrl" class="preview__logo">
+                    <img :src="onboarding.data.logoDataUrl" alt="Logo preview" />
+                  </span>
+                  <span v-else class="preview__mark" :style="{ background: onboarding.data.accentColour }">
                     <span class="preview__mark-dot" />
                   </span>
                   <span class="preview__wordmark">{{ brandWordmark }}</span>
@@ -776,16 +856,28 @@ function sendInvite() {
 .brand-card--preview { display: flex; flex-direction: column; gap: 12px; }
 .brand-grid + .brand-card { margin-top: 12px; }
 .logo { display: flex; align-items: center; gap: 14px; }
-.logo__drop { width: 72px; height: 72px; border-radius: 14px; background: #fff; border: 1px dashed var(--color-hairline); display: inline-flex; align-items: center; justify-content: center; color: var(--color-mute); cursor: pointer; flex-shrink: 0; }
+.logo__drop { width: 72px; height: 72px; border-radius: 14px; background: #fff; border: 1px dashed var(--color-hairline); display: inline-flex; align-items: center; justify-content: center; color: var(--color-mute); cursor: pointer; flex-shrink: 0; overflow: hidden; position: relative; }
 .logo__drop:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.logo__drop.has-image { border-style: solid; padding: 6px; }
+.logo__drop-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.logo__drop-spin { width: 22px; height: 22px; border: 2px solid var(--color-hairline); border-top-color: var(--color-accent); border-radius: 999px; animation: logo-spin 0.8s linear infinite; }
+@keyframes logo-spin { to { transform: rotate(360deg); } }
 .logo__body { flex: 1; min-width: 0; }
 .logo__title { font-family: var(--font-display); font-size: 14px; font-weight: 600; color: var(--color-ink); }
-.logo__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 3px; }
-.logo__btn { margin-top: 8px; padding: 7px 12px; background: var(--color-ink); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
-.logo__btn:hover { background: var(--color-graphite); }
-.preview { height: 78px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; width: 100%; gap: 10px; border: 1px solid; }
-.preview__mark { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; }
+.logo__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logo__actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.logo__btn { padding: 7px 12px; background: var(--color-ink); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
+.logo__btn:hover:not(:disabled) { background: var(--color-graphite); }
+.logo__btn:disabled { opacity: 0.6; cursor: default; }
+.logo__remove { background: transparent; border: 0; padding: 0; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-danger); cursor: pointer; }
+.logo__remove:hover { text-decoration: underline; }
+.logo__error { padding: 8px 10px; background: #FEE2E2; color: #991B1B; border-radius: 8px; font-family: var(--font-body); font-size: 12px; }
+
+.preview { height: 78px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; width: 100%; gap: 12px; border: 1px solid; padding: 0 16px; }
+.preview__mark { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .preview__mark-dot { width: 8px; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.7); }
+.preview__logo { width: 44px; height: 44px; border-radius: 10px; background: #fff; display: inline-flex; align-items: center; justify-content: center; padding: 4px; box-shadow: 0 1px 2px rgba(10, 10, 11, 0.06); flex-shrink: 0; }
+.preview__logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .preview__wordmark { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--color-ink); }
 
 .accent-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }

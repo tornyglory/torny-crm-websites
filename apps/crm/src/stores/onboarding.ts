@@ -43,6 +43,7 @@ export interface OnboardingData {
   tiers: MembershipTier[]
   // Step 5 — Brand
   logoName: string | null
+  logoDataUrl: string | null    // client-side preview only; backend upload is a follow-up (brief 10 §6)
   accentColour: string
   tagline: string
   // Step 6 — Website
@@ -83,6 +84,7 @@ const defaultData = (): OnboardingData => ({
     { id: 'junior', name: 'Junior (under 25)', description: 'Full playing rights at a supported rate.', price: 40, tone: 'tangerine' },
   ],
   logoName: null,
+  logoDataUrl: null,
   accentColour: '#2563EB',
   tagline: '',
   subdomain: '',

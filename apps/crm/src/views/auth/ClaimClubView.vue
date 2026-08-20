@@ -3,9 +3,11 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { directory, claims as claimsApi, ApiError, type DirectoryClub, type MyClaim } from '@torny/api-client'
 import { useAuthStore } from '@/stores/auth'
+import { useClubStore } from '@/stores/club'
 
 const router = useRouter()
 const auth = useAuthStore()
+const club = useClubStore()
 
 type Step = 1 | 2 | 3
 
@@ -177,6 +179,7 @@ onMounted(async () => {
     const approved = rows.find((c) => c.status === 'approved')
     if (approved) {
       await auth.refresh()
+      club.syncFromUserClubs(auth.user?.clubs)
       router.replace('/crm/dashboard')
       return
     }

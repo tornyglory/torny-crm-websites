@@ -1,12 +1,17 @@
 export type ID = string
 
+/**
+ * Full club record. `id` is a number (matches backend integer PKs; see brief
+ * 08 §Timezones + IDs). Other fields are optional so we can hydrate a stub
+ * from a `UserClub` in the auth response before a full /clubs/:id load.
+ */
 export interface Club {
-  id: ID
-  slug: string
+  id: number
   name: string
-  domain: string | null
-  brandPrimary: string | null
-  logoUrl: string | null
+  slug?: string | null
+  domain?: string | null
+  brandPrimary?: string | null
+  logoUrl?: string | null
 }
 
 export interface Member {

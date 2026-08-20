@@ -80,7 +80,11 @@ export const useAuthStore = defineStore('auth', () => {
   /**
    * Refresh the local user from GET /me. Call after actions that may have
    * mutated the caller's role/clubs server-side (e.g. their claim was
-   * approved). Silent on 401 — router will handle re-authing.
+   * approved). Silent on 401 — router will handle re-authing. Callers who
+   * need the current-club sidebar to stay in sync should also invoke
+   * `useClubStore().syncFromUserClubs(user.value?.clubs)` after this
+   * resolves — kept as a caller responsibility to avoid a store→store
+   * circular import.
    */
   async function refresh(): Promise<void> {
     if (!token.value) return

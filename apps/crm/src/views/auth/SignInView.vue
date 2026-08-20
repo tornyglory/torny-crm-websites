@@ -44,9 +44,10 @@ async function submit(e: Event) {
     })
     const user = fromApiUser(apiUser)
     auth.setSession(token, user)
-    // We don't know a club yet in M1 (clubs[] is always empty). Clear any
-    // stale mock club so the shell doesn't pretend they belong somewhere.
-    club.clear()
+    // Hydrate the current club from the login response's clubs[] so the
+    // sidebar badge shows the right club immediately. No-op for platform
+    // admins or players with no clubs.
+    club.syncFromUserClubs(user.clubs)
 
     const redirect = (route.query.redirect as string | undefined) ?? landingFor(user)
     await router.push(redirect)

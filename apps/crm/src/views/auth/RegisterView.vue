@@ -47,7 +47,7 @@ async function submit(e: Event) {
     })
     const user = fromApiUser(apiUser)
     auth.setSession(token, user)
-    club.clear()
+    club.syncFromUserClubs(user.clubs)
 
     const redirect = (route.query.redirect as string | undefined) ?? '/claim'
     await router.push(redirect)

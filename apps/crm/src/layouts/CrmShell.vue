@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
 import NotificationsDropdown from '@/components/NotificationsDropdown.vue'
 import NewMenu from '@/components/NewMenu.vue'
+import UserMenu from '@/components/UserMenu.vue'
 import CrmToast from '@/components/CrmToast.vue'
 
 const auth = useAuthStore()
@@ -13,14 +14,19 @@ const route = useRoute()
 const moreOpen = ref(false)
 const notifsOpen = ref(false)
 const newMenuOpen = ref(false)
+const userMenuOpen = ref(false)
 
 function toggleNotifs() {
   notifsOpen.value = !notifsOpen.value
-  if (notifsOpen.value) newMenuOpen.value = false
+  if (notifsOpen.value) { newMenuOpen.value = false; userMenuOpen.value = false }
 }
 function toggleNewMenu() {
   newMenuOpen.value = !newMenuOpen.value
-  if (newMenuOpen.value) notifsOpen.value = false
+  if (newMenuOpen.value) { notifsOpen.value = false; userMenuOpen.value = false }
+}
+function toggleUserMenu() {
+  userMenuOpen.value = !userMenuOpen.value
+  if (userMenuOpen.value) { notifsOpen.value = false; newMenuOpen.value = false }
 }
 
 const initials = computed(() => {
@@ -125,7 +131,12 @@ const bottomTabs: TabItem[] = [
           </svg>
           <span class="mobile-top__bell-dot" />
         </button>
-        <div class="mobile-top__avatar">{{ initials }}</div>
+        <button
+          class="mobile-top__avatar"
+          data-usermenu-anchor
+          aria-label="Account menu"
+          @click="toggleUserMenu"
+        >{{ initials }}</button>
       </header>
 
       <!-- Desktop topbar -->
@@ -164,6 +175,15 @@ const bottomTabs: TabItem[] = [
             + New
             <span class="topbar__new-kbd" aria-hidden="true">⌘N</span>
           </button>
+          <button
+            class="topbar__avatar"
+            data-usermenu-anchor
+            :aria-expanded="userMenuOpen"
+            aria-label="Account menu"
+            @click="toggleUserMenu"
+          >
+            <span>{{ initials }}</span>
+          </button>
         </div>
       </header>
 
@@ -172,6 +192,8 @@ const bottomTabs: TabItem[] = [
       <NotificationsDropdown v-model:open="notifsOpen" />
       <!-- Quick-create menu anchored to the "+ New" button. -->
       <NewMenu v-model:open="newMenuOpen" />
+      <!-- Account menu anchored to the avatar (desktop) or mobile top strip. -->
+      <UserMenu v-model:open="userMenuOpen" />
       <!-- Global toast — any view can call useToast().success(...) etc. -->
       <CrmToast />
 
@@ -267,6 +289,9 @@ const bottomTabs: TabItem[] = [
 .topbar__new { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; background: var(--color-ink); color: #fff; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color 0.15s ease; }
 .topbar__new:hover { background: var(--color-graphite); }
 .topbar__new-kbd { font-family: var(--font-mono); font-size: 10px; padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.7); letter-spacing: 0.02em; }
+.topbar__avatar { width: 34px; height: 34px; border-radius: 999px; background: var(--color-ink); color: #fff; border: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-family: var(--font-body); font-size: 12px; font-weight: 700; transition: background-color 0.15s ease; }
+.topbar__avatar:hover { background: var(--color-graphite); }
+.topbar__avatar:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
 /* -------- Mobile top nav -------- */
 .mobile-top { display: none; padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--color-hairline); align-items: center; gap: 12px; position: sticky; top: 0; z-index: 5; }
@@ -275,7 +300,8 @@ const bottomTabs: TabItem[] = [
 .mobile-top__club-name { flex: 1; font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-top__bell { position: relative; width: 36px; height: 36px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; color: var(--color-ink); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .mobile-top__bell-dot { position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 999px; background: var(--color-danger); border: 2px solid #fff; }
-.mobile-top__avatar { width: 36px; height: 36px; border-radius: 999px; background: var(--color-graphite); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 12px; font-weight: 700; }
+.mobile-top__avatar { width: 36px; height: 36px; border-radius: 999px; background: var(--color-graphite); color: #fff; border: 0; padding: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 12px; font-weight: 700; cursor: pointer; }
+.mobile-top__avatar:hover { background: var(--color-ink); }
 
 /* -------- Page area -------- */
 .page { flex: 1; padding: 32px 40px; background: var(--color-surface); }

@@ -191,8 +191,7 @@ onUnmounted(() => {
               @click="selected = club"
             >
               <div class="club__avatar" :style="{ background: avatarColour(club) }">
-                <img v-if="club.avatar" :src="club.avatar" :alt="club.name" />
-                <span v-else>{{ initials(club) }}</span>
+                <span>{{ initials(club) }}</span>
               </div>
               <div class="club__body">
                 <div class="club__name">{{ club.name }}</div>
@@ -263,8 +262,7 @@ onUnmounted(() => {
 
         <div class="picked">
           <div class="club__avatar club__avatar--lg" :style="{ background: avatarColour(selected) }">
-            <img v-if="selected.avatar" :src="selected.avatar" :alt="selected.name" />
-            <span v-else>{{ initials(selected) }}</span>
+            <span>{{ initials(selected) }}</span>
           </div>
           <div class="picked__body">
             <div class="picked__name">{{ selected.name }}</div>

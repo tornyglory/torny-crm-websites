@@ -1,8 +1,9 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
-import { requireOwner } from './guards'
+import { requireOwner, requireOwnerAndOnboarded } from './guards'
 
 const CrmShell = () => import('@/layouts/CrmShell.vue')
 const AuthShell = () => import('@/layouts/AuthShell.vue')
+const OnboardingShell = () => import('@/layouts/OnboardingShell.vue')
 
 const routes: RouteRecordRaw[] = [
   {
@@ -15,9 +16,25 @@ const routes: RouteRecordRaw[] = [
     ],
   },
   {
+    path: '/crm/onboarding',
+    component: OnboardingShell,
+    beforeEnter: requireOwner,
+    children: [
+      { path: '', redirect: { name: 'onboarding-welcome' } },
+      { path: 'welcome', name: 'onboarding-welcome', component: () => import('@/views/onboarding/WelcomeView.vue') },
+      { path: 'club-basics', name: 'onboarding-step-1', component: () => import('@/views/onboarding/Step1BasicsView.vue') },
+      { path: 'location', name: 'onboarding-step-2', component: () => import('@/views/onboarding/Step2LocationView.vue') },
+      { path: 'contact', name: 'onboarding-step-3', component: () => import('@/views/onboarding/Step3ContactView.vue') },
+      { path: 'membership', name: 'onboarding-step-4', component: () => import('@/views/onboarding/Step4MembershipView.vue') },
+      { path: 'brand', name: 'onboarding-step-5', component: () => import('@/views/onboarding/Step5BrandView.vue') },
+      { path: 'website', name: 'onboarding-step-6', component: () => import('@/views/onboarding/Step6WebsiteView.vue') },
+      { path: 'complete', name: 'onboarding-complete', component: () => import('@/views/onboarding/CompleteView.vue') },
+    ],
+  },
+  {
     path: '/crm',
     component: CrmShell,
-    beforeEnter: requireOwner,
+    beforeEnter: requireOwnerAndOnboarded,
     children: [
       { path: '', redirect: { name: 'dashboard' } },
       { path: 'dashboard', name: 'dashboard', component: () => import('@/views/dashboard/DashboardView.vue') },

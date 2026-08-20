@@ -283,7 +283,7 @@ const bottomTabs: TabItem[] = [
 .topbar__search-input { width: 100%; padding: 9px 44px 9px 40px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 13px; background: var(--color-surface); color: var(--color-ink); }
 .topbar__search-input:focus { outline: none; border-color: var(--color-accent); background: #fff; box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .topbar__search-kbd { position: absolute; right: 12px; font-family: var(--font-mono); font-size: 10px; color: var(--color-fog); padding: 2px 6px; border: 1px solid var(--color-hairline); border-radius: 4px; background: #fff; }
-.topbar__actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.topbar__actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
 .topbar__bell { position: relative; width: 34px; height: 34px; background: transparent; border: 1px solid var(--color-hairline); border-radius: 10px; color: var(--color-ink); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .topbar__bell-dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 999px; background: var(--color-danger); border: 2px solid #fff; }
 .topbar__new { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; background: var(--color-ink); color: #fff; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color 0.15s ease; }

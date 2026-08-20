@@ -224,7 +224,7 @@ function submit() {
 </template>
 
 <style scoped>
-.members { max-width: 1080px; display: flex; flex-direction: column; gap: 20px; }
+.members { max-width: 1280px; display: flex; flex-direction: column; gap: 20px; }
 
 .members__header { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
 .members__eyebrow { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; color: var(--color-fog); text-transform: uppercase; }

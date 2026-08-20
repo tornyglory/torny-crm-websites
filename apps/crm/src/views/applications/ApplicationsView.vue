@@ -106,7 +106,7 @@ function exportCsv() {
 </template>
 
 <style scoped>
-.apps { max-width: 1080px; }
+.apps { max-width: 1280px; }
 .apps__header { display: flex; align-items: end; justify-content: space-between; margin-bottom: 24px; gap: 16px; }
 .apps__eyebrow { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; color: var(--color-fog); text-transform: uppercase; }
 .apps__heading { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin: 4px 0 6px; color: var(--color-ink); }

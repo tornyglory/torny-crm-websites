@@ -101,7 +101,7 @@ function newSelection() {
 </template>
 
 <style scoped>
-.teams { max-width: 1080px; }
+.teams { max-width: 1280px; }
 .teams__header { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
 .teams__eyebrow { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-fog); }
 .teams__heading { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin: 4px 0 6px; color: var(--color-ink); }

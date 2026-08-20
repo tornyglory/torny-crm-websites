@@ -2,13 +2,27 @@
 import { computed, reactive, ref } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import { useToast } from '@/composables/useToast'
+import { useOnboardingStore, type MembershipTier } from '@/stores/onboarding'
 
 const toast = useToast()
+const onboarding = useOnboardingStore()
 
-type SectionKey = 'club' | 'billing' | 'team' | 'security' | 'integrations' | 'danger'
+type SectionKey =
+  | 'club'
+  | 'membership'
+  | 'hours'
+  | 'brand'
+  | 'billing'
+  | 'team'
+  | 'security'
+  | 'integrations'
+  | 'danger'
 
 const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
-  { key: 'club', label: 'Club profile', hint: 'Name, logo, address, contact.' },
+  { key: 'club', label: 'Club profile', hint: 'Name, legal, address, contact.' },
+  { key: 'membership', label: 'Membership types', hint: 'Tiers, pricing, cadence.' },
+  { key: 'hours', label: 'Opening hours', hint: 'Weekly schedule for the clubrooms.' },
+  { key: 'brand', label: 'Brand', hint: 'Logo, accent colour, tagline.' },
   { key: 'billing', label: 'Billing', hint: 'Torny subscription + invoices.' },
   { key: 'team', label: 'Team access', hint: 'Who else can manage the CRM.' },
   { key: 'security', label: 'Security', hint: 'Sign-in, sessions, 2FA.' },
@@ -17,6 +31,84 @@ const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
 ]
 
 const active = ref<SectionKey>('club')
+
+// ── Membership tiers (shared with onboarding store) ────────────
+// Tiers, cadence and discount live in onboarding — same source of truth
+// whether the owner is completing setup or editing later. Backend swap
+// (brief 10 §3) writes both surfaces to `membership_tiers` in one place.
+const cadenceLabel = computed(
+  () => ({ annual: 'per year', monthly: 'per month', season: 'per season' })[onboarding.data.cadence],
+)
+const tierToneMap: Record<MembershipTier['tone'], { bg: string; fg: string }> = {
+  accent: { bg: 'var(--color-accent-soft)', fg: 'var(--color-accent-strong)' },
+  mint: { bg: '#DCFCE7', fg: '#166534' },
+  tangerine: { bg: '#FEF3C7', fg: '#92400E' },
+  violet: { bg: '#EDE9FE', fg: '#5B21B6' },
+}
+const tierTones: MembershipTier['tone'][] = ['accent', 'mint', 'tangerine', 'violet']
+
+function addTier() {
+  const nextTone = tierTones[onboarding.data.tiers.length % tierTones.length]!
+  onboarding.data.tiers.push({
+    id: `tier-${Date.now()}`,
+    name: 'New tier',
+    description: 'What this membership includes.',
+    price: 0,
+    tone: nextTone,
+  })
+}
+function removeTier(id: string) {
+  onboarding.data.tiers = onboarding.data.tiers.filter((t) => t.id !== id)
+}
+function setDefaultTier(id: string) {
+  onboarding.data.tiers = onboarding.data.tiers.map((t) => ({ ...t, isDefault: t.id === id }))
+}
+function saveMembership() {
+  // Onboarding store already auto-persists via the watch — this is UX
+  // affordance parity with the other Settings sections.
+  toast.success('Membership settings saved.')
+}
+
+// ── Opening hours (shared with onboarding store) ───────────────
+const HOURS_DAYS = [
+  { key: 'mon', label: 'Monday' },
+  { key: 'tue', label: 'Tuesday' },
+  { key: 'wed', label: 'Wednesday' },
+  { key: 'thu', label: 'Thursday' },
+  { key: 'fri', label: 'Friday' },
+  { key: 'sat', label: 'Saturday' },
+  { key: 'sun', label: 'Sunday' },
+] as const
+
+function toggleDay(key: (typeof HOURS_DAYS)[number]['key']) {
+  onboarding.data.hours[key].open = !onboarding.data.hours[key].open
+}
+function saveHours() {
+  toast.success('Opening hours saved.')
+}
+
+// ── Brand (shared with onboarding store) ───────────────────────
+const brandSwatches = ['#2563EB', '#DC2626', '#16A34A', '#EA580C', '#7C3AED', '#0F766E', '#0A0A0B']
+const logoFileInput = ref<HTMLInputElement | null>(null)
+
+const brandWordmark = computed(() => {
+  const name = onboarding.data.clubName || club.value.name || 'Your club'
+  const parts = name.split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return 'YC'
+  if (parts.length === 1) return (parts[0] ?? '').slice(0, 12)
+  return parts.map((p) => p.charAt(0)).slice(0, 4).join('').toUpperCase()
+})
+
+function openLogoPicker() {
+  logoFileInput.value?.click()
+}
+function onLogoFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (file) onboarding.data.logoName = file.name
+}
+function saveBrand() {
+  toast.success('Brand saved.')
+}
 
 const club = ref({
   name: 'Kelburn Bowling Club',
@@ -225,6 +317,165 @@ function sendInvite() {
                 <button class="link" @click="toast.info(`Downloading ${i.id.toUpperCase()}…`)">Download</button>
               </li>
             </ul>
+          </div>
+        </template>
+
+        <!-- Membership types -->
+        <template v-else-if="active === 'membership'">
+          <div class="card">
+            <div class="card__head">
+              <div>
+                <div class="card__eyebrow">Membership types</div>
+                <h2 class="card__title">Tiers &amp; pricing</h2>
+              </div>
+              <button class="btn btn--outline" @click="saveMembership">Save changes</button>
+            </div>
+            <p class="card__sub">Tiers your members pay to join. Prices show on the public /membership page and drive the application flow.</p>
+
+            <div class="member-controls">
+              <div>
+                <div class="field__label">Billing cadence</div>
+                <div class="segmented">
+                  <button type="button" :class="{ 'is-on': onboarding.data.cadence === 'annual' }" @click="onboarding.data.cadence = 'annual'">Annual</button>
+                  <button type="button" :class="{ 'is-on': onboarding.data.cadence === 'monthly' }" @click="onboarding.data.cadence = 'monthly'">Monthly</button>
+                  <button type="button" :class="{ 'is-on': onboarding.data.cadence === 'season' }" @click="onboarding.data.cadence = 'season'">Season</button>
+                </div>
+              </div>
+              <div class="discount">
+                <span class="discount__dot" />
+                <span class="discount__label"><b>First year 20% off</b> — new joiners only</span>
+                <button type="button" class="switch" :class="{ 'is-on': onboarding.data.firstYearDiscount }" @click="onboarding.data.firstYearDiscount = !onboarding.data.firstYearDiscount"><span class="switch__knob" /></button>
+              </div>
+            </div>
+
+            <ul class="tiers">
+              <li v-for="tier in onboarding.data.tiers" :key="tier.id" class="tier">
+                <div class="tier__icon" :style="{ background: tierToneMap[tier.tone].bg, color: tierToneMap[tier.tone].fg }">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="8" r="3" /><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" /></svg>
+                </div>
+                <div class="tier__body">
+                  <div class="tier__row">
+                    <input v-model="tier.name" class="tier__name" />
+                    <span v-if="tier.isDefault" class="tier__flag">Default</span>
+                    <button v-else type="button" class="tier__make-default" @click="setDefaultTier(tier.id)">Make default</button>
+                  </div>
+                  <input v-model="tier.description" class="tier__desc" />
+                </div>
+                <div class="tier__price">
+                  <span class="tier__price-sign">$</span>
+                  <input v-model.number="tier.price" type="number" min="0" step="5" class="tier__price-input" />
+                  <span class="tier__price-unit">{{ cadenceLabel }}</span>
+                </div>
+                <button v-if="!tier.isDefault" type="button" class="tier__remove" aria-label="Remove tier" @click="removeTier(tier.id)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" width="14" height="14"><path d="M6 6l12 12M6 18L18 6" /></svg>
+                </button>
+              </li>
+              <button type="button" class="add-tier" @click="addTier">+ Add membership type</button>
+            </ul>
+          </div>
+        </template>
+
+        <!-- Opening hours -->
+        <template v-else-if="active === 'hours'">
+          <div class="card">
+            <div class="card__head">
+              <div>
+                <div class="card__eyebrow">Clubrooms</div>
+                <h2 class="card__title">Opening hours</h2>
+              </div>
+              <button class="btn btn--outline" @click="saveHours">Save changes</button>
+            </div>
+            <p class="card__sub">When your clubrooms are open. Shown on your public site and drives event scheduling defaults.</p>
+
+            <div class="hours-grid">
+              <div v-for="d in HOURS_DAYS" :key="d.key" class="hour-row" :class="{ 'is-closed': !onboarding.data.hours[d.key].open }">
+                <button type="button" class="switch switch--sm" :class="{ 'is-on': onboarding.data.hours[d.key].open }" @click="toggleDay(d.key)" aria-label="Toggle open"><span class="switch__knob" /></button>
+                <div class="hour-row__day">{{ d.label }}</div>
+                <template v-if="onboarding.data.hours[d.key].open">
+                  <input v-model="onboarding.data.hours[d.key].from" type="time" class="hour-row__time" />
+                  <span class="hour-row__dash">–</span>
+                  <input v-model="onboarding.data.hours[d.key].to" type="time" class="hour-row__time" />
+                </template>
+                <span v-else class="hour-row__closed">Closed</span>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Brand -->
+        <template v-else-if="active === 'brand'">
+          <div class="card">
+            <div class="card__head">
+              <div>
+                <div class="card__eyebrow">Visual identity</div>
+                <h2 class="card__title">Brand</h2>
+              </div>
+              <button class="btn btn--outline" @click="saveBrand">Save changes</button>
+            </div>
+            <p class="card__sub">A logo, an accent colour, one short tagline. Rendered across the CRM, the public site, and Torny apps.</p>
+
+            <div class="brand-grid">
+              <div class="brand-card">
+                <div class="field__label">Logo</div>
+                <div class="logo">
+                  <div class="logo__drop" @click="openLogoPicker" role="button" tabindex="0">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M12 5v14M5 12h14" /></svg>
+                  </div>
+                  <div class="logo__body">
+                    <div class="logo__title">{{ onboarding.data.logoName ? 'Change logo' : 'Upload logo' }}</div>
+                    <div class="logo__hint">{{ onboarding.data.logoName || 'PNG or SVG · square works best · at least 400×400' }}</div>
+                    <button type="button" class="logo__btn" @click="openLogoPicker">Choose file</button>
+                    <input ref="logoFileInput" type="file" accept="image/png,image/svg+xml" hidden @change="onLogoFile" />
+                  </div>
+                </div>
+              </div>
+              <div class="brand-card brand-card--preview">
+                <div class="field__label">Preview</div>
+                <div class="preview" :style="{ background: onboarding.data.accentColour + '14', borderColor: onboarding.data.accentColour + '33' }">
+                  <span class="preview__mark" :style="{ background: onboarding.data.accentColour }">
+                    <span class="preview__mark-dot" />
+                  </span>
+                  <span class="preview__wordmark">{{ brandWordmark }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="brand-card">
+              <div class="accent-head">
+                <div>
+                  <div class="field__label">Accent colour</div>
+                  <div class="accent-sub">Used on buttons, links, and highlights across your site.</div>
+                </div>
+                <div class="hex">
+                  <span class="hex__swatch" :style="{ background: onboarding.data.accentColour }" />
+                  <span class="hex__code">{{ onboarding.data.accentColour.toUpperCase() }}</span>
+                </div>
+              </div>
+              <div class="swatches">
+                <button
+                  v-for="c in brandSwatches"
+                  :key="c"
+                  type="button"
+                  class="swatch-btn"
+                  :class="{ 'is-on': onboarding.data.accentColour.toLowerCase() === c.toLowerCase() }"
+                  :style="{ background: c, '--ring': c } as any"
+                  @click="onboarding.data.accentColour = c"
+                />
+                <label class="swatch-btn swatch-btn--custom">
+                  <span>#</span>
+                  <input type="color" v-model="onboarding.data.accentColour" />
+                </label>
+              </div>
+            </div>
+
+            <label class="field">
+              <div class="field-head">
+                <span class="field__label">Tagline</span>
+                <span class="field__count">{{ onboarding.data.tagline.length }} / 80</span>
+              </div>
+              <input v-model="onboarding.data.tagline" maxlength="80" class="tagline" placeholder="Wellington's home for social bowls since 1898." />
+              <span class="field__hint">One short line. Appears under your club name on the public site.</span>
+            </label>
           </div>
         </template>
 
@@ -473,9 +724,95 @@ function sendInvite() {
 .modal-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .modal-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 
+/* ── Membership types ────────────────────────────────────────── */
+.member-controls { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin: 16px 0 20px; }
+.field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); margin-bottom: 8px; display: block; }
+.segmented { display: inline-flex; padding: 4px; background: var(--color-surface); border-radius: 999px; }
+.segmented button { padding: 8px 16px; background: transparent; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-fog); cursor: pointer; }
+.segmented button.is-on { background: #fff; color: var(--color-ink); font-weight: 600; box-shadow: var(--shadow-sm); }
+.discount { display: inline-flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--color-accent-soft); border-radius: 12px; }
+.discount__dot { width: 8px; height: 8px; border-radius: 999px; background: var(--color-accent); }
+.discount__label { font-family: var(--font-body); font-size: 12px; color: var(--color-accent-strong); }
+.discount__label b { font-weight: 600; }
+
+.tiers { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.tier { display: flex; align-items: center; gap: 16px; padding: 16px 20px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 14px; }
+.tier__icon { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.tier__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.tier__row { display: flex; align-items: center; gap: 10px; }
+.tier__name { border: 0; background: transparent; padding: 0; font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--color-ink); width: 100%; }
+.tier__name:focus { outline: none; }
+.tier__desc { border: 0; background: transparent; padding: 0; font-family: var(--font-body); font-size: 12px; color: var(--color-fog); width: 100%; }
+.tier__desc:focus { outline: none; color: var(--color-ink); }
+.tier__flag { font-family: var(--font-mono); font-size: 10px; padding: 2px 8px; background: var(--color-accent-soft); color: var(--color-accent-strong); border-radius: 6px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; }
+.tier__make-default { background: transparent; border: 0; padding: 0; font-family: var(--font-body); font-size: 11px; color: var(--color-accent); font-weight: 600; cursor: pointer; text-decoration: underline; }
+.tier__make-default:hover { color: var(--color-accent-strong); }
+.tier__price { display: inline-flex; align-items: center; padding: 8px 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; gap: 4px; flex-shrink: 0; }
+.tier__price-sign { font-family: var(--font-mono); font-size: 13px; color: var(--color-fog); }
+.tier__price-input { width: 60px; padding: 4px 0; background: transparent; border: 0; font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.01em; text-align: right; -moz-appearance: textfield; }
+.tier__price-input::-webkit-outer-spin-button, .tier__price-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.tier__price-input:focus { outline: none; }
+.tier__price-unit { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-left: 4px; }
+.tier__remove { width: 32px; height: 32px; border-radius: 8px; background: transparent; border: 1px solid var(--color-hairline); color: var(--color-fog); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.tier__remove:hover { background: var(--color-danger); border-color: var(--color-danger); color: #fff; }
+.add-tier { padding: 12px; background: transparent; border: 1px dashed var(--color-hairline); border-radius: 12px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-accent); cursor: pointer; }
+.add-tier:hover { background: var(--color-accent-soft); }
+
+/* ── Opening hours ───────────────────────────────────────────── */
+.hours-grid { display: flex; flex-direction: column; margin-top: 16px; }
+.hour-row { display: grid; grid-template-columns: 40px 130px 100px 12px 100px 1fr; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--color-hairline); }
+.hour-row:last-child { border-bottom: 0; }
+.hour-row.is-closed { opacity: 0.6; }
+.switch--sm { width: 34px; height: 20px; padding: 2px; }
+.switch--sm .switch__knob { width: 16px; height: 16px; }
+.switch--sm.is-on .switch__knob { transform: translateX(14px); }
+.hour-row__day { font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--color-ink); }
+.hour-row__time { padding: 8px 10px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-mono); font-size: 13px; color: var(--color-ink); }
+.hour-row__time:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
+.hour-row__dash { text-align: center; color: var(--color-fog); }
+.hour-row__closed { grid-column: 3 / -1; font-family: var(--font-body); font-size: 13px; color: var(--color-fog); font-style: italic; }
+
+/* ── Brand ───────────────────────────────────────────────────── */
+.brand-grid { display: grid; grid-template-columns: 1fr 260px; gap: 12px; margin-top: 16px; }
+.brand-card { padding: 18px 20px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 14px; }
+.brand-card--preview { display: flex; flex-direction: column; gap: 10px; }
+.logo { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+.logo__drop { width: 72px; height: 72px; border-radius: 14px; background: #fff; border: 1px dashed var(--color-hairline); display: inline-flex; align-items: center; justify-content: center; color: var(--color-mute); cursor: pointer; flex-shrink: 0; }
+.logo__drop:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.logo__body { flex: 1; min-width: 0; }
+.logo__title { font-family: var(--font-display); font-size: 14px; font-weight: 600; color: var(--color-ink); }
+.logo__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 3px; }
+.logo__btn { margin-top: 8px; padding: 7px 12px; background: var(--color-ink); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
+.logo__btn:hover { background: var(--color-graphite); }
+.preview { height: 78px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; width: 100%; gap: 10px; border: 1px solid; margin-top: 4px; }
+.preview__mark { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; }
+.preview__mark-dot { width: 8px; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.7); }
+.preview__wordmark { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--color-ink); }
+
+.accent-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 12px; }
+.accent-sub { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
+.hex { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 8px; flex-shrink: 0; }
+.hex__swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0, 0, 0, 0.06); }
+.hex__code { font-family: var(--font-mono); font-size: 12px; color: var(--color-ink); font-weight: 600; }
+.swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.swatch-btn { width: 38px; height: 38px; border-radius: 10px; border: 0; padding: 0; cursor: pointer; position: relative; transition: transform 0.1s ease; }
+.swatch-btn:hover { transform: scale(1.05); }
+.swatch-btn.is-on { box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--ring, var(--color-ink)); }
+.swatch-btn--custom { background: #fff; border: 1px dashed var(--color-hairline); display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: var(--color-fog); overflow: hidden; }
+.swatch-btn--custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.field { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.field-head { display: flex; justify-content: space-between; align-items: baseline; }
+.field__count { font-family: var(--font-mono); font-size: 10px; color: var(--color-mute); }
+.field__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-mute); }
+.tagline { padding: 12px 14px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-display); font-size: 16px; color: var(--color-ink); font-weight: 500; }
+.tagline:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
+
 @media (max-width: 900px) {
   .settings__grid { grid-template-columns: 1fr; }
   .nav { position: static; }
   .grid { grid-template-columns: 1fr; }
+  .member-controls { flex-direction: column; align-items: stretch; }
+  .brand-grid { grid-template-columns: 1fr; }
+  .hour-row { grid-template-columns: 32px 90px 1fr auto 1fr; row-gap: 6px; }
 }
 </style>

@@ -1,13 +1,26 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore } from '@/stores/onboarding'
+import { useOnboardingStore, stepForField } from '@/stores/onboarding'
+import { useToast } from '@/composables/useToast'
 
 const onboarding = useOnboardingStore()
 const router = useRouter()
+const toast = useToast()
 
 const clubName = computed(() => onboarding.data.clubName || 'Your club')
-const subdomain = computed(() => onboarding.data.subdomain || 'yourclub')
+// Prefer the server-provided publicUrl (guaranteed correct subdomain) over
+// whatever the user typed in step 6.
+const publicUrl = computed(() => onboarding.publicUrl)
+const subdomain = computed(() => {
+  if (publicUrl.value) {
+    const match = publicUrl.value.match(/https?:\/\/([^./]+)/)
+    if (match) return match[1]!
+  }
+  return onboarding.data.subdomain || 'yourclub'
+})
+
+const finalizeError = ref<string | null>(null)
 
 interface NextCard { to: { name: string }; label: string; title: string; desc: string; tone: 'accent' | 'mint' | 'tangerine'; time: string }
 const cards: NextCard[] = [
@@ -22,8 +35,19 @@ const toneMap = {
   tangerine: { bg: '#FEF3C7', fg: '#92400E' },
 } as const
 
-onMounted(() => {
-  if (!onboarding.completed) onboarding.markComplete()
+onMounted(async () => {
+  if (onboarding.completed) return
+  const result = await onboarding.markComplete()
+  if (result === 'validation') {
+    const first = onboarding.validationErrors[0]
+    const jumpTo = first ? stepForField(first.field) : 'welcome'
+    toast.error(`Please fix ${onboarding.validationErrors.length} issue${onboarding.validationErrors.length === 1 ? '' : 's'} before finishing.`)
+    // Bounce back to the step that owns the failing field.
+    if (jumpTo === 'welcome') router.replace({ name: 'onboarding-welcome' })
+    else router.replace({ name: `onboarding-step-${jumpTo}` })
+  } else if (result === 'error') {
+    finalizeError.value = onboarding.saveError ?? 'Something went wrong finishing setup.'
+  }
 })
 
 function enterDashboard() {
@@ -45,6 +69,7 @@ function enterDashboard() {
         <span class="hero__code">{{ subdomain }}.torny.club</span>
         &mdash; usually ready within a minute. Here's where to go next.
       </p>
+      <div v-if="finalizeError" class="hero__error">{{ finalizeError }}</div>
     </div>
 
     <div class="cards">
@@ -88,6 +113,7 @@ function enterDashboard() {
 .hero__title { font-family: var(--font-display); font-size: 56px; font-weight: 500; color: var(--color-ink); letter-spacing: -0.02em; line-height: 1.05; margin: 0; }
 .hero__lede { font-family: var(--font-body); font-size: 17px; line-height: 1.5; color: var(--color-graphite); margin: 0; max-width: 520px; }
 .hero__code { font-family: var(--font-mono); font-weight: 600; color: var(--color-ink); }
+.hero__error { padding: 12px 16px; background: #FEE2E2; color: #991B1B; border-radius: 12px; font-family: var(--font-body); font-size: 13px; }
 
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; width: 100%; text-align: left; }
 .card { padding: 24px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 20px; text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 12px; transition: border-color 0.15s ease, transform 0.15s ease; }

@@ -1,6 +1,15 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { useClubStore } from './club'
+import { useAuthStore } from './auth'
+import {
+  clubOnboarding,
+  ApiError,
+  type WizardData,
+  type WizardStepValue,
+  type OnboardingValidationError,
+  type WizardTier,
+} from '@torny/api-client'
 
 export type WizardStep = 'welcome' | 1 | 2 | 3 | 4 | 5 | 6 | 'complete'
 
@@ -10,45 +19,14 @@ export interface DayHours {
   to: string
 }
 
-export interface MembershipTier {
+export interface MembershipTier extends WizardTier {
   id: string
-  name: string
-  description: string
-  price: number
   tone: 'accent' | 'mint' | 'tangerine' | 'violet'
-  isDefault?: boolean
 }
 
-export interface OnboardingData {
-  // Step 1 — Club basics
-  clubName: string
-  yearFounded: string
-  clubType: 'community' | 'private' | 'district'
-  shortDescription: string
-  // Step 2 — Where you play
-  address: string
-  suburb: string
-  region: string
-  country: string
-  greens: number
-  rinks: number
-  greenSurface: 'tifdwarf' | 'cotula' | 'synthetic' | 'mixed'
-  // Step 3 — Contact & hours
-  email: string
-  phone: string
-  hours: Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun', DayHours>
-  // Step 4 — Membership
-  cadence: 'annual' | 'monthly' | 'season'
-  firstYearDiscount: boolean
+export interface OnboardingData extends WizardData {
   tiers: MembershipTier[]
-  // Step 5 — Brand
-  logoName: string | null
-  logoDataUrl: string | null    // client-side preview only; backend upload is a follow-up (brief 10 §6)
-  accentColour: string
-  tagline: string
-  // Step 6 — Website
-  subdomain: string
-  pages: Record<'home' | 'about' | 'membership' | 'events' | 'shop', boolean>
+  logoDataUrl: string | null
 }
 
 const defaultHours: OnboardingData['hours'] = {
@@ -84,6 +62,7 @@ const defaultData = (): OnboardingData => ({
     { id: 'junior', name: 'Junior (under 25)', description: 'Full playing rights at a supported rate.', price: 40, tone: 'tangerine' },
   ],
   logoName: null,
+  logoUrl: null,
   logoDataUrl: null,
   accentColour: '#2563EB',
   tagline: '',
@@ -91,38 +70,92 @@ const defaultData = (): OnboardingData => ({
   pages: { home: true, about: true, membership: true, events: true, shop: false },
 })
 
-function storageKey(clubId: number | string | null): string {
+const TONES: MembershipTier['tone'][] = ['accent', 'mint', 'tangerine', 'violet']
+const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
+
+/**
+ * Merge a server-returned WizardData over local defaults. Server may omit
+ * fields — the wizard should never see undefined for a required field. Also
+ * hydrates tier tones (server doesn't know about them, they're a client UI hint).
+ */
+function fromServerData(remote: Partial<WizardData> | null | undefined): OnboardingData {
+  const d = defaultData()
+  if (!remote) return d
+  return {
+    ...d,
+    ...remote,
+    hours: { ...d.hours, ...(remote.hours ?? {}) },
+    pages: { ...d.pages, ...(remote.pages ?? {}) },
+    tiers: (remote.tiers && remote.tiers.length > 0 ? remote.tiers : d.tiers).map((t, i): MembershipTier => ({
+      id: t.id ?? `tier-${i}`,
+      name: t.name,
+      description: t.description,
+      price: t.price,
+      tone: (t.tone as MembershipTier['tone']) ?? TONES[i % TONES.length]!,
+      isDefault: t.isDefault,
+    })),
+    logoDataUrl: d.logoDataUrl,
+  }
+}
+
+function toServerData(local: OnboardingData): WizardData {
+  // Drop `logoDataUrl` (client-only preview) — server has its own logoUrl.
+  const { logoDataUrl: _unused, ...rest } = local
+  void _unused
+  return rest
+}
+
+// WizardStep (local, mixed number/string) ↔ WizardStepValue (server, all strings).
+function stepToServer(step: WizardStep): WizardStepValue {
+  if (step === 'welcome' || step === 'complete') return step
+  return String(step) as WizardStepValue
+}
+function stepFromServer(v: WizardStepValue): WizardStep {
+  if (v === 'welcome' || v === 'complete') return v
+  return Number(v) as WizardStep
+}
+
+// Simple debounce so a quick edit-and-tab-away doesn't flood the API.
+function debounce<A extends unknown[]>(fn: (...args: A) => void, ms: number) {
+  let t: ReturnType<typeof setTimeout> | null = null
+  return (...args: A) => {
+    if (t) clearTimeout(t)
+    t = setTimeout(() => fn(...args), ms)
+  }
+}
+
+// Local fallback key so an offline session still holds the wizard state.
+function fallbackKey(clubId: number | string | null): string {
   return `torny.crm.onboarding.${clubId ?? 'draft'}`
 }
 
-interface Persisted {
-  data: OnboardingData
-  completed: boolean
-  step: WizardStep
-}
-
-function load(clubId: number | string | null): Persisted {
-  try {
-    const raw = localStorage.getItem(storageKey(clubId))
-    if (!raw) return { data: defaultData(), completed: false, step: 'welcome' }
-    const parsed = JSON.parse(raw) as Partial<Persisted>
-    return {
-      data: { ...defaultData(), ...(parsed.data ?? {}) },
-      completed: !!parsed.completed,
-      step: parsed.step ?? 'welcome',
-    }
-  } catch {
-    return { data: defaultData(), completed: false, step: 'welcome' }
-  }
+/** Map a server validation `field` string to the wizard step that owns it. */
+export function stepForField(field: string): WizardStep {
+  if (/^clubName|yearFounded|clubType|shortDescription/.test(field)) return 1
+  if (/^address|suburb|region|country|greens|rinks|greenSurface/.test(field)) return 2
+  if (/^email|phone|hours/.test(field)) return 3
+  if (/^tiers|cadence|firstYearDiscount/.test(field)) return 4
+  if (/^logo|accentColour|tagline/.test(field)) return 5
+  if (/^subdomain|pages/.test(field)) return 6
+  return 'welcome'
 }
 
 export const useOnboardingStore = defineStore('onboarding', () => {
   const club = useClubStore()
-  const initial = load(club.current?.id ?? null)
+  const auth = useAuthStore()
 
-  const data = ref<OnboardingData>(initial.data)
-  const completed = ref(initial.completed)
-  const step = ref<WizardStep>(initial.step)
+  const data = ref<OnboardingData>(defaultData())
+  const completed = ref(false)
+  const completedAt = ref<string | null>(null)
+  const step = ref<WizardStep>('welcome')
+
+  const loading = ref(false)
+  const saving = ref(false)
+  const saveError = ref<string | null>(null)
+
+  const publicUrl = ref<string | null>(null)
+  const membershipTierIds = ref<number[]>([])
+  const validationErrors = ref<OnboardingValidationError[]>([])
 
   const stepNumber = computed<number | null>(() => (typeof step.value === 'number' ? step.value : null))
   const progressPct = computed(() => {
@@ -131,34 +164,164 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     return Math.round(((stepNumber.value ?? 0) / 6) * 100)
   })
 
-  function setStep(next: WizardStep) {
-    step.value = next
-    persist()
+  // ── Server sync ──────────────────────────────────────────────
+  async function hydrate(): Promise<void> {
+    const clubId = club.current?.id
+    if (!clubId || typeof clubId !== 'number') return
+    loading.value = true
+    saveError.value = null
+    try {
+      const state = await clubOnboarding.get(clubId)
+      data.value = fromServerData(state.data)
+      completed.value = state.completed
+      completedAt.value = state.completedAt
+      step.value = stepFromServer(state.step)
+    } catch (err) {
+      // Non-fatal: fall back to whatever's in localStorage.
+      try {
+        const raw = localStorage.getItem(fallbackKey(clubId))
+        if (raw) {
+          const parsed = JSON.parse(raw) as { data?: OnboardingData; step?: WizardStep; completed?: boolean }
+          if (parsed.data) data.value = { ...defaultData(), ...parsed.data }
+          if (parsed.step) step.value = parsed.step
+          if (parsed.completed) completed.value = parsed.completed
+        }
+      } catch { /* ignore */ }
+      saveError.value = err instanceof ApiError ? err.message : (err as Error).message
+    } finally {
+      loading.value = false
+    }
   }
 
-  function markComplete() {
-    completed.value = true
-    step.value = 'complete'
-    persist()
+  async function pushPatch(payload: { step?: WizardStep; data?: Partial<WizardData> }) {
+    const clubId = club.current?.id
+    if (!clubId || typeof clubId !== 'number') return
+    saving.value = true
+    saveError.value = null
+    try {
+      const serverPayload: { step?: WizardStepValue; data?: Partial<WizardData> } = {}
+      if (payload.step !== undefined) serverPayload.step = stepToServer(payload.step)
+      if (payload.data !== undefined) serverPayload.data = payload.data
+      await clubOnboarding.patch(clubId, serverPayload)
+      // Also persist offline for resilience.
+      try {
+        localStorage.setItem(fallbackKey(clubId), JSON.stringify({ data: data.value, step: step.value, completed: completed.value }))
+      } catch { /* localStorage might be full — non-fatal */ }
+    } catch (err) {
+      saveError.value = err instanceof ApiError ? err.message : (err as Error).message
+      // Keep the local edit even if PATCH failed — user retries on next change.
+      try {
+        localStorage.setItem(fallbackKey(clubId), JSON.stringify({ data: data.value, step: step.value, completed: completed.value }))
+      } catch { /* ignore */ }
+    } finally {
+      saving.value = false
+    }
+  }
+
+  const debouncedPatch = debounce(pushPatch, 500)
+
+  // ── Actions ──────────────────────────────────────────────────
+  function setStep(next: WizardStep) {
+    step.value = next
+    // Fire an immediate patch on step advance (not debounced) so the bookmark
+    // is durable even if the user closes the tab straight after.
+    pushPatch({ step: next, data: toServerDataStrip(data.value) })
+  }
+
+  async function markComplete(): Promise<'ok' | 'validation' | 'error'> {
+    const clubId = club.current?.id
+    if (!clubId || typeof clubId !== 'number') return 'error'
+    saving.value = true
+    saveError.value = null
+    validationErrors.value = []
+    try {
+      const res = await clubOnboarding.complete(clubId)
+      completed.value = true
+      completedAt.value = res.onboardedAt
+      publicUrl.value = res.publicUrl
+      membershipTierIds.value = res.membershipTierIds
+      step.value = 'complete'
+      // Refresh session so /me picks up the new onboarded state on clubs[].
+      await auth.refresh()
+      return 'ok'
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 422 && Array.isArray((err.body as { errors?: unknown[] })?.errors)) {
+        validationErrors.value = ((err.body as { errors: OnboardingValidationError[] }).errors) ?? []
+        const first = validationErrors.value[0]
+        if (first) step.value = stepForField(first.field)
+        return 'validation'
+      }
+      if (err instanceof ApiError && err.code === 'already_onboarded') {
+        completed.value = true
+        step.value = 'complete'
+        return 'ok'
+      }
+      saveError.value = err instanceof ApiError ? err.message : (err as Error).message
+      return 'error'
+    } finally {
+      saving.value = false
+    }
   }
 
   function reset() {
     data.value = defaultData()
     completed.value = false
+    completedAt.value = null
+    publicUrl.value = null
+    membershipTierIds.value = []
+    validationErrors.value = []
     step.value = 'welcome'
-    persist()
   }
 
-  function persist() {
-    const key = storageKey(club.current?.id ?? null)
-    const payload: Persisted = { data: data.value, completed: completed.value, step: step.value }
-    localStorage.setItem(key, JSON.stringify(payload))
+  function toServerDataStrip(local: OnboardingData): Partial<WizardData> {
+    const { logoDataUrl: _unused, ...rest } = local
+    void _unused
+    return rest
   }
 
-  watch(data, persist, { deep: true })
+  // Debounced autosave whenever wizard fields change. Skips completed sessions.
+  watch(
+    data,
+    (val) => {
+      if (completed.value) return
+      debouncedPatch({ data: toServerDataStrip(val) })
+    },
+    { deep: true },
+  )
 
-  return { data, completed, step, stepNumber, progressPct, setStep, markComplete, reset }
+  // When the current club changes (post-approval, post-switch), re-hydrate.
+  watch(
+    () => club.current?.id,
+    (id) => {
+      if (id && typeof id === 'number') hydrate()
+      else reset()
+    },
+    { immediate: true },
+  )
+
+  return {
+    data,
+    completed,
+    completedAt,
+    step,
+    stepNumber,
+    progressPct,
+    loading,
+    saving,
+    saveError,
+    publicUrl,
+    membershipTierIds,
+    validationErrors,
+    setStep,
+    markComplete,
+    reset,
+    hydrate,
+  }
 })
+
+// Deliberately not re-exporting from this store — WizardTier is authored in
+// api-client; MembershipTier is the local extension used by the store + views.
+export type { WizardTier }
 
 if (import.meta.hot) {
   import.meta.hot.accept(acceptHMRUpdate(useOnboardingStore, import.meta.hot))

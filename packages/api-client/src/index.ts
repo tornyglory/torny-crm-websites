@@ -41,5 +41,18 @@ export type {
   CommitRowResult,
   CommitResult,
 } from './resources/memberImports'
+export * as clubOnboarding from './resources/clubOnboarding'
+export type {
+  WizardStepValue,
+  WizardDayHours,
+  WizardTier,
+  WizardData,
+  OnboardingState,
+  OnboardingPatchPayload,
+  OnboardingPatchResponse,
+  OnboardingCompleteResponse,
+  OnboardingValidationError,
+  SubdomainCheckResult,
+} from './resources/clubOnboarding'
 export { SAM_BASE, CRM_BASE } from './config'
-export { ApiError, authedFetch, TOKEN_STORAGE_KEY } from './http'
+export { ApiError, authedFetch, publicFetch, TOKEN_STORAGE_KEY } from './http'

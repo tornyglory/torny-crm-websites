@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOnboardingStore } from '@/stores/onboarding'
+import { clubOnboarding, ApiError, type SubdomainCheckResult } from '@torny/api-client'
 import WizardHeader from '@/components/onboarding/WizardHeader.vue'
 import WizardFooter from '@/components/onboarding/WizardFooter.vue'
 
@@ -19,7 +20,66 @@ const pages: PageItem[] = [
 
 const enabledCount = computed(() => pages.filter(p => onboarding.data.pages[p.key]).length)
 
-const canPublish = computed(() => onboarding.data.subdomain.trim().length >= 2)
+// ── Subdomain live-check (brief 11 §4) ────────────────────────
+type CheckState = 'idle' | 'checking' | 'available' | 'taken' | 'reserved' | 'invalid' | 'too-short' | 'error'
+const subdomainState = ref<CheckState>('idle')
+let subdomainAbort: AbortController | null = null
+let subdomainTimer: ReturnType<typeof setTimeout> | null = null
+
+function debounceCheck() {
+  if (subdomainTimer) clearTimeout(subdomainTimer)
+  subdomainTimer = setTimeout(runCheck, 300)
+}
+
+async function runCheck() {
+  const value = onboarding.data.subdomain.trim().toLowerCase()
+  if (value.length < 3) {
+    subdomainState.value = 'too-short'
+    return
+  }
+  if (subdomainAbort) subdomainAbort.abort()
+  subdomainAbort = new AbortController()
+  subdomainState.value = 'checking'
+  try {
+    const result: SubdomainCheckResult = await clubOnboarding.checkSubdomain(value, { signal: subdomainAbort.signal })
+    if (result.available) subdomainState.value = 'available'
+    else subdomainState.value = result.reason
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') return
+    if (err instanceof ApiError) subdomainState.value = 'error'
+    else subdomainState.value = 'error'
+  }
+}
+
+watch(() => onboarding.data.subdomain, debounceCheck)
+
+const canPublish = computed(
+  () => subdomainState.value === 'available',
+)
+
+const pillMeta = computed(() => {
+  switch (subdomainState.value) {
+    case 'checking':  return { label: 'Checking…', tone: 'mute' }
+    case 'available': return { label: 'Available', tone: 'ok' }
+    case 'taken':     return { label: 'Taken',     tone: 'danger' }
+    case 'reserved':  return { label: 'Reserved',  tone: 'danger' }
+    case 'invalid':   return { label: 'Invalid',   tone: 'danger' }
+    case 'too-short': return { label: 'Too short', tone: 'mute' }
+    case 'error':     return { label: 'Check failed', tone: 'mute' }
+    default:          return null
+  }
+})
+
+const availabilityHint = computed(() => {
+  switch (subdomainState.value) {
+    case 'taken':     return "Someone else has that one. Try a variation."
+    case 'reserved':  return "That's a reserved word (like 'admin' or 'www'). Pick something else."
+    case 'invalid':   return 'Only lowercase letters, numbers and hyphens. 3–30 chars.'
+    case 'too-short': return 'Needs to be at least 3 characters.'
+    case 'error':     return "Couldn't reach the availability service — try again."
+    default:          return null
+  }
+})
 
 onMounted(() => {
   onboarding.setStep(6)
@@ -30,6 +90,7 @@ onMounted(() => {
       .replace(/^-|-$/g, '')
       .slice(0, 30)
   }
+  runCheck()
 })
 
 function togglePage(item: PageItem) {
@@ -37,7 +98,9 @@ function togglePage(item: PageItem) {
   onboarding.data.pages[item.key] = !onboarding.data.pages[item.key]
 }
 function publish() {
-  onboarding.markComplete()
+  // The actual complete() call happens on CompleteView mount so we have a
+  // single source of truth. Navigate there; if it errors, the wizard bounces
+  // back to the failing step automatically.
   router.push({ name: 'onboarding-complete' })
 }
 </script>
@@ -57,14 +120,20 @@ function publish() {
             <div class="field__label">Your address</div>
             <div class="dom-sub">A free Torny subdomain to start. You can point a custom domain later in settings.</div>
           </div>
-          <span v-if="canPublish" class="pill pill--ok">Available</span>
+          <span v-if="pillMeta" class="pill" :class="`pill--${pillMeta.tone}`">{{ pillMeta.label }}</span>
         </div>
         <div class="dom">
           <span class="dom__prefix">https://</span>
-          <input v-model="onboarding.data.subdomain" class="dom__input" placeholder="kelburn" />
+          <input
+            v-model="onboarding.data.subdomain"
+            class="dom__input"
+            placeholder="kelburn"
+            maxlength="30"
+            @input="onboarding.data.subdomain = ($event.target as HTMLInputElement).value.toLowerCase().replace(/[^a-z0-9-]/g, '')"
+          />
           <span class="dom__suffix">.torny.club</span>
-          <button type="button" class="dom__check">Check</button>
         </div>
+        <div v-if="availabilityHint" class="dom-hint" :class="{ 'dom-hint--danger': ['taken','reserved','invalid','error'].includes(subdomainState) }">{{ availabilityHint }}</div>
       </div>
 
       <div>
@@ -141,10 +210,15 @@ function publish() {
 .dom__check { padding: 10px 14px; background: var(--color-ink); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
 .dom__check:hover { background: var(--color-graphite); }
 
-.pill { font-family: var(--font-mono); font-size: 10px; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; }
+.pill { font-family: var(--font-mono); font-size: 10px; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; white-space: nowrap; }
 .pill--ok { background: #DCFCE7; color: #166534; }
+.pill--danger { background: #FEE2E2; color: #991B1B; }
+.pill--mute { background: var(--color-surface); color: var(--color-fog); }
 .pill--ink { background: var(--color-ink); color: #fff; }
 .pill--dark { background: rgba(255,255,255,0.08); color: #fff; }
+
+.dom-hint { margin-top: 8px; font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
+.dom-hint--danger { color: #991B1B; }
 
 .pages { padding: 6px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; display: flex; flex-direction: column; }
 .prow { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-bottom: 1px solid var(--color-hairline); }

@@ -50,7 +50,7 @@ export async function authedFetch<T = unknown>(
   const { token: overrideToken, headers, ...rest } = init
   const token = overrideToken ?? readToken()
 
-  const res = await fetch(url, {
+  return doFetch<T>(url, {
     ...rest,
     headers: {
       'Content-Type': 'application/json',
@@ -58,6 +58,28 @@ export async function authedFetch<T = unknown>(
       ...(headers ?? {}),
     },
   })
+}
+
+/**
+ * Unauthenticated fetch with the same envelope handling. Used for the
+ * subdomain check (brief 11 §4) where auth isn't required.
+ */
+export async function publicFetch<T = unknown>(
+  url: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const { headers, ...rest } = init
+  return doFetch<T>(url, {
+    ...rest,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(headers ?? {}),
+    },
+  })
+}
+
+async function doFetch<T>(url: string, init: RequestInit): Promise<T> {
+  const res = await fetch(url, init)
 
   let body: ApiErrorBody = {}
   const text = await res.text()

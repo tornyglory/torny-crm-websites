@@ -25,5 +25,21 @@ export type {
   ApproveClaimResponse,
   RejectClaimResponse,
 } from './resources/claims'
+export * as memberImports from './resources/memberImports'
+export type {
+  ImportResolution,
+  ImportErrorCode,
+  NewUserStrategy,
+  ConflictCandidate,
+  PreviewRow,
+  PreviewRowError,
+  PreviewRowWarning,
+  PreviewRowInput,
+  PreviewInput,
+  PreviewSummary,
+  PreviewResult,
+  CommitRowResult,
+  CommitResult,
+} from './resources/memberImports'
 export { SAM_BASE, CRM_BASE } from './config'
 export { ApiError, authedFetch, TOKEN_STORAGE_KEY } from './http'

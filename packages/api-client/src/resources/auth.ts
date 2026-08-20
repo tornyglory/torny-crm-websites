@@ -7,8 +7,13 @@
 export type Role = 'platform' | 'owner' | 'admin' | 'committee' | 'player'
 
 export interface UserClub {
-  id: string
+  /** Integer club id (per brief 08 §Timezones + IDs). */
+  id: number
+  /** Enriched club name (from /me + /login responses). */
+  name?: string
   role: Exclude<Role, 'platform' | 'player'>
+  /** Optional freeform title (e.g. "Secretary"). */
+  title?: string | null
 }
 
 export interface AuthUser {

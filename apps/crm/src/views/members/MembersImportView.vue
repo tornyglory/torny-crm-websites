@@ -2,62 +2,45 @@
 /**
  * Bulk member import wizard.
  *
- * See docs/backend-briefs/07-bulk-member-import.md for the API contract.
- * The preview + commit calls are mocked client-side — swap for real API
- * calls to POST /clubs/:clubId/members/import/preview and .../commit when
- * backend lands. The mock preserves the response shape from §6.1 / §6.2.
+ * See docs/backend-briefs/09-bulk-member-import-live.md for the API contract.
+ * Preview + commit hit the real CRM API endpoints on the club the caller has
+ * owner/admin access to (auth.user.clubs[0]).
  */
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
+import { useAuthStore } from '@/stores/auth'
+import {
+  memberImports,
+  ApiError,
+  type PreviewResult,
+  type PreviewRow,
+  type CommitResult,
+  type NewUserStrategy,
+  type ImportResolution,
+  type PreviewRowInput,
+} from '@torny/api-client'
 
 const router = useRouter()
 const toast = useToast()
+const auth = useAuthStore()
+
+// Resolve club to import into. MVP: first owner/admin club the user has.
+const targetClubId = computed<number | null>(() => {
+  const club = auth.user?.clubs?.find((c) => c.role === 'owner' || c.role === 'admin')
+  return club?.id ?? null
+})
+const targetClubName = computed<string>(() => {
+  const club = auth.user?.clubs?.find((c) => c.role === 'owner' || c.role === 'admin')
+  return club?.name ?? 'your club'
+})
 
 type WizardStep = 1 | 2 | 3 | 4 | 5
-
 type TornyField = 'email' | 'phone' | 'firstName' | 'lastName' | 'dob' | 'membershipType'
-type NewUserStrategy = 'invite' | 'stub'
-type Resolution = 'linked' | 'relinked' | 'skipped' | 'invited' | 'stub_created' | 'error'
 
 interface ParsedRow {
   rowNumber: number
   values: string[]
-}
-
-interface MappedRow {
-  rowNumber: number
-  email: string
-  phone: string
-  firstName: string
-  lastName: string
-  dob: string
-  membershipType: string
-}
-
-interface PreviewRow {
-  rowNumber: number
-  email: string
-  displayName: string
-  resolution: Resolution
-  matchedVia?: 'email' | 'phone' | 'none'
-  matchedUserId?: string
-  existingAvatar?: string
-  error?: { code: string; message: string }
-}
-
-interface PreviewResponse {
-  importId: string
-  summary: {
-    totalRows: number
-    willSkip: number
-    willLink: number
-    willRelink: number
-    willInvite: number
-    willStub: number
-    errors: number
-  }
-  rows: PreviewRow[]
 }
 
 // ── State ─────────────────────────────────────────────────────
@@ -67,6 +50,7 @@ const parsedHeaders = ref<string[]>([])
 const parsedRows = ref<ParsedRow[]>([])
 const parseError = ref<string | null>(null)
 
+const MAPPING_STORAGE_KEY = 'torny.import.mapping'
 const columnMapping = ref<Record<TornyField, number | null>>({
   email: null,
   phone: null,
@@ -78,20 +62,13 @@ const columnMapping = ref<Record<TornyField, number | null>>({
 
 const newUserStrategy = ref<NewUserStrategy>('invite')
 const previewLoading = ref(false)
-const previewData = ref<PreviewResponse | null>(null)
+const previewData = ref<PreviewResult | null>(null)
+const previewError = ref<string | null>(null)
 const excludedRowNumbers = ref<Set<number>>(new Set())
 
 const committing = ref(false)
-const commitResult = ref<{
-  linked: number
-  relinked: number
-  invited: number
-  stubCreated: number
-  skipped: number
-  failed: number
-  pushSent: number
-  emailsSent: number
-} | null>(null)
+const commitError = ref<string | null>(null)
+const commitResult = ref<CommitResult | null>(null)
 
 // ── CSV parsing ────────────────────────────────────────────────
 function parseCsvRow(line: string): string[] {
@@ -236,162 +213,53 @@ function goBack(target: WizardStep) {
   step.value = target
 }
 
-// ── Preview (mocked) ──────────────────────────────────────────
-function getMapped(): MappedRow[] {
+// ── Row mapping ────────────────────────────────────────────────
+function getMappedForApi(): PreviewRowInput[] {
   const m = columnMapping.value
-  return parsedRows.value.map((r) => ({
-    rowNumber: r.rowNumber,
-    email: m.email !== null ? (r.values[m.email] ?? '') : '',
-    phone: m.phone !== null ? (r.values[m.phone] ?? '') : '',
-    firstName: m.firstName !== null ? (r.values[m.firstName] ?? '') : '',
-    lastName: m.lastName !== null ? (r.values[m.lastName] ?? '') : '',
-    dob: m.dob !== null ? (r.values[m.dob] ?? '') : '',
-    membershipType: m.membershipType !== null ? (r.values[m.membershipType] ?? '') : '',
-  }))
+  return parsedRows.value.map((r) => {
+    const row: PreviewRowInput = { rowNumber: r.rowNumber }
+    if (m.email !== null && r.values[m.email]) row.email = r.values[m.email]
+    if (m.phone !== null && r.values[m.phone]) row.phone = r.values[m.phone]
+    if (m.firstName !== null && r.values[m.firstName]) row.firstName = r.values[m.firstName]
+    if (m.lastName !== null && r.values[m.lastName]) row.lastName = r.values[m.lastName]
+    if (m.dob !== null && r.values[m.dob]) row.dob = r.values[m.dob]
+    if (m.membershipType !== null && r.values[m.membershipType]) row.membershipType = r.values[m.membershipType]
+    return row
+  })
 }
 
-// Mock: emails ending in these domains are treated as "existing Torny users".
-const KNOWN_TORNY_DOMAINS = ['example.com', 'kelburnbowls.co.nz', 'naenaebowling.org.nz']
-// Rows already in this club — mimics the seeded members from MembersView so
-// duplicates behave believably. Uses matching by name for the mock.
-const MOCK_ALREADY_IN_CLUB = new Set([
-  'jo kirk',
-  'sione vagana',
-  'ana kereopa',
-])
-
+// ── Preview — real API ────────────────────────────────────────
 async function runPreview() {
+  if (!targetClubId.value) {
+    previewError.value = "You don't have a club to import members into yet. Approve a claim first."
+    previewLoading.value = false
+    return
+  }
   previewLoading.value = true
   previewData.value = null
+  previewError.value = null
   excludedRowNumbers.value = new Set()
 
-  // Mock latency
-  await new Promise((r) => setTimeout(r, 500))
-
-  const rows = getMapped()
-  const seenEmails = new Map<string, number>() // email → first rowNumber
-  const seenPhones = new Map<string, number>()
-
-  const previewRows: PreviewRow[] = rows.map((r) => {
-    const displayName = `${r.firstName} ${r.lastName}`.trim() || r.email || `Row ${r.rowNumber}`
-
-    // Missing required fields
-    if (!r.email && !r.phone) {
-      return {
-        rowNumber: r.rowNumber,
-        email: r.email,
-        displayName,
-        resolution: 'error',
-        error: { code: 'missing_required', message: 'Add email or phone to include this row.' },
-      }
-    }
-
-    // Email validation
-    if (r.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)) {
-      return {
-        rowNumber: r.rowNumber,
-        email: r.email,
-        displayName,
-        resolution: 'error',
-        error: { code: 'invalid_email', message: `"${r.email}" is not a valid email.` },
-      }
-    }
-
-    // Phone validation (loose — anything with 8+ digits)
-    if (r.phone && (r.phone.replace(/\D/g, '').length < 8)) {
-      return {
-        rowNumber: r.rowNumber,
-        email: r.email,
-        displayName,
-        resolution: 'error',
-        error: { code: 'invalid_phone', message: `"${r.phone}" doesn't look like a valid phone number.` },
-      }
-    }
-
-    // Duplicate in CSV
-    const emailKey = r.email.toLowerCase()
-    const phoneKey = r.phone.replace(/\D/g, '')
-    if (emailKey && seenEmails.has(emailKey)) {
-      return {
-        rowNumber: r.rowNumber,
-        email: r.email,
-        displayName,
-        resolution: 'error',
-        error: { code: 'duplicate_in_csv', message: `Duplicate of row ${seenEmails.get(emailKey)}.` },
-      }
-    }
-    if (phoneKey && seenPhones.has(phoneKey)) {
-      return {
-        rowNumber: r.rowNumber,
-        email: r.email,
-        displayName,
-        resolution: 'error',
-        error: { code: 'duplicate_in_csv', message: `Same phone as row ${seenPhones.get(phoneKey)}.` },
-      }
-    }
-    if (emailKey) seenEmails.set(emailKey, r.rowNumber)
-    if (phoneKey) seenPhones.set(phoneKey, r.rowNumber)
-
-    // Already in this club (mock)
-    if (MOCK_ALREADY_IN_CLUB.has(displayName.toLowerCase())) {
-      return {
-        rowNumber: r.rowNumber,
-        email: r.email,
-        displayName,
-        resolution: 'skipped',
-        matchedVia: 'email',
-        matchedUserId: `usr_${r.rowNumber}`,
-      }
-    }
-
-    // Existing Torny user (mock — check domain)
-    const domain = emailKey.split('@')[1]
-    if (domain && KNOWN_TORNY_DOMAINS.includes(domain)) {
-      return {
-        rowNumber: r.rowNumber,
-        email: r.email,
-        displayName,
-        resolution: 'linked',
-        matchedVia: 'email',
-        matchedUserId: `usr_${r.rowNumber}`,
-      }
-    }
-
-    // New user path
-    if (newUserStrategy.value === 'stub') {
-      return {
-        rowNumber: r.rowNumber,
-        email: r.email,
-        displayName,
-        resolution: 'stub_created',
-        matchedVia: 'none',
-      }
-    }
-    return {
-      rowNumber: r.rowNumber,
-      email: r.email,
-      displayName,
-      resolution: 'invited',
-      matchedVia: 'none',
-    }
-  })
-
-  const summary = {
-    totalRows: previewRows.length,
-    willSkip:   previewRows.filter((r) => r.resolution === 'skipped').length,
-    willLink:   previewRows.filter((r) => r.resolution === 'linked').length,
-    willRelink: previewRows.filter((r) => r.resolution === 'relinked').length,
-    willInvite: previewRows.filter((r) => r.resolution === 'invited').length,
-    willStub:   previewRows.filter((r) => r.resolution === 'stub_created').length,
-    errors:     previewRows.filter((r) => r.resolution === 'error').length,
+  try {
+    const result = await memberImports.preview(targetClubId.value, {
+      rows: getMappedForApi(),
+      newUserStrategy: newUserStrategy.value,
+    })
+    previewData.value = result
+  } catch (err) {
+    previewError.value = previewErrorCopy(err)
+  } finally {
+    previewLoading.value = false
   }
+}
 
-  previewData.value = {
-    importId: `imp_${Date.now()}`,
-    summary,
-    rows: previewRows,
+function previewErrorCopy(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 403) return "You don't have permission to import members into this club — admin or owner only."
+    if (err.status === 400) return err.message || 'The CSV rows were rejected — check your data and try again.'
+    return err.message
   }
-  previewLoading.value = false
+  return (err as Error).message
 }
 
 function toggleExclude(rowNumber: number) {
@@ -408,26 +276,63 @@ const includedRows = computed(
   () => previewData.value?.rows.filter((r) => !excludedRowNumbers.value.has(r.rowNumber)) ?? [],
 )
 
-// ── Commit (mocked) ───────────────────────────────────────────
+const excludedCount = computed(() => excludedRowNumbers.value.size)
+
+// ── Commit — real API ─────────────────────────────────────────
 async function commit() {
-  if (!previewData.value) return
+  if (!previewData.value || !targetClubId.value) return
   committing.value = true
-  await new Promise((r) => setTimeout(r, 800))
-  const rows = includedRows.value
-  const counts = {
-    linked:      rows.filter((r) => r.resolution === 'linked').length,
-    relinked:    rows.filter((r) => r.resolution === 'relinked').length,
-    invited:     rows.filter((r) => r.resolution === 'invited').length,
-    stubCreated: rows.filter((r) => r.resolution === 'stub_created').length,
-    skipped:     rows.filter((r) => r.resolution === 'skipped').length,
-    failed:      0,
-    pushSent:    rows.filter((r) => r.resolution === 'linked' || r.resolution === 'relinked').length,
-    emailsSent:  rows.filter((r) => r.resolution === 'invited').length,
+  commitError.value = null
+
+  // If the owner excluded rows, we need a fresh preview without them — commit
+  // takes the whole importId's rows. Rebuild the preview minus excluded rows.
+  if (excludedRowNumbers.value.size > 0) {
+    try {
+      const filtered = getMappedForApi().filter((r) => !excludedRowNumbers.value.has(r.rowNumber))
+      const fresh = await memberImports.preview(targetClubId.value, {
+        rows: filtered,
+        newUserStrategy: newUserStrategy.value,
+      })
+      previewData.value = fresh
+    } catch (err) {
+      commitError.value = previewErrorCopy(err)
+      committing.value = false
+      return
+    }
   }
-  commitResult.value = counts
-  committing.value = false
-  step.value = 5
-  toast.success(`Imported ${counts.linked + counts.invited + counts.stubCreated} members.`)
+
+  try {
+    const result = await memberImports.commit(targetClubId.value, previewData.value.importId)
+    commitResult.value = result
+    step.value = 5
+    const totalAdded =
+      result.actualCounts.linked +
+      result.actualCounts.relinked +
+      result.actualCounts.invited +
+      result.actualCounts.stubCreated
+    if (result.replayed) {
+      toast.info('This import was already applied.')
+    } else {
+      toast.success(`Imported ${totalAdded} member${totalAdded === 1 ? '' : 's'}.`)
+    }
+    if (result.actualCounts.failed > 0) {
+      toast.error(`${result.actualCounts.failed} row${result.actualCounts.failed === 1 ? '' : 's'} failed — see details below.`)
+    }
+  } catch (err) {
+    if (err instanceof ApiError) {
+      if (err.status === 410) {
+        commitError.value = "This import has expired (1 hour limit). Upload your CSV again."
+      } else if (err.status === 404) {
+        commitError.value = 'This import no longer exists. Upload your CSV again.'
+      } else {
+        commitError.value = err.message
+      }
+    } else {
+      commitError.value = (err as Error).message
+    }
+  } finally {
+    committing.value = false
+  }
 }
 
 function startOver() {
@@ -437,7 +342,9 @@ function startOver() {
   parsedRows.value = []
   parseError.value = null
   previewData.value = null
+  previewError.value = null
   commitResult.value = null
+  commitError.value = null
   excludedRowNumbers.value = new Set()
   columnMapping.value = { email: null, phone: null, firstName: null, lastName: null, dob: null, membershipType: null }
 }
@@ -456,7 +363,7 @@ const tornyFields: { key: TornyField; label: string; required: boolean; hint?: s
   { key: 'membershipType', label: 'Membership type', required: false },
 ]
 
-const resolutionMeta: Record<Resolution, { label: string; tone: string; hint: string }> = {
+const resolutionMeta: Record<ImportResolution, { label: string; tone: string; hint: string }> = {
   linked:       { label: 'Link',        tone: 'ok',     hint: 'Existing Torny user, will be added to this club' },
   relinked:     { label: 'Re-link',     tone: 'ok',     hint: 'Was in this club before, will re-activate' },
   skipped:      { label: 'Skip',        tone: 'mute',   hint: 'Already a member of this club' },
@@ -642,7 +549,13 @@ const stepMeta: Record<WizardStep, { label: string }> = {
         <div>Analysing {{ parsedRows.length }} rows…</div>
       </div>
 
+      <div v-else-if="previewError" class="alert">
+        {{ previewError }}
+        <button class="alert__retry" @click="runPreview">Retry</button>
+      </div>
+
       <template v-else-if="previewData">
+        <div v-if="commitError" class="alert">{{ commitError }}</div>
         <div class="summary">
           <div class="summary__stat"><div class="summary__value">{{ previewData.summary.totalRows }}</div><div class="summary__label">Total rows</div></div>
           <div class="summary__stat summary__stat--ok"><div class="summary__value">{{ previewData.summary.willLink + previewData.summary.willRelink }}</div><div class="summary__label">Linked</div></div>
@@ -677,23 +590,50 @@ const stepMeta: Record<WizardStep, { label: string }> = {
                 />
               </td>
               <td class="preview__num">{{ r.rowNumber }}</td>
-              <td>{{ r.displayName }}</td>
+              <td>
+                <div class="preview__name">{{ r.displayName || '—' }}</div>
+                <div v-if="r.existingName && r.existingName !== r.displayName" class="preview__matched">
+                  → linked to <strong>{{ r.existingName }}</strong>
+                </div>
+              </td>
               <td class="preview__email">{{ r.email || '—' }}</td>
               <td>
-                <span class="pill" :class="`pill--${resolutionMeta[r.resolution].tone}`">{{ resolutionMeta[r.resolution].label }}</span>
+                <div class="preview__resolution">
+                  <span class="pill" :class="`pill--${resolutionMeta[r.resolution].tone}`">{{ resolutionMeta[r.resolution].label }}</span>
+                  <span v-if="r.phoneMismatch" class="chip chip--warn">phone drift</span>
+                  <span v-if="r.emailMismatch" class="chip chip--warn">email drift</span>
+                </div>
               </td>
               <td class="preview__note">
-                <span v-if="r.error">{{ r.error.message }}</span>
-                <span v-else>{{ resolutionMeta[r.resolution].hint }}</span>
+                <template v-if="r.error">
+                  <span>{{ r.error.message }}</span>
+                  <div v-if="r.error.candidates?.length" class="candidates">
+                    <div v-for="c in r.error.candidates" :key="c.userId" class="candidate">
+                      <span class="candidate__name">{{ c.name }}</span>
+                      <span class="candidate__via">matched by {{ c.matchedVia }}</span>
+                    </div>
+                  </div>
+                </template>
+                <template v-else>
+                  <span>{{ resolutionMeta[r.resolution].hint }}</span>
+                  <div v-if="r.warnings?.length" class="warnings">
+                    <span v-for="w in r.warnings" :key="w.code" class="chip chip--mute">{{ w.message }}</span>
+                  </div>
+                </template>
               </td>
             </tr>
           </tbody>
         </table>
 
         <div class="commit-summary">
-          You're about to import <strong>{{ includedRows.filter(r => r.resolution !== 'error').length }}</strong>
-          {{ includedRows.filter(r => r.resolution !== 'error').length === 1 ? 'member' : 'members' }}
-          into <strong>Naenae Bowling</strong>.
+          <div>
+            You're about to import <strong>{{ includedRows.filter(r => r.resolution !== 'error').length }}</strong>
+            {{ includedRows.filter(r => r.resolution !== 'error').length === 1 ? 'member' : 'members' }}
+            into <strong>{{ targetClubName }}</strong>.
+          </div>
+          <div v-if="excludedCount > 0" class="commit-summary__note">
+            {{ excludedCount }} excluded — we'll re-run preview on commit so only your selected rows apply.
+          </div>
         </div>
       </template>
 
@@ -712,15 +652,34 @@ const stepMeta: Record<WizardStep, { label: string }> = {
         <div class="done__badge">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="28" height="28"><path d="M20 6 9 17l-5-5" /></svg>
         </div>
-        <h2 class="done__title">{{ commitResult.linked + commitResult.invited + commitResult.stubCreated }} members imported.</h2>
-        <p class="done__sub">Your roster is up to date.</p>
+        <h2 class="done__title">
+          {{ commitResult.actualCounts.linked + commitResult.actualCounts.relinked + commitResult.actualCounts.invited + commitResult.actualCounts.stubCreated }} members imported.
+        </h2>
+        <p class="done__sub">
+          <template v-if="commitResult.replayed">This import had already been applied — no duplicates were created.</template>
+          <template v-else-if="commitResult.actualCounts.failed > 0">
+            {{ commitResult.actualCounts.failed }} row{{ commitResult.actualCounts.failed === 1 ? '' : 's' }} failed — see details below.
+          </template>
+          <template v-else>Your roster is up to date.</template>
+        </p>
       </div>
 
       <div class="done-stats">
-        <div class="done-stat"><div class="done-stat__value">{{ commitResult.linked + commitResult.relinked }}</div><div class="done-stat__label">Linked from Torny</div></div>
-        <div class="done-stat"><div class="done-stat__value">{{ commitResult.invited }}</div><div class="done-stat__label">Invites emailed</div></div>
-        <div class="done-stat"><div class="done-stat__value">{{ commitResult.stubCreated }}</div><div class="done-stat__label">Added, no invite</div></div>
-        <div class="done-stat"><div class="done-stat__value">{{ commitResult.pushSent }}</div><div class="done-stat__label">Push notifs sent</div></div>
+        <div class="done-stat"><div class="done-stat__value">{{ commitResult.actualCounts.linked + commitResult.actualCounts.relinked }}</div><div class="done-stat__label">Linked from Torny</div></div>
+        <div class="done-stat"><div class="done-stat__value">{{ commitResult.actualCounts.invited }}</div><div class="done-stat__label">Invites emailed</div></div>
+        <div class="done-stat"><div class="done-stat__value">{{ commitResult.actualCounts.stubCreated }}</div><div class="done-stat__label">Added, no invite</div></div>
+        <div class="done-stat"><div class="done-stat__value">{{ commitResult.notificationsFired.emailsSent }}</div><div class="done-stat__label">Emails sent</div></div>
+      </div>
+
+      <!-- Failed row breakdown (rare — race conditions, dupe emails, etc.) -->
+      <div v-if="commitResult.actualCounts.failed > 0" class="failures">
+        <div class="failures__title">Rows that didn't apply</div>
+        <ul class="failures__list">
+          <li v-for="r in commitResult.rows.filter(row => row.failed)" :key="r.rowNumber">
+            <span class="failures__row">Row {{ r.rowNumber }}</span>
+            <span class="failures__reason">{{ r.message ?? 'Failed to apply' }}</span>
+          </li>
+        </ul>
       </div>
 
       <div class="foot">
@@ -780,8 +739,35 @@ const stepMeta: Record<WizardStep, { label: string }> = {
 
 .parsed-hint { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; background: #DCFCE7; color: #14532D; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 500; align-self: flex-start; }
 
-.alert { padding: 12px 14px; background: #FEE2E2; color: #991B1B; border-radius: 10px; font-family: var(--font-body); font-size: 13px; }
+.alert { padding: 12px 14px; background: #FEE2E2; color: #991B1B; border-radius: 10px; font-family: var(--font-body); font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .alert--warn { background: #FEF3C7; color: #92400E; }
+.alert__retry { padding: 6px 12px; background: #fff; color: #991B1B; border: 1px solid #FCA5A5; border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
+.alert__retry:hover { background: #FEE2E2; }
+
+/* Preview row extras */
+.preview__name { font-weight: 500; }
+.preview__matched { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 2px; }
+.preview__matched strong { color: var(--color-ink); font-weight: 600; }
+.preview__resolution { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 0.02em; }
+.chip--warn { background: #FEF3C7; color: #92400E; }
+.chip--mute { background: var(--color-surface); color: var(--color-fog); border: 1px solid var(--color-hairline); }
+
+.candidates { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.candidate { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #fff; border: 1px solid #FECACA; border-radius: 8px; font-size: 12px; }
+.candidate__name { font-weight: 600; color: var(--color-ink); }
+.candidate__via { color: var(--color-fog); font-size: 11px; }
+
+.warnings { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
+
+.commit-summary__note { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 6px; font-style: italic; }
+
+.failures { padding: 14px 16px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; margin-top: 4px; }
+.failures__title { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #991B1B; margin-bottom: 8px; }
+.failures__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.failures__list li { display: flex; gap: 10px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); }
+.failures__row { font-family: var(--font-mono); font-size: 11px; color: #991B1B; font-weight: 600; min-width: 60px; }
+.failures__reason { color: var(--color-graphite); }
 
 /* Mapping */
 .mapping { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }

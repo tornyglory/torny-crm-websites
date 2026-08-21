@@ -46,6 +46,14 @@ interface Member {
    *  visual grouping; this preserves the actual value for PATCH round-trips. */
   apiRole?: 'owner' | 'admin' | 'committee' | 'player'
   title?: string | null
+  /** What the member should pay per cadence — from `membership.fee` (or the legacy
+   *  `annual_fee` alias). Null when no tier is assigned. */
+  fee?: number | null
+  /** Amount they paid on their most recent payment — from
+   *  `membership.last_payment_amount`. Null when never paid. */
+  lastPaymentAmount?: number | null
+  /** annual / monthly / season — drives the "$/…" suffix. */
+  cadence?: 'annual' | 'monthly' | 'season' | null
 }
 
 const {
@@ -160,6 +168,9 @@ function rosterToView(r: RosterMember): Member {
     membershipTypeId: r.membership?.type_id ?? null,
     apiRole: r.club_role,
     title: null,
+    fee: r.membership?.fee ?? r.membership?.annual_fee ?? null,
+    lastPaymentAmount: r.membership?.last_payment_amount ?? null,
+    cadence: r.membership?.cadence ?? null,
   }
 }
 
@@ -248,6 +259,40 @@ const statusTone: Record<MemberStatus, string> = {
   Active: 'ok',
   Pending: 'warn',
   Lapsed: 'danger',
+}
+
+// ── Fee display helpers ─────────────────────────────────────────
+const CADENCE_SUFFIX: Record<NonNullable<Member['cadence']>, string> = {
+  annual: '/yr',
+  monthly: '/mo',
+  season: '/season',
+}
+
+/** "$240/yr" or "$240" (when cadence is unknown). Empty string if fee is null. */
+function feeLabel(m: Member): string {
+  if (m.fee == null) return ''
+  const suffix = m.cadence ? CADENCE_SUFFIX[m.cadence] : ''
+  return suffix ? `$${m.fee}${suffix}` : `$${m.fee}`
+}
+
+/**
+ * Amount summary — what to show under the dues pill.
+ * - Paid:      "Paid $240"
+ * - Partial:   "$120 of $240"
+ * - Due:       "$240 due"
+ * - Overdue:   "$240 overdue"
+ * - No tier:   "" (nothing to show)
+ */
+function duesAmountLabel(m: Member): string {
+  if (m.fee == null) return ''
+  const feeStr = `$${m.fee}`
+  const paidStr = m.lastPaymentAmount != null ? `$${m.lastPaymentAmount}` : null
+  switch (m.duesStatus) {
+    case 'Paid':    return paidStr ? `Paid ${paidStr}` : `Paid ${feeStr}`
+    case 'Overdue': return `${feeStr} overdue`
+    case 'Due':     return paidStr && m.lastPaymentAmount! < m.fee ? `${paidStr} of ${feeStr}` : `${feeStr} due`
+    default:        return ''
+  }
 }
 
 const duesTone: Record<DuesStatus, string> = {
@@ -712,8 +757,14 @@ async function submit() {
             </div>
           </td>
           <td>{{ m.email }}</td>
-          <td>{{ m.membership }}</td>
-          <td><span class="pill" :class="`pill--${duesTone[m.duesStatus]}`">{{ m.duesStatus }}</span></td>
+          <td>
+            <div>{{ m.membership }}</div>
+            <div v-if="feeLabel(m)" class="row__fee">{{ feeLabel(m) }}</div>
+          </td>
+          <td>
+            <span class="pill" :class="`pill--${duesTone[m.duesStatus]}`">{{ m.duesStatus }}</span>
+            <div v-if="duesAmountLabel(m)" class="row__dues-amount">{{ duesAmountLabel(m) }}</div>
+          </td>
           <td><span class="pill" :class="`pill--${statusTone[m.status]}`">{{ m.status }}</span></td>
           <td class="row__chev" aria-hidden="true">›</td>
         </tr>
@@ -792,6 +843,11 @@ async function submit() {
             <span v-if="membershipBadge(m)" class="badge" :class="`badge--${membershipBadge(m)!.tone}`">{{ membershipBadge(m)!.label }}</span>
             <span v-if="roleBadge(m)" class="badge" :class="`badge--${roleBadge(m)!.tone}`">{{ roleBadge(m)!.label }}</span>
             <span v-if="m.duesStatus !== 'Paid'" class="badge" :class="`badge--${duesTone[m.duesStatus]}-soft`">{{ m.duesStatus === 'Overdue' ? 'Dues overdue' : 'Dues due' }}</span>
+          </div>
+          <div v-if="feeLabel(m) || duesAmountLabel(m)" class="card__fee">
+            <span v-if="feeLabel(m)">{{ feeLabel(m) }}</span>
+            <span v-if="feeLabel(m) && duesAmountLabel(m)" class="card__fee-sep">·</span>
+            <span v-if="duesAmountLabel(m)" :class="`card__fee-${duesTone[m.duesStatus]}`">{{ duesAmountLabel(m) }}</span>
           </div>
           <div class="card__contact">{{ m.email }}</div>
         </div>
@@ -874,7 +930,8 @@ async function submit() {
             <div class="stat" :class="`stat--${duesTone[activeMember.duesStatus]}`">
               <div class="stat__value">{{ activeMember.duesStatus }}</div>
               <div class="stat__label">Dues</div>
-              <div v-if="activeMember.duesNote" class="stat__hint">{{ activeMember.duesNote }}</div>
+              <div v-if="duesAmountLabel(activeMember)" class="stat__hint">{{ duesAmountLabel(activeMember) }}</div>
+              <div v-else-if="activeMember.duesNote" class="stat__hint">{{ activeMember.duesNote }}</div>
             </div>
             <div class="stat">
               <div class="stat__value">{{ activeMember.eventsAttended }}</div>
@@ -904,6 +961,8 @@ async function submit() {
                 <div class="dl__row"><dt>Member #</dt><dd class="dl__mono">{{ activeMember.memberNumber }}</dd></div>
                 <div class="dl__row"><dt>Joined</dt><dd>{{ activeMember.joinedAt }}</dd></div>
                 <div class="dl__row"><dt>Role</dt><dd>{{ activeMember.role }}</dd></div>
+                <div v-if="feeLabel(activeMember)" class="dl__row"><dt>Fee</dt><dd>{{ feeLabel(activeMember) }}</dd></div>
+                <div v-if="activeMember.lastPaymentAmount != null" class="dl__row"><dt>Last paid</dt><dd>${{ activeMember.lastPaymentAmount }}</dd></div>
               </dl>
             </section>
           </div>
@@ -1183,6 +1242,8 @@ async function submit() {
 .row__name-text { min-width: 0; }
 .row__name-main { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-family: var(--font-display); font-size: 14px; font-weight: 600; color: var(--color-ink); }
 .row__name-sub { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 2px; }
+.row__fee { font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); margin-top: 3px; }
+.row__dues-amount { font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); margin-top: 4px; }
 .row__chev { text-align: right; color: var(--color-mute); font-size: 18px; padding-right: 20px; width: 24px; }
 .row--skeleton { cursor: default; }
 .row--skeleton:hover { background: transparent; }
@@ -1201,6 +1262,11 @@ async function submit() {
 .card__name { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card__badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
 .card__contact { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card__fee { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); margin-top: 6px; flex-wrap: wrap; }
+.card__fee-sep { opacity: 0.5; }
+.card__fee-ok { color: var(--color-graphite); }
+.card__fee-warn { color: #92400E; font-weight: 600; }
+.card__fee-danger { color: #991B1B; font-weight: 600; }
 .card--skeleton { cursor: default; }
 .card__body--sk { display: flex; flex-direction: column; gap: 8px; }
 .card__body--sk .crm-skeleton { display: block; }

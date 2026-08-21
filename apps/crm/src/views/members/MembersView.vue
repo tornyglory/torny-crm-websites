@@ -314,6 +314,48 @@ function roleBadge(m: Member): { label: string; tone: string } | null {
   return null
 }
 
+// ── Roster stats (over the roster, not the search results) ────
+const rosterStats = computed(() => {
+  const rows = members.value
+  let expected = 0
+  let received = 0
+  let outstanding = 0
+  const tierCounts = new Map<string, number>()
+
+  for (const m of rows) {
+    if (m.status === 'Lapsed') continue
+    const fee = m.fee ?? 0
+    expected += fee
+    if (m.duesStatus === 'Paid') {
+      received += m.lastPaymentAmount ?? fee
+    } else if (m.duesStatus === 'Due' || m.duesStatus === 'Overdue') {
+      const paid = m.lastPaymentAmount ?? 0
+      outstanding += Math.max(0, fee - paid)
+      // If they've partially paid, count that toward received too.
+      if (paid > 0 && paid < fee) received += paid
+    }
+    if (m.membership) tierCounts.set(m.membership, (tierCounts.get(m.membership) ?? 0) + 1)
+  }
+
+  const collectionRate = expected > 0 ? Math.round((received / expected) * 100) : null
+  const activeCount = rows.filter((m) => m.status === 'Active').length
+  const dueCount = rows.filter((m) => m.duesStatus === 'Due' && m.status !== 'Lapsed').length
+  const overdueCount = rows.filter((m) => m.duesStatus === 'Overdue' && m.status !== 'Lapsed').length
+
+  // Most common tier
+  let topTier: { name: string; count: number } | null = null
+  for (const [name, count] of tierCounts) {
+    if (!topTier || count > topTier.count) topTier = { name, count }
+  }
+
+  return { expected, received, outstanding, collectionRate, activeCount, dueCount, overdueCount, topTier }
+})
+
+function fmtMoney(n: number): string {
+  if (n >= 1000) return `$${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`
+  return `$${n}`
+}
+
 // ── Detail modal ────────────────────────────────────────────────
 const detailOpen = ref(false)
 const activeMember = ref<Member | null>(null)
@@ -688,6 +730,36 @@ async function submit() {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
       </button>
     </div>
+
+    <!-- Roster stat panels — fees expected vs collected vs outstanding -->
+    <section v-if="!rosterLoading && members.length > 0" class="stats">
+      <div class="stat-panel">
+        <div class="stat-panel__label">Expected fees</div>
+        <div class="stat-panel__value">{{ fmtMoney(rosterStats.expected) }}</div>
+        <div class="stat-panel__sub">{{ rosterStats.activeCount }} active member{{ rosterStats.activeCount === 1 ? '' : 's' }}</div>
+      </div>
+      <div class="stat-panel stat-panel--ok">
+        <div class="stat-panel__label">Collected</div>
+        <div class="stat-panel__value">{{ fmtMoney(rosterStats.received) }}</div>
+        <div class="stat-panel__sub">
+          <span v-if="rosterStats.collectionRate != null">{{ rosterStats.collectionRate }}% of expected</span>
+          <span v-else>—</span>
+        </div>
+      </div>
+      <div class="stat-panel" :class="{ 'stat-panel--warn': rosterStats.outstanding > 0 }">
+        <div class="stat-panel__label">Outstanding</div>
+        <div class="stat-panel__value">{{ fmtMoney(rosterStats.outstanding) }}</div>
+        <div class="stat-panel__sub">
+          <template v-if="rosterStats.overdueCount > 0"><strong>{{ rosterStats.overdueCount }} overdue</strong> · </template>
+          {{ rosterStats.dueCount }} due
+        </div>
+      </div>
+      <div class="stat-panel stat-panel--muted">
+        <div class="stat-panel__label">Top tier</div>
+        <div class="stat-panel__value stat-panel__value--sm">{{ rosterStats.topTier?.name ?? '—' }}</div>
+        <div class="stat-panel__sub">{{ rosterStats.topTier?.count ?? 0 }} member{{ rosterStats.topTier?.count === 1 ? '' : 's' }}</div>
+      </div>
+    </section>
 
     <div class="filters">
       <div class="chips">
@@ -1211,6 +1283,24 @@ async function submit() {
 .search--mobile { display: none; }
 
 /* Filter chips */
+/* Roster stat panels */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.stat-panel { padding: 14px 16px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; }
+.stat-panel--ok { background: #F0FDF4; border-color: #BBF7D0; }
+.stat-panel--ok .stat-panel__value { color: #14532D; }
+.stat-panel--warn { background: #FFFBEB; border-color: #FDE68A; }
+.stat-panel--warn .stat-panel__value { color: #92400E; }
+.stat-panel--muted { background: var(--color-surface); }
+.stat-panel__label { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.stat-panel__value { font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: -0.01em; color: var(--color-ink); margin-top: 6px; line-height: 1.1; }
+.stat-panel__value--sm { font-size: 16px; }
+.stat-panel__sub { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 4px; }
+.stat-panel__sub strong { color: #991B1B; font-weight: 700; }
+
+@media (max-width: 900px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+}
+
 .filters { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .chips { display: flex; gap: 6px; padding: 4px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 999px; width: fit-content; }
 .chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border: 0; background: transparent; border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-fog); cursor: pointer; }

@@ -32,7 +32,7 @@ export const requireOwner: NavigationGuard = (to) => {
   return true
 }
 
-export const requireOwnerAndOnboarded: NavigationGuard = (to) => {
+export const requireOwnerAndOnboarded: NavigationGuard = async (to) => {
   const auth = useAuthStore()
   if (!auth.isAuthenticated) {
     return { name: 'sign-in', query: { redirect: to.fullPath } }
@@ -44,6 +44,12 @@ export const requireOwnerAndOnboarded: NavigationGuard = (to) => {
     return { name: 'forbidden' }
   }
   const onboarding = useOnboardingStore()
+  // The store's default `completed` is false. Hydrate from the real
+  // GET /clubs/:id/onboarding before deciding — otherwise a returning owner
+  // whose onboarding completed remotely gets bounced back to the wizard.
+  if (!onboarding.completed) {
+    await onboarding.hydrate()
+  }
   if (!onboarding.completed) {
     return { name: 'onboarding-welcome' }
   }

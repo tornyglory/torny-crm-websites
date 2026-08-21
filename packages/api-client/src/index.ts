@@ -17,6 +17,15 @@ export type {
   RosterResponse,
   PendingInvite,
   ListRosterParams,
+  AddMemberInput,
+  AddMemberResult,
+  AddMemberResolution,
+  UpdateMemberInput,
+  UpdateMemberResult,
+  RemoveMemberResult,
+  PaymentMethod,
+  RecordPaymentInput,
+  RecordPaymentResult,
 } from './resources/members'
 export * as events from './resources/events'
 export * as teams from './resources/teams'
@@ -70,5 +79,14 @@ export type {
   OnboardingValidationError,
   SubdomainCheckResult,
 } from './resources/clubOnboarding'
-export { SAM_BASE, CRM_BASE } from './config'
+export * as media from './resources/media'
+export type {
+  MediaEntityType,
+  MediaContentType,
+  UploadUrlResponse,
+  ConfirmedImage,
+  RequestUploadParams,
+  ConfirmParams,
+} from './resources/media'
+export { SAM_BASE, CRM_BASE, MEDIA_BASE } from './config'
 export { ApiError, authedFetch, publicFetch, TOKEN_STORAGE_KEY } from './http'

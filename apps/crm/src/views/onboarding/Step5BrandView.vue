@@ -2,10 +2,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOnboardingStore } from '@/stores/onboarding'
+import { useClubStore } from '@/stores/club'
+import { media } from '@torny/api-client'
 import WizardHeader from '@/components/onboarding/WizardHeader.vue'
 import WizardFooter from '@/components/onboarding/WizardFooter.vue'
 
 const onboarding = useOnboardingStore()
+const clubStore = useClubStore()
 const router = useRouter()
 const fileInput = ref<HTMLInputElement | null>(null)
 
@@ -25,16 +28,71 @@ onMounted(() => {
   onboarding.setStep(5)
 })
 
+// ── Logo upload ───────────────────────────────────────────────────
+type UploadState = 'idle' | 'uploading' | 'error'
+const uploadState = ref<UploadState>('idle')
+const uploadError = ref<string | null>(null)
+// Local object-URL preview so the thumbnail shows the picked file even
+// before the confirmed Cloudflare URL is ready.
+const localPreview = ref<string | null>(null)
+
+const MAX_LOGO_BYTES = 10 * 1024 * 1024   // Cloudflare Images default
+const ACCEPTED_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
+
+const logoPreviewUrl = computed(() => localPreview.value ?? onboarding.data.logoUrl ?? null)
+
 function openPicker() {
   fileInput.value?.click()
 }
-function onFile(e: Event) {
-  const files = (e.target as HTMLInputElement).files
-  const file = files?.[0]
-  if (file) {
-    onboarding.data.logoName = file.name
+
+async function onFile(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  // Reset the input so the same file can be reselected after an error.
+  target.value = ''
+  if (!file) return
+
+  if (!ACCEPTED_MIME.has(file.type)) {
+    uploadError.value = 'Please pick a PNG, JPG, GIF, or WebP file.'
+    uploadState.value = 'error'
+    return
+  }
+  if (file.size > MAX_LOGO_BYTES) {
+    uploadError.value = 'That file is over 10 MB — try a smaller one.'
+    uploadState.value = 'error'
+    return
+  }
+
+  const clubId = clubStore.current?.id
+  if (clubId == null) {
+    uploadError.value = 'No club is active — refresh and try again.'
+    uploadState.value = 'error'
+    return
+  }
+
+  // Swap in a local preview immediately so the UI feels responsive.
+  if (localPreview.value) URL.revokeObjectURL(localPreview.value)
+  localPreview.value = URL.createObjectURL(file)
+  uploadState.value = 'uploading'
+  uploadError.value = null
+  onboarding.data.logoName = file.name
+
+  try {
+    const confirmed = await media.uploadClubLogo(clubId, file)
+    // Store's deep watcher picks this up and PATCHes on the next tick.
+    onboarding.data.logoUrl = confirmed.avatar_url
+    uploadState.value = 'idle'
+  } catch (err) {
+    uploadState.value = 'error'
+    uploadError.value = err instanceof Error ? err.message : 'Upload failed'
+    // Roll the preview back to whatever the server had (if anything).
+    if (localPreview.value) {
+      URL.revokeObjectURL(localPreview.value)
+      localPreview.value = null
+    }
   }
 }
+
 function goNext() {
   router.push({ name: 'onboarding-step-6' })
 }
@@ -53,14 +111,36 @@ function goNext() {
         <div class="card">
           <div class="field__label">Logo</div>
           <div class="logo">
-            <div class="logo__drop" @click="openPicker" role="button" tabindex="0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M12 5v14M5 12h14" /></svg>
+            <div
+              class="logo__drop"
+              :class="{ 'logo__drop--has-image': !!logoPreviewUrl }"
+              @click="openPicker"
+              role="button"
+              tabindex="0"
+            >
+              <img v-if="logoPreviewUrl" :src="logoPreviewUrl" alt="Club logo preview" />
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M12 5v14M5 12h14" /></svg>
+              <span v-if="uploadState === 'uploading'" class="logo__spinner" aria-hidden="true" />
             </div>
             <div class="logo__body">
               <div class="logo__title">{{ onboarding.data.logoName ? 'Change logo' : 'Upload logo' }}</div>
-              <div class="logo__hint">{{ onboarding.data.logoName || 'PNG or SVG · square works best · at least 400×400' }}</div>
-              <button type="button" class="logo__btn" @click="openPicker">Choose file</button>
-              <input ref="fileInput" type="file" accept="image/png,image/svg+xml" hidden @change="onFile" />
+              <div class="logo__hint">{{ onboarding.data.logoName || 'PNG, JPG, GIF, or WebP · square works best · at least 400×400 · ≤ 10 MB' }}</div>
+              <div class="logo__actions">
+                <button
+                  type="button"
+                  class="logo__btn"
+                  :disabled="uploadState === 'uploading'"
+                  @click="openPicker"
+                >
+                  {{ uploadState === 'uploading' ? 'Uploading…' : 'Choose file' }}
+                </button>
+                <span v-if="uploadState === 'uploading'" class="logo__status">Uploading to Cloudflare…</span>
+                <span v-else-if="onboarding.data.logoUrl && uploadState === 'idle'" class="logo__status logo__status--ok">Saved</span>
+              </div>
+              <div v-if="uploadState === 'error' && uploadError" class="logo__error" role="alert">
+                {{ uploadError }}
+              </div>
+              <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden @change="onFile" />
             </div>
           </div>
         </div>
@@ -132,12 +212,22 @@ function goNext() {
 .card--preview { display: flex; flex-direction: column; gap: 12px; }
 
 .logo { display: flex; align-items: center; gap: 16px; margin-top: 12px; }
-.logo__drop { width: 84px; height: 84px; border-radius: 16px; background: var(--color-surface); border: 1px dashed var(--color-hairline); display: inline-flex; align-items: center; justify-content: center; color: var(--color-mute); cursor: pointer; flex-shrink: 0; }
+.logo__drop { position: relative; width: 84px; height: 84px; border-radius: 16px; background: var(--color-surface); border: 1px dashed var(--color-hairline); display: inline-flex; align-items: center; justify-content: center; color: var(--color-mute); cursor: pointer; flex-shrink: 0; overflow: hidden; }
 .logo__drop:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.logo__drop--has-image { border-style: solid; background: #fff; }
+.logo__drop img { width: 100%; height: 100%; object-fit: contain; }
+.logo__spinner { position: absolute; inset: 0; background: rgba(255,255,255,0.72); display: flex; align-items: center; justify-content: center; }
+.logo__spinner::after { content: ''; width: 22px; height: 22px; border-radius: 999px; border: 2px solid var(--color-hairline); border-top-color: var(--color-accent); animation: logo-spin 0.9s linear infinite; }
+@keyframes logo-spin { to { transform: rotate(360deg); } }
 .logo__body { flex: 1; min-width: 0; }
 .logo__title { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); }
 .logo__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 4px; }
-.logo__btn { margin-top: 10px; padding: 8px 14px; background: var(--color-ink); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
+.logo__actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.logo__btn { padding: 8px 14px; background: var(--color-ink); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
+.logo__btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.logo__status { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
+.logo__status--ok { color: #16A34A; font-weight: 600; }
+.logo__error { margin-top: 8px; padding: 8px 10px; background: #FEE2E2; border: 1px solid #FCA5A5; border-radius: 8px; font-family: var(--font-body); font-size: 12px; color: #991B1B; }
 
 .preview { height: 84px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; width: 100%; gap: 10px; border: 1px solid; }
 .preview__mark { width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; }

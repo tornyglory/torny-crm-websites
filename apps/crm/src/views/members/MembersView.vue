@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import CrmEmptyState from '@/components/CrmEmptyState.vue'
+import CrmSkeleton from '@/components/CrmSkeleton.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import { useToast } from '@/composables/useToast'
 import { useMemberSearch } from '@/composables/useMemberSearch'
 import { useClubStore } from '@/stores/club'
-import type { RosterMember } from '@torny/api-client'
+import { members as membersApi, ApiError, type RosterMember } from '@torny/api-client'
 
 const toast = useToast()
 const clubStore = useClubStore()
 
 type MemberStatus = 'Active' | 'Pending' | 'Lapsed'
 type MemberRole = 'Player' | 'Committee' | 'Coach' | 'Junior' | 'Volunteer'
-type MembershipType = 'Playing member' | 'Social member' | 'Life member' | 'Junior'
+/** Server-provided type_name — kept as a string since clubs can define
+ *  their own tiers via the onboarding wizard. */
+type MembershipType = string
 type DuesStatus = 'Paid' | 'Due' | 'Overdue'
+const DUES_STATUSES: DuesStatus[] = ['Paid', 'Due', 'Overdue']
 
 interface Member {
   id: string
@@ -32,6 +38,8 @@ interface Member {
   lastActive: string
   eventsAttended: number
   notes?: string
+  avatarUrl?: string | null
+  membershipTypeId?: number | null
 }
 
 const {
@@ -46,8 +54,65 @@ const {
 })
 
 const statusFilter = ref<'all' | MemberStatus>('all')
+const membershipFilter = ref<'all' | MembershipType>('all')
+const duesFilter = ref<'all' | DuesStatus>('all')
 const MIN_SEARCH_CHARS = 2
 const isSearching = computed(() => search.value.trim().length >= MIN_SEARCH_CHARS)
+
+// Skeleton rows stand in for the list when either (a) the initial
+// roster is still loading, or (b) a fresh search is in flight with no
+// previous results to keep visible. Existing results stay put during
+// re-search so the UI doesn't flash.
+const showTableSkeleton = computed(() => {
+  if (isSearching.value && searchLoading.value && apiResults.value.length === 0) return true
+  if (!isSearching.value && rosterLoading.value && members.value.length === 0) return true
+  return false
+})
+
+const hasActiveFilter = computed(
+  () =>
+    statusFilter.value !== 'all' ||
+    membershipFilter.value !== 'all' ||
+    duesFilter.value !== 'all' ||
+    search.value.trim().length > 0,
+)
+function resetFilters() {
+  statusFilter.value = 'all'
+  membershipFilter.value = 'all'
+  duesFilter.value = 'all'
+  search.value = ''
+}
+
+const emptyTitle = computed(() => {
+  if (isSearching.value) return `No matches for "${search.value.trim()}"`
+  if (hasActiveFilter.value) return 'No members match those filters'
+  return 'No members yet'
+})
+const emptyDescription = computed(() => {
+  if (isSearching.value) return 'Check the spelling, or clear the search to browse the full roster.'
+  if (hasActiveFilter.value) return 'Try loosening a filter or hitting reset to see everyone.'
+  return "Add your first member or import a CSV to get started."
+})
+
+function onSearchRetry() {
+  // Nudge the composable — mutating and restoring the same query
+  // fires the watcher which schedules a fresh fetch.
+  const q = search.value
+  search.value = ''
+  search.value = q
+}
+
+// Server timestamps are ISO 8601 UTC. Roster sub-lines want "Feb 2019".
+const MONTH_YEAR_FMT = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  year: 'numeric',
+})
+function formatJoinedAt(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return MONTH_YEAR_FMT.format(d)
+}
 
 // Map the server roster shape to the local view Member so the table /
 // card / detail templates keep working unchanged. Fields not present on
@@ -71,11 +136,7 @@ function rosterToView(r: RosterMember): Member {
     partial: 'Due',
     overdue: 'Overdue',
   }
-  const typeName = r.membership?.type_name ?? 'Playing member'
-  const membership: MembershipType =
-    typeName === 'Life member' || typeName === 'Playing member' || typeName === 'Social member' || typeName === 'Junior'
-      ? (typeName as MembershipType)
-      : 'Playing member'
+  const membership = r.membership?.type_name ?? 'Playing member'
   return {
     id: String(r.user_id),
     name: r.name,
@@ -85,23 +146,57 @@ function rosterToView(r: RosterMember): Member {
     status: statusMap[r.computed_status] ?? 'Active',
     membership,
     memberNumber: r.member_number != null ? `#${r.member_number}` : '—',
-    joinedAt: '—',
+    joinedAt: formatJoinedAt(r.joined_at),
     duesStatus: paymentToDues[r.membership?.payment_status ?? ''] ?? 'Paid',
     lastActive: '—',
     eventsAttended: 0,
+    avatarUrl: r.avatar_url ?? null,
+    membershipTypeId: r.membership?.type_id ?? null,
   }
 }
 
-const members = ref<Member[]>([
-  { id: '1', name: 'Marcus Tuilagi', email: 'marcus@example.com', phone: '021 555 0101', role: 'Player', status: 'Active', membership: 'Playing member', memberNumber: 'NBC-042', joinedAt: 'Feb 2019', duesStatus: 'Paid', dob: '14 Mar 1988', address: '12 Riverbank Rd, Naenae, Lower Hutt 5011', lastActive: '2h ago', eventsAttended: 24, notes: 'Skips Tuesday nights during rugby season.' },
-  { id: '2', name: 'Denise Peters', email: 'denise@example.com', phone: '022 555 0202', role: 'Committee', status: 'Active', membership: 'Life member', memberNumber: 'NBC-006', joinedAt: 'Aug 2004', duesStatus: 'Paid', dob: '2 Nov 1958', address: '48 Fergusson Dr, Upper Hutt 5018', lastActive: '3d ago', eventsAttended: 112, notes: 'Committee treasurer since 2019. Handles Xero reconciliations.' },
-  { id: '3', name: 'Tama Wong', email: 'tama@example.com', phone: '027 555 0303', role: 'Coach', status: 'Active', membership: 'Playing member', memberNumber: 'NBC-118', joinedAt: 'Jan 2022', duesStatus: 'Due', duesNote: 'Due 30 Sep', dob: '19 Jul 1979', address: '9 Whakatiki St, Trentham 5018', lastActive: '1d ago', eventsAttended: 47, notes: 'Coaches the junior development squad on Saturday mornings.' },
-  { id: '4', name: 'Reggie Harris', email: 'reggie@example.com', phone: '021 555 0404', role: 'Player', status: 'Lapsed', membership: 'Playing member', memberNumber: 'NBC-081', joinedAt: 'Sep 2020', duesStatus: 'Overdue', duesNote: 'Overdue since 1 Aug', dob: '5 Feb 1995', address: '203 Waterloo Rd, Lower Hutt 5011', lastActive: '3 weeks ago', eventsAttended: 8 },
-  { id: '5', name: 'Jo Kirk', email: 'jo@example.com', phone: '022 555 0505', role: 'Player', status: 'Active', membership: 'Playing member', memberNumber: 'NBC-097', joinedAt: 'Nov 2021', duesStatus: 'Paid', dob: '22 Sep 1990', address: '17 Miromiro St, Waiwhetu 5011', lastActive: '5h ago', eventsAttended: 33 },
-  { id: '6', name: 'Ana Kereopa', email: 'ana@example.com', phone: '021 555 0606', role: 'Junior', status: 'Active', membership: 'Junior', memberNumber: 'NBC-142', joinedAt: 'Mar 2024', duesStatus: 'Paid', dob: '11 Apr 2011', address: '5 Petherick Cres, Wainuiomata 5014', lastActive: '2d ago', eventsAttended: 6, notes: 'Under-14. Parent contact: Manaia Kereopa (021 555 0666).' },
-  { id: '7', name: 'Sione Vagana', email: 'sione@example.com', phone: '027 555 0707', role: 'Volunteer', status: 'Active', membership: 'Social member', memberNumber: 'NBC-115', joinedAt: 'Jun 2022', duesStatus: 'Paid', dob: '30 Jan 1972', address: '61 High St, Petone 5012', lastActive: '1w ago', eventsAttended: 18, notes: 'Runs the BBQ every match day.' },
-  { id: '8', name: 'Priya Kaur', email: 'priya@example.com', phone: '022 555 0808', role: 'Player', status: 'Pending', membership: 'Playing member', memberNumber: '—', joinedAt: 'Aug 2026', duesStatus: 'Due', duesNote: 'Awaiting first payment', dob: '8 Dec 1993', address: '', lastActive: '—', eventsAttended: 0, notes: 'New applicant, referred by Marcus Tuilagi.' },
-])
+const members = ref<Member[]>([])
+const rosterLoading = ref(false)
+const rosterError = ref<string | null>(null)
+const rosterCounts = ref<{ total: number; active: number } | null>(null)
+
+// Prefer the server's authoritative counts for the hero line so the "N
+// total · N active" number stays put while the user is searching.
+const heroCounts = computed(() =>
+  rosterCounts.value ?? {
+    total: members.value.length,
+    active: members.value.filter((m) => m.status === 'Active').length,
+  },
+)
+
+async function loadRoster() {
+  const cid = clubStore.current?.id
+  if (cid == null) {
+    members.value = []
+    rosterCounts.value = null
+    return
+  }
+  rosterLoading.value = true
+  rosterError.value = null
+  try {
+    const res = await membersApi.listRoster(cid, {
+      limit: 200,
+      include_invites: false,
+    })
+    members.value = res.members.map(rosterToView)
+    rosterCounts.value = { total: res.counts.total, active: res.counts.active }
+  } catch (err) {
+    rosterError.value = err instanceof Error ? err.message : 'Failed to load roster'
+    members.value = []
+    rosterCounts.value = null
+  } finally {
+    rosterLoading.value = false
+  }
+}
+
+onMounted(loadRoster)
+// Reload when the active club changes (e.g. via the club switcher).
+watch(() => clubStore.current?.id, loadRoster)
 
 const visibleSource = computed<Member[]>(() =>
   isSearching.value ? apiResults.value.map(rosterToView) : members.value,
@@ -115,10 +210,27 @@ const counts = computed(() => ({
 }))
 
 const filtered = computed(() =>
-  visibleSource.value.filter(
-    (m) => statusFilter.value === 'all' || m.status === statusFilter.value,
-  ),
+  visibleSource.value.filter((m) => {
+    if (statusFilter.value !== 'all' && m.status !== statusFilter.value) return false
+    if (membershipFilter.value !== 'all' && m.membership !== membershipFilter.value) return false
+    if (duesFilter.value !== 'all' && m.duesStatus !== duesFilter.value) return false
+    return true
+  }),
 )
+
+/** Union of membership types across the roster + any current search
+ *  results, so the dropdown offers every value the user might see. */
+const membershipOptions = computed<MembershipType[]>(() => {
+  const set = new Set<MembershipType>()
+  for (const m of members.value) if (m.membership) set.add(m.membership)
+  if (isSearching.value) {
+    for (const r of apiResults.value) {
+      const t = r.membership?.type_name
+      if (t) set.add(t)
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b))
+})
 
 function initials(m: Member) {
   return m.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
@@ -169,8 +281,39 @@ function editMember() {
   toast.info(`Edit form for ${activeMember.value.name} coming next session.`)
 }
 
+async function removeActiveMember() {
+  const m = activeMember.value
+  const cid = clubStore.current?.id
+  if (!m || cid == null) return
+  const ok = confirm(`Remove ${m.name} from the club? They'll appear under Lapsed and can be re-linked later.`)
+  if (!ok) return
+  try {
+    await membersApi.remove(cid, Number(m.id))
+    toast.success(`${m.name} removed.`)
+    detailOpen.value = false
+    await loadRoster()
+  } catch (err) {
+    toast.error(removeErrorCopy(err))
+  }
+}
+
+function removeErrorCopy(err: unknown): string {
+  if (err instanceof ApiError) {
+    switch (err.code) {
+      case 'owner_immutable':    return "You can't remove the club owner. Transfer ownership first."
+      case 'cannot_remove_self': return "You can't remove yourself. Use the leave-club flow (coming soon)."
+      case 'already_revoked':    return 'They\'ve already been removed. Refreshing the roster.'
+      case 'forbidden':          return "You don't have permission to remove this member."
+      default:                   return err.message
+    }
+  }
+  return (err as Error).message
+}
+
 // ── Add member modal ───────────────────────────────────────────
 const addOpen = ref(false)
+const addSubmitting = ref(false)
+const addError = ref<string | null>(null)
 const emptyForm = () => ({
   firstName: '',
   lastName: '',
@@ -185,6 +328,7 @@ const form = reactive(emptyForm())
 
 function openAdd() {
   Object.assign(form, emptyForm())
+  addError.value = null
   addOpen.value = true
 }
 function closeAdd() {
@@ -192,28 +336,70 @@ function closeAdd() {
 }
 
 const canSubmit = computed(
-  () => form.firstName.trim().length > 0 && form.lastName.trim().length > 0 && form.email.trim().length > 0,
+  () => form.firstName.trim().length > 0 && form.lastName.trim().length > 0 && /.+@.+\..+/.test(form.email.trim()),
 )
 
-function submit() {
+// Map the UI role picker (Player / Committee / Coach / Junior / Volunteer)
+// to the API's smaller role vocabulary. Coach / Junior / Volunteer are
+// player-tier for permissions; use `title` to preserve the flavour.
+function toApiRole(role: MemberRole): 'committee' | 'player' {
+  return role === 'Committee' ? 'committee' : 'player'
+}
+
+// Pluck a tier id off the current roster for the picked membership type.
+// The onboarding wizard's Step 4 owns the canonical id list — but until
+// we have a dedicated /membership-tiers endpoint this is the cheapest
+// lookup that works.
+function tierIdForMembership(name: MembershipType): number | undefined {
+  const hit = members.value.find((m) => m.membership === name && m.membershipTypeId != null)
+  return hit?.membershipTypeId ?? undefined
+}
+
+async function submit() {
   if (!canSubmit.value) return
-  members.value.unshift({
-    id: `m${Date.now()}`,
-    name: `${form.firstName.trim()} ${form.lastName.trim()}`,
-    email: form.email.trim(),
-    phone: form.phone.trim(),
-    role: form.role,
-    status: form.markPending ? 'Pending' : 'Active',
-    membership: form.membership,
-    memberNumber: '—',
-    joinedAt: 'Just now',
-    duesStatus: 'Due',
-    duesNote: 'Awaiting first payment',
-    lastActive: '—',
-    eventsAttended: 0,
-  })
-  closeAdd()
-  toast.success(`${form.firstName.trim()} added to the roster.`)
+  const cid = clubStore.current?.id
+  if (cid == null) {
+    addError.value = 'No active club — refresh and try again.'
+    return
+  }
+  addSubmitting.value = true
+  addError.value = null
+  try {
+    const result = await membersApi.add(cid, {
+      email: form.email.trim(),
+      first_name: form.firstName.trim(),
+      last_name: form.lastName.trim(),
+      phone: form.phone.trim() || undefined,
+      role: toApiRole(form.role),
+      title: form.role === 'Coach' || form.role === 'Junior' || form.role === 'Volunteer' ? form.role : undefined,
+      membership_type_id: tierIdForMembership(form.membership),
+      membership_type: form.membership,
+      send_invite: form.sendInvite,
+    })
+    const name = `${form.firstName.trim()} ${form.lastName.trim()}`
+    switch (result.resolution) {
+      case 'linked':       toast.success(`${name} linked from an existing Torny user.`); break
+      case 'relinked':     toast.success(`${name} was previously removed — re-linked with their old member number.`); break
+      case 'invited':      toast.success(`Invite emailed to ${form.email.trim()}.`); break
+      case 'stub_created': toast.success(`${name} added.`); break
+    }
+    closeAdd()
+    await loadRoster()
+  } catch (err) {
+    if (err instanceof ApiError) {
+      switch (err.code) {
+        case 'already_member': addError.value = 'That email is already an active member.'; break
+        case 'invite_exists':  addError.value = 'A pending invite already exists for that email.'; break
+        case 'invalid_email':  addError.value = 'That email isn\'t valid.'; break
+        case 'unknown_type':   addError.value = 'That membership tier isn\'t on this club yet — finish onboarding first.'; break
+        default:               addError.value = err.message
+      }
+    } else {
+      addError.value = (err as Error).message
+    }
+  } finally {
+    addSubmitting.value = false
+  }
 }
 </script>
 
@@ -223,7 +409,7 @@ function submit() {
       <div>
         <div class="members__eyebrow">Roster</div>
         <h1 class="members__heading">Members</h1>
-        <p class="members__sub">{{ counts.all }} total · {{ counts.Active }} active</p>
+        <p class="members__sub">{{ heroCounts.total }} total · {{ heroCounts.active }} active</p>
       </div>
       <div class="members__actions">
         <div class="search">
@@ -235,8 +421,12 @@ function submit() {
             v-model="search"
             placeholder="Search name, email, phone, role…"
             class="search__input"
+            :aria-busy="searchLoading || undefined"
           />
-          <button v-if="search" class="search__clear" aria-label="Clear search" @click="search = ''">
+          <span v-if="isSearching && searchLoading" class="search__spinner">
+            <CrmSpinner size="sm" label="Searching" />
+          </span>
+          <button v-else-if="search" class="search__clear" aria-label="Clear search" @click="search = ''">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
@@ -253,8 +443,16 @@ function submit() {
         <circle cx="11" cy="11" r="8" />
         <path d="m21 21-4.35-4.35" />
       </svg>
-      <input v-model="search" placeholder="Search members…" class="search__input" />
-      <button v-if="search" class="search__clear" aria-label="Clear search" @click="search = ''">
+      <input
+        v-model="search"
+        placeholder="Search members…"
+        class="search__input"
+        :aria-busy="searchLoading || undefined"
+      />
+      <span v-if="isSearching && searchLoading" class="search__spinner">
+        <CrmSpinner size="sm" label="Searching" />
+      </span>
+      <button v-else-if="search" class="search__clear" aria-label="Clear search" @click="search = ''">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
       </button>
     </div>
@@ -272,8 +470,25 @@ function submit() {
           <span class="chip__count">{{ counts[tab] }}</span>
         </button>
       </div>
-      <div v-if="search || statusFilter !== 'all'" class="filters__result">
+      <div class="filters__selects">
+        <label class="filter-select">
+          <span class="filter-select__label">Membership</span>
+          <select v-model="membershipFilter">
+            <option value="all">All</option>
+            <option v-for="opt in membershipOptions" :key="opt" :value="opt">{{ opt }}</option>
+          </select>
+        </label>
+        <label class="filter-select">
+          <span class="filter-select__label">Dues</span>
+          <select v-model="duesFilter">
+            <option value="all">All</option>
+            <option v-for="opt in DUES_STATUSES" :key="opt" :value="opt">{{ opt }}</option>
+          </select>
+        </label>
+      </div>
+      <div v-if="hasActiveFilter" class="filters__result">
         {{ filtered.length }} of {{ counts.all }}
+        <button type="button" class="filters__reset" @click="resetFilters">Reset</button>
       </div>
     </div>
 
@@ -293,14 +508,19 @@ function submit() {
         <tr v-for="m in filtered" :key="m.id" class="row" tabindex="0" @click="openDetail(m)" @keydown.enter="openDetail(m)">
           <td class="row__name">
             <div class="row__name-inner">
-              <div class="row__avatar">{{ initials(m) }}</div>
+              <div class="row__avatar" :class="{ 'row__avatar--image': m.avatarUrl }">
+                <img v-if="m.avatarUrl" :src="m.avatarUrl" :alt="m.name" />
+                <template v-else>{{ initials(m) }}</template>
+              </div>
               <div class="row__name-text">
                 <div class="row__name-main">
                   {{ m.name }}
                   <span v-if="membershipBadge(m)" class="badge" :class="`badge--${membershipBadge(m)!.tone}`">{{ membershipBadge(m)!.label }}</span>
                   <span v-if="roleBadge(m)" class="badge" :class="`badge--${roleBadge(m)!.tone}`">{{ roleBadge(m)!.label }}</span>
                 </div>
-                <div class="row__name-sub">{{ m.memberNumber }} · joined {{ m.joinedAt }}</div>
+                <div class="row__name-sub">
+                  {{ m.memberNumber }}<template v-if="m.joinedAt !== '—'"> · joined {{ m.joinedAt }}</template>
+                </div>
               </div>
             </div>
           </td>
@@ -310,14 +530,61 @@ function submit() {
           <td><span class="pill" :class="`pill--${statusTone[m.status]}`">{{ m.status }}</span></td>
           <td class="row__chev" aria-hidden="true">›</td>
         </tr>
-        <tr v-if="isSearching && searchLoading && !filtered.length">
-          <td colspan="6" class="empty">Searching…</td>
-        </tr>
+        <template v-if="showTableSkeleton">
+          <tr
+            v-for="i in 5"
+            :key="`sk-${i}`"
+            class="row row--skeleton"
+            aria-busy="true"
+          >
+            <td class="row__name">
+              <div class="row__name-inner">
+                <CrmSkeleton shape="circle" width="36px" height="36px" />
+                <div class="row__name-text row__name-text--sk">
+                  <CrmSkeleton shape="text" width="60%" />
+                  <CrmSkeleton shape="text" width="40%" />
+                </div>
+              </div>
+            </td>
+            <td><CrmSkeleton shape="text" width="70%" /></td>
+            <td><CrmSkeleton shape="text" width="55%" /></td>
+            <td><CrmSkeleton width="48px" height="18px" radius="999px" /></td>
+            <td><CrmSkeleton width="52px" height="18px" radius="999px" /></td>
+            <td aria-hidden="true" />
+          </tr>
+        </template>
         <tr v-else-if="isSearching && searchError && !filtered.length">
-          <td colspan="6" class="empty">Couldn't search: {{ searchError }}</td>
+          <td colspan="6" class="empty">
+            <CrmEmptyState
+              variant="error"
+              title="We couldn't run that search"
+              :description="searchError"
+              action-label="Try again"
+              @action="onSearchRetry"
+            />
+          </td>
+        </tr>
+        <tr v-else-if="!isSearching && rosterError && !filtered.length">
+          <td colspan="6" class="empty">
+            <CrmEmptyState
+              variant="error"
+              title="We couldn't load the roster"
+              :description="rosterError"
+              action-label="Try again"
+              @action="loadRoster"
+            />
+          </td>
         </tr>
         <tr v-else-if="!filtered.length">
-          <td colspan="6" class="empty">Nothing matches. Try clearing the search or filter.</td>
+          <td colspan="6" class="empty">
+            <CrmEmptyState
+              variant="empty"
+              :title="emptyTitle"
+              :description="emptyDescription"
+              :action-label="hasActiveFilter ? 'Reset filters' : null"
+              @action="resetFilters"
+            />
+          </td>
         </tr>
       </tbody>
     </table>
@@ -325,7 +592,10 @@ function submit() {
     <!-- Mobile card list -->
     <ul class="cards">
       <li v-for="m in filtered" :key="m.id" class="card" tabindex="0" @click="openDetail(m)" @keydown.enter="openDetail(m)">
-        <div class="card__avatar">{{ initials(m) }}</div>
+        <div class="card__avatar" :class="{ 'card__avatar--image': m.avatarUrl }">
+          <img v-if="m.avatarUrl" :src="m.avatarUrl" :alt="m.name" />
+          <template v-else>{{ initials(m) }}</template>
+        </div>
         <div class="card__body">
           <div class="card__name-row">
             <div class="card__name">{{ m.name }}</div>
@@ -339,9 +609,48 @@ function submit() {
           <div class="card__contact">{{ m.email }}</div>
         </div>
       </li>
-      <li v-if="isSearching && searchLoading && !filtered.length" class="empty">Searching…</li>
-      <li v-else-if="isSearching && searchError && !filtered.length" class="empty">Couldn't search: {{ searchError }}</li>
-      <li v-else-if="!filtered.length" class="empty">Nothing matches. Try clearing the search or filter.</li>
+      <template v-if="showTableSkeleton">
+        <li
+          v-for="i in 4"
+          :key="`sk-${i}`"
+          class="card card--skeleton"
+          aria-busy="true"
+        >
+          <CrmSkeleton shape="circle" width="44px" height="44px" />
+          <div class="card__body card__body--sk">
+            <CrmSkeleton shape="text" width="55%" />
+            <CrmSkeleton shape="text" width="35%" />
+            <CrmSkeleton shape="text" width="70%" />
+          </div>
+        </li>
+      </template>
+      <li v-else-if="isSearching && searchError && !filtered.length" class="empty">
+        <CrmEmptyState
+          variant="error"
+          title="We couldn't run that search"
+          :description="searchError"
+          action-label="Try again"
+          @action="onSearchRetry"
+        />
+      </li>
+      <li v-else-if="!isSearching && rosterError && !filtered.length" class="empty">
+        <CrmEmptyState
+          variant="error"
+          title="We couldn't load the roster"
+          :description="rosterError"
+          action-label="Try again"
+          @action="loadRoster"
+        />
+      </li>
+      <li v-else-if="!filtered.length" class="empty">
+        <CrmEmptyState
+          variant="empty"
+          :title="emptyTitle"
+          :description="emptyDescription"
+          :action-label="hasActiveFilter ? 'Reset filters' : null"
+          @action="resetFilters"
+        />
+      </li>
     </ul>
 
     <button class="fab" @click="openAdd">+ Add member</button>
@@ -357,10 +666,15 @@ function submit() {
       <template v-if="activeMember">
         <div class="detail">
           <div class="detail__hero" :class="`detail__hero--${statusTone[activeMember.status]}`">
-            <div class="detail__avatar">{{ initials(activeMember) }}</div>
+            <div class="detail__avatar" :class="{ 'detail__avatar--image': activeMember.avatarUrl }">
+              <img v-if="activeMember.avatarUrl" :src="activeMember.avatarUrl" :alt="activeMember.name" />
+              <template v-else>{{ initials(activeMember) }}</template>
+            </div>
             <div class="detail__hero-body">
               <div class="detail__hero-line">{{ activeMember.membership }} · {{ activeMember.role }}</div>
-              <div class="detail__hero-meta">{{ activeMember.memberNumber }} · joined {{ activeMember.joinedAt }}</div>
+              <div class="detail__hero-meta">
+                {{ activeMember.memberNumber }}<template v-if="activeMember.joinedAt !== '—'"> · joined {{ activeMember.joinedAt }}</template>
+              </div>
             </div>
             <div class="detail__hero-badges">
               <span class="pill" :class="`pill--${statusTone[activeMember.status]}`">{{ activeMember.status }}</span>
@@ -415,6 +729,8 @@ function submit() {
       </template>
 
       <template #footer>
+        <button type="button" class="btn btn--danger-outline" @click="removeActiveMember">Remove</button>
+        <div class="modal__foot-spacer" />
         <button type="button" class="btn btn--outline" @click="messageMember">Send message</button>
         <button type="button" class="btn btn--primary" @click="editMember">Edit member</button>
       </template>
@@ -493,16 +809,18 @@ function submit() {
             @click="form.markPending = !form.markPending"
           ><span class="switch__knob" /></button>
         </div>
+
+        <p v-if="addError" class="add-error">{{ addError }}</p>
       </form>
 
       <template #footer>
-        <button type="button" class="btn btn--outline" @click="closeAdd">Cancel</button>
+        <button type="button" class="btn btn--outline" @click="closeAdd" :disabled="addSubmitting">Cancel</button>
         <button
           type="button"
           class="btn btn--primary"
-          :disabled="!canSubmit"
+          :disabled="!canSubmit || addSubmitting"
           @click="submit"
-        >Add member</button>
+        >{{ addSubmitting ? 'Adding…' : 'Add member' }}</button>
       </template>
     </CrmModal>
   </div>
@@ -528,6 +846,7 @@ function submit() {
 .search__input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .search__clear { position: absolute; right: 8px; width: 22px; height: 22px; border-radius: 999px; background: var(--color-surface); border: 0; color: var(--color-graphite); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .search__clear:hover { background: var(--color-hairline); color: var(--color-ink); }
+.search__spinner { position: absolute; right: 12px; display: inline-flex; align-items: center; color: var(--color-accent); pointer-events: none; }
 .search--mobile { display: none; }
 
 /* Filter chips */
@@ -537,7 +856,14 @@ function submit() {
 .chip.is-active { background: #fff; color: var(--color-ink); font-weight: 600; box-shadow: var(--shadow-sm); }
 .chip__count { font-family: var(--font-mono); font-size: 10px; padding: 1px 7px; background: var(--color-hairline); color: var(--color-graphite); border-radius: 999px; }
 .chip.is-active .chip__count { background: var(--color-accent-soft); color: var(--color-accent); }
-.filters__result { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
+.filters__result { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); display: inline-flex; align-items: center; gap: 10px; }
+.filters__reset { background: none; border: 0; padding: 0; font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--color-accent); cursor: pointer; }
+.filters__reset:hover { text-decoration: underline; }
+.filters__selects { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.filter-select { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 12px; color: var(--color-ink); }
+.filter-select__label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.filter-select select { border: 0; outline: 0; background: transparent; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-ink); padding: 2px 4px; cursor: pointer; }
+.filter-select:focus-within { border-color: var(--color-ink); }
 
 /* Table */
 .table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; overflow: hidden; }
@@ -549,22 +875,33 @@ function submit() {
 .table tbody tr.row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 
 .row__name-inner { display: flex; align-items: center; gap: 12px; }
-.row__avatar { width: 36px; height: 36px; border-radius: 999px; background: var(--color-graphite); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.row__avatar { width: 36px; height: 36px; border-radius: 999px; background: var(--color-graphite); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 12px; font-weight: 700; flex-shrink: 0; overflow: hidden; }
+.row__avatar--image { background: var(--color-surface); }
+.row__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .row__name-text { min-width: 0; }
 .row__name-main { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-family: var(--font-display); font-size: 14px; font-weight: 600; color: var(--color-ink); }
 .row__name-sub { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 2px; }
 .row__chev { text-align: right; color: var(--color-mute); font-size: 18px; padding-right: 20px; width: 24px; }
+.row--skeleton { cursor: default; }
+.row--skeleton:hover { background: transparent; }
+.row__name-text--sk { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.row__name-text--sk .crm-skeleton { display: block; }
 
 /* Cards (mobile) */
 .cards { display: none; list-style: none; padding: 0; margin: 0; flex-direction: column; gap: 8px; }
 .card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; cursor: pointer; }
 .card:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.card__avatar { width: 44px; height: 44px; border-radius: 999px; background: var(--color-graphite); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 13px; font-weight: 700; flex-shrink: 0; }
+.card__avatar { width: 44px; height: 44px; border-radius: 999px; background: var(--color-graphite); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 13px; font-weight: 700; flex-shrink: 0; overflow: hidden; }
+.card__avatar--image { background: var(--color-surface); }
+.card__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .card__body { flex: 1; min-width: 0; }
 .card__name-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .card__name { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card__badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
 .card__contact { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card--skeleton { cursor: default; }
+.card__body--sk { display: flex; flex-direction: column; gap: 8px; }
+.card__body--sk .crm-skeleton { display: block; }
 
 /* Pills — status */
 .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; flex-shrink: 0; }
@@ -582,7 +919,9 @@ function submit() {
 .badge--warn-soft { background: #FEF3C7; color: #92400E; }
 .badge--danger-soft { background: #FEE2E2; color: #991B1B; }
 
-.empty { padding: 32px; text-align: center; font-family: var(--font-body); font-size: 13px; color: var(--color-fog); background: var(--color-surface); }
+.empty { padding: 0; background: transparent; }
+.table .empty { border-bottom: 0; }
+.cards > .empty { list-style: none; }
 
 .fab { display: none; position: fixed; right: 20px; bottom: 84px; padding: 14px 20px; background: var(--color-ink); color: #fff; border: none; border-radius: 999px; font-family: var(--font-body); font-size: 14px; font-weight: 600; box-shadow: var(--shadow-lg); cursor: pointer; z-index: 10; }
 
@@ -596,7 +935,9 @@ function submit() {
 .detail__hero--warn::before { background: var(--color-accent); }
 .detail__hero--danger::before { background: var(--color-danger); }
 
-.detail__avatar { width: 60px; height: 60px; border-radius: 999px; background: var(--color-ink); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; flex-shrink: 0; }
+.detail__avatar { width: 60px; height: 60px; border-radius: 999px; background: var(--color-ink); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; flex-shrink: 0; overflow: hidden; }
+.detail__avatar--image { background: var(--color-surface); }
+.detail__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .detail__hero-body { flex: 1; min-width: 0; }
 .detail__hero-line { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--color-ink); }
 .detail__hero-meta { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
@@ -655,7 +996,14 @@ function submit() {
 .btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
 .btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
-.btn--outline:hover { background: var(--color-surface); }
+.btn--outline:hover:not(:disabled) { background: var(--color-surface); }
+.btn--outline:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn--danger-outline { background: transparent; color: var(--color-danger); border: 1px solid var(--color-hairline); padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn--danger-outline:hover { background: #FEE2E2; border-color: var(--color-danger); }
+
+.modal__foot-spacer { flex: 1; }
+
+.add-error { padding: 10px 12px; background: #FEE2E2; color: #991B1B; border-radius: 10px; font-family: var(--font-body); font-size: 13px; margin: 0; }
 
 @media (max-width: 900px) {
   .detail__cols { grid-template-columns: 1fr; gap: 20px; }

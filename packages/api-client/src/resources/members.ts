@@ -54,6 +54,11 @@ export interface RosterMember {
   member_number: number | null
   club_role: MemberRole
   computed_status: MemberStatus
+  /** ISO 8601 UTC — when the club_members row was created. Null for
+   *  self-declared / pending rows that never got a club_members row. */
+  joined_at: string | null
+  /** ISO 8601 UTC — set on lapsed rows, null on active + pending. */
+  revoked_at: string | null
   membership: RosterMembership | null
 }
 
@@ -146,6 +151,138 @@ export async function listRoster(
     method: 'GET',
     signal: opts.signal,
   })
+  return res.data
+}
+
+// ── Add / edit / remove (brief 12) ────────────────────────────────
+
+export type AddMemberResolution = 'linked' | 'relinked' | 'invited' | 'stub_created'
+
+export interface AddMemberInput {
+  email: string
+  first_name?: string
+  last_name?: string
+  phone?: string
+  dob?: string
+  role?: 'committee' | 'player'
+  title?: string
+  membership_type_id?: number
+  membership_type?: string
+  send_invite?: boolean
+}
+
+export interface AddMemberResult {
+  resolution: AddMemberResolution
+  user_id?: number
+  invite_id?: number
+  club_id: number
+  role: MemberRole
+  member_number?: number
+  membership_type_id?: number
+  accept_url?: string
+  expires_in_days?: number
+}
+
+export interface UpdateMemberInput {
+  role?: 'admin' | 'committee' | 'player'
+  title?: string | null
+  type_id?: number | null
+}
+
+export interface UpdateMemberResult {
+  club_id: number
+  user_id: number
+  role: MemberRole
+  title: string | null
+  updated_at: string
+  membership: {
+    type_id: number | null
+    type_name: string | null
+    cadence: MembershipCadence | null
+    fee: number | null
+  } | null
+}
+
+export interface RemoveMemberResult {
+  club_id: number
+  user_id: number
+  revoked_at: string
+}
+
+export type PaymentMethod = 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'other' | 'waived'
+
+export interface RecordPaymentInput {
+  amount: number
+  payment_date?: string
+  payment_method?: PaymentMethod
+  payment_reference?: string
+  notes?: string
+}
+
+export interface RecordPaymentResult {
+  payment_id: number
+  membership_id: number
+  club_id: number
+  user_id: number
+  amount: number
+  payment_date: string
+  payment_method: PaymentMethod
+  payment_reference: string | null
+  payment_status: PaymentStatus
+}
+
+/** POST /clubs/:clubId/members — add one. Handles link / invite / stub paths. */
+export async function add(
+  clubId: number,
+  input: AddMemberInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<AddMemberResult> {
+  const res = await authedFetch<Envelope<AddMemberResult>>(`${CRM_BASE}/clubs/${clubId}/members`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    signal: opts.signal,
+  })
+  return res.data
+}
+
+/** PATCH /clubs/:clubId/members/:userId — change role / title / tier. */
+export async function update(
+  clubId: number,
+  userId: number,
+  patch: UpdateMemberInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<UpdateMemberResult> {
+  const res = await authedFetch<Envelope<UpdateMemberResult>>(
+    `${CRM_BASE}/clubs/${clubId}/members/${userId}`,
+    { method: 'PATCH', body: JSON.stringify(patch), signal: opts.signal },
+  )
+  return res.data
+}
+
+/** DELETE /clubs/:clubId/members/:userId — soft-remove. */
+export async function remove(
+  clubId: number,
+  userId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<RemoveMemberResult> {
+  const res = await authedFetch<Envelope<RemoveMemberResult>>(
+    `${CRM_BASE}/clubs/${clubId}/members/${userId}`,
+    { method: 'DELETE', signal: opts.signal },
+  )
+  return res.data
+}
+
+/** POST /clubs/:clubId/members/:userId/payments — record a manual payment or waive fees. */
+export async function recordPayment(
+  clubId: number,
+  userId: number,
+  input: RecordPaymentInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<RecordPaymentResult> {
+  const res = await authedFetch<Envelope<RecordPaymentResult>>(
+    `${CRM_BASE}/clubs/${clubId}/members/${userId}/payments`,
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+  )
   return res.data
 }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterView, RouterLink, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
@@ -15,6 +15,33 @@ const moreOpen = ref(false)
 const notifsOpen = ref(false)
 const newMenuOpen = ref(false)
 const userMenuOpen = ref(false)
+const drawerOpen = ref(false)
+
+function toggleDrawer() {
+  drawerOpen.value = !drawerOpen.value
+  if (drawerOpen.value) {
+    notifsOpen.value = false
+    newMenuOpen.value = false
+    userMenuOpen.value = false
+    moreOpen.value = false
+  }
+}
+function closeDrawer() {
+  drawerOpen.value = false
+}
+
+// Close the drawer whenever the route changes — RouterLinks inside it
+// otherwise leave the drawer open over the newly-navigated page.
+watch(() => route.fullPath, closeDrawer)
+
+// Escape key closes the drawer for keyboard users.
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && drawerOpen.value) closeDrawer()
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', onKeydown)
+  onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+}
 
 function toggleNotifs() {
   notifsOpen.value = !notifsOpen.value
@@ -39,25 +66,42 @@ const clubInitials = computed(() => {
 })
 const crumbTitle = computed(() => String(route.name ?? '').replace(/-/g, ' '))
 
-interface NavItem { to: string; label: string; count?: number | string }
+type NavIcon =
+  | 'dashboard' | 'members' | 'applications' | 'enquiries'
+  | 'website' | 'events' | 'teams' | 'honour' | 'achievements'
+  | 'communications' | 'site-settings' | 'settings'
+
+interface NavItem {
+  to: string
+  label: string
+  icon: NavIcon
+  count?: number | string
+  /** `accent` = draw-attention pill (unhandled items); `neutral` = informational. */
+  countTone?: 'accent' | 'neutral'
+}
 const manageNav: NavItem[] = [
-  { to: '/crm/dashboard', label: 'Dashboard' },
-  { to: '/crm/members', label: 'Members', count: 142 },
-  { to: '/crm/applications', label: 'Applications', count: 3 },
-  { to: '/crm/enquiries', label: 'Enquiries', count: 2 },
+  { to: '/crm/dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { to: '/crm/members', label: 'Members', icon: 'members', count: 142, countTone: 'neutral' },
+  { to: '/crm/applications', label: 'Applications', icon: 'applications', count: 3, countTone: 'accent' },
+  { to: '/crm/enquiries', label: 'Enquiries', icon: 'enquiries', count: 2, countTone: 'accent' },
 ]
 const contentNav: NavItem[] = [
-  { to: '/crm/website', label: 'Website' },
-  { to: '/crm/events', label: 'Events', count: 12 },
-  { to: '/crm/teams', label: 'Team selections', count: 4 },
-  { to: '/crm/honour-board', label: 'Honour board', count: 11 },
-  { to: '/crm/achievements', label: 'Achievements' },
+  { to: '/crm/website', label: 'Website', icon: 'website' },
+  { to: '/crm/events', label: 'Events', icon: 'events', count: 12, countTone: 'neutral' },
+  { to: '/crm/teams', label: 'Team selections', icon: 'teams', count: 4, countTone: 'neutral' },
+  { to: '/crm/honour-board', label: 'Honour board', icon: 'honour', count: 11, countTone: 'neutral' },
+  { to: '/crm/achievements', label: 'Achievements', icon: 'achievements' },
 ]
 const accountNav: NavItem[] = [
-  { to: '/crm/communications', label: 'Communications' },
-  { to: '/crm/site-settings', label: 'Site settings' },
-  { to: '/crm/settings', label: 'Settings' },
+  { to: '/crm/communications', label: 'Communications', icon: 'communications' },
+  { to: '/crm/site-settings', label: 'Site settings', icon: 'site-settings' },
+  { to: '/crm/settings', label: 'Settings', icon: 'settings' },
 ]
+
+function signOut() {
+  auth.clearSession()
+  closeDrawer()
+}
 
 interface TabItem { to: string; label: string; count?: number; icon: 'home' | 'members' | 'apps' | 'enquiries' | 'more' }
 const bottomTabs: TabItem[] = [
@@ -70,77 +114,179 @@ const bottomTabs: TabItem[] = [
 
 <template>
   <div class="shell">
-    <!-- Desktop sidebar -->
-    <aside class="sidebar">
+    <!-- Backdrop for the mobile / tablet drawer. -->
+    <div
+      v-if="drawerOpen"
+      class="drawer-backdrop"
+      aria-hidden="true"
+      @click="closeDrawer"
+    />
+
+    <!-- Sidebar. Sticky column on desktop (≥1024). Off-canvas drawer
+         with a slide-in transform below that, opened by the hamburger. -->
+    <aside class="sidebar" :class="{ 'is-open': drawerOpen }">
       <div class="sidebar__brand">
-        <span class="sidebar__dot" />
-        <span class="sidebar__wordmark">Torny</span>
-        <span class="sidebar__tag">CRM</span>
+        <span class="sidebar__brand-inner">
+          <span class="sidebar__dot" />
+          <span class="sidebar__wordmark">Torny</span>
+          <span class="sidebar__tag">CRM</span>
+        </span>
+        <button
+          class="sidebar__close"
+          type="button"
+          aria-label="Close menu"
+          @click="closeDrawer"
+        >
+          <svg viewBox="0 0 12 12" fill="none" width="12" height="12" aria-hidden="true">
+            <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+        </button>
       </div>
-      <div class="sidebar__club">
+
+      <button type="button" class="sidebar__club">
         <div class="sidebar__club-badge">{{ clubInitials }}</div>
         <div class="sidebar__club-info">
-          <div class="sidebar__club-label">Club</div>
+          <div class="sidebar__club-label">Current club</div>
           <div class="sidebar__club-name">{{ club.current?.name ?? 'Select a club' }}</div>
         </div>
-      </div>
+        <svg viewBox="0 0 16 16" fill="none" width="16" height="16" aria-hidden="true" class="sidebar__club-chev">
+          <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+
       <nav class="sidebar__nav">
         <div class="sidebar__section-label">Manage</div>
-        <RouterLink v-for="item in manageNav" :key="item.to" :to="item.to" class="sidebar__link" active-class="is-active">
+        <RouterLink
+          v-for="item in manageNav"
+          :key="item.to"
+          :to="item.to"
+          class="sidebar__link"
+          active-class="is-active"
+        >
+          <span class="sidebar__link-icon" aria-hidden="true">
+            <component :is="'nav-icon-slot'" />
+            <svg v-if="item.icon === 'dashboard'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3h5v5H3zM10 3h5v5h-5zM3 10h5v5H3zM10 10h5v5h-5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg v-else-if="item.icon === 'members'" width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M13 5a2.5 2.5 0 1 1 0 5M2 15v-1a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4v1M14 10a3 3 0 0 1 3 3v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <svg v-else-if="item.icon === 'applications'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 2H5a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 5 16h8a1.5 1.5 0 0 0 1.5-1.5V5.5L11 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M11 2v3.5h3.5M6.5 9.5h5M6.5 12h5M6.5 7h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <svg v-else-if="item.icon === 'enquiries'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2.5 4a1.5 1.5 0 0 1 1.5-1.5h10a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5H7l-3.5 3v-3H4A1.5 1.5 0 0 1 2.5 11V4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          </span>
           <span class="sidebar__link-label">{{ item.label }}</span>
-          <span v-if="item.count !== undefined" class="sidebar__link-count">{{ item.count }}</span>
+          <span
+            v-if="item.count !== undefined"
+            class="sidebar__link-count"
+            :class="`sidebar__link-count--${item.countTone ?? 'neutral'}`"
+          >{{ item.count }}</span>
         </RouterLink>
+
         <div class="sidebar__section-label">Content</div>
-        <RouterLink v-for="item in contentNav" :key="item.to" :to="item.to" class="sidebar__link" active-class="is-active">
+        <RouterLink
+          v-for="item in contentNav"
+          :key="item.to"
+          :to="item.to"
+          class="sidebar__link"
+          active-class="is-active"
+        >
+          <span class="sidebar__link-icon" aria-hidden="true">
+            <svg v-if="item.icon === 'website'" width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 9h13M9 2.5c1.8 2.2 2.7 4.3 2.7 6.5s-.9 4.3-2.7 6.5C7.2 13.3 6.3 11.2 6.3 9S7.2 4.7 9 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg v-else-if="item.icon === 'events'" width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="4" width="13" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 7.5h13M6 2.5v3M12 2.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <svg v-else-if="item.icon === 'teams'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M6 3.5h6a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5z" stroke="currentColor" stroke-width="1.5"/><path d="M7 2.5h4v2H7zM7 8h4M7 11h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <svg v-else-if="item.icon === 'honour'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M5 2.5h8v5.5a4 4 0 1 1-8 0V2.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5 4.5H3v2a2 2 0 0 0 2 2M13 4.5h2v2a2 2 0 0 1-2 2M6 15.5h6M9 11.5v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <svg v-else-if="item.icon === 'achievements'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M12 3H6v3a3 3 0 1 0 6 0V3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 8.5A3.5 3.5 0 1 1 4 15.5M14 8.5A3.5 3.5 0 1 0 14 15.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </span>
           <span class="sidebar__link-label">{{ item.label }}</span>
-          <span v-if="item.count !== undefined" class="sidebar__link-count">{{ item.count }}</span>
+          <span
+            v-if="item.count !== undefined"
+            class="sidebar__link-count"
+            :class="`sidebar__link-count--${item.countTone ?? 'neutral'}`"
+          >{{ item.count }}</span>
         </RouterLink>
+
         <div class="sidebar__section-label">Account</div>
-        <RouterLink v-for="item in accountNav" :key="item.to" :to="item.to" class="sidebar__link" active-class="is-active">
+        <RouterLink
+          v-for="item in accountNav"
+          :key="item.to"
+          :to="item.to"
+          class="sidebar__link"
+          active-class="is-active"
+        >
+          <span class="sidebar__link-icon" aria-hidden="true">
+            <svg v-if="item.icon === 'communications'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M15.5 3.5 8 11M15.5 3.5l-4.5 12L8 11 3.5 8l12-4.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg v-else-if="item.icon === 'site-settings'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="5" r="1.5" fill="var(--color-ground)" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="9" r="1.5" fill="var(--color-ground)" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="13" r="1.5" fill="var(--color-ground)" stroke="currentColor" stroke-width="1.5"/></svg>
+            <svg v-else-if="item.icon === 'settings'" width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M9 1.5v2M9 14.5v2M14.3 3.7l-1.4 1.4M5.1 12.9l-1.4 1.4M16.5 9h-2M3.5 9h-2M14.3 14.3l-1.4-1.4M5.1 5.1 3.7 3.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </span>
           <span class="sidebar__link-label">{{ item.label }}</span>
         </RouterLink>
       </nav>
+
       <div class="sidebar__user">
         <div class="sidebar__user-avatar">{{ initials }}</div>
         <div class="sidebar__user-info">
           <div class="sidebar__user-name">{{ auth.user?.firstName }} {{ auth.user?.lastName }}</div>
           <div class="sidebar__user-role">{{ auth.role ?? '' }}</div>
         </div>
+        <button
+          class="sidebar__signout"
+          type="button"
+          aria-label="Sign out"
+          @click="signOut"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M6.5 2.5H4A1.5 1.5 0 0 0 2.5 4v8A1.5 1.5 0 0 0 4 13.5h2.5M10 5l3 3-3 3M13 8H6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </div>
     </aside>
 
     <div class="main">
-      <!-- Mobile top nav -->
+      <!-- Mobile top nav. Hamburger opens the drawer (which now owns the
+           club switcher). Bell + avatar stay on the right. -->
       <header class="mobile-top">
-        <button class="mobile-top__club">
-          <div class="mobile-top__club-badge">{{ clubInitials }}</div>
-          <span class="mobile-top__club-name">{{ club.current?.name ?? 'Select a club' }}</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
-            <path d="m7 10 5 5 5-5" />
-          </svg>
-        </button>
         <button
-          class="mobile-top__bell"
-          data-notif-anchor
-          aria-label="Notifications"
-          @click="toggleNotifs"
+          class="hamburger hamburger--mobile"
+          type="button"
+          aria-label="Open navigation menu"
+          :aria-expanded="drawerOpen"
+          @click="toggleDrawer"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
-            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+          <svg viewBox="0 0 18 18" fill="none" width="18" height="18" aria-hidden="true">
+            <path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
           </svg>
-          <span class="mobile-top__bell-dot" />
         </button>
-        <button
-          class="mobile-top__avatar"
-          data-usermenu-anchor
-          aria-label="Account menu"
-          @click="toggleUserMenu"
-        >{{ initials }}</button>
+        <div class="mobile-top__actions">
+          <button
+            class="mobile-top__bell"
+            data-notif-anchor
+            aria-label="Notifications"
+            @click="toggleNotifs"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+              <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+              <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+            </svg>
+            <span class="mobile-top__bell-dot" />
+          </button>
+          <button
+            class="mobile-top__avatar"
+            data-usermenu-anchor
+            aria-label="Account menu"
+            @click="toggleUserMenu"
+          >{{ initials }}</button>
+        </div>
       </header>
 
-      <!-- Desktop topbar -->
+      <!-- Desktop / tablet topbar. Hamburger shows at ≤1023px only. -->
       <header class="topbar">
+        <button
+          class="hamburger hamburger--topbar"
+          type="button"
+          aria-label="Open navigation menu"
+          :aria-expanded="drawerOpen"
+          @click="toggleDrawer"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+            <path d="M3 6h18M3 12h18M3 18h18" />
+          </svg>
+        </button>
         <div class="topbar__crumbs">
           <span class="topbar__crumb-muted">{{ club.current?.name ?? '' }}</span>
           <span class="topbar__crumb-divider">/</span>
@@ -244,17 +390,47 @@ const bottomTabs: TabItem[] = [
 .shell { display: flex; min-height: 100vh; }
 
 /* -------- Sidebar (desktop only) -------- */
-.sidebar { width: 240px; background: #fff; border-right: 1px solid var(--color-hairline); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
-.sidebar__brand { padding: 20px 20px 24px; display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid var(--color-hairline); }
+.sidebar { width: 240px; background: #fff; border-right: 1px solid var(--color-hairline); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; z-index: 30; }
+.sidebar__brand-inner { display: inline-flex; align-items: baseline; gap: 8px; }
+.sidebar__close { display: none; width: 32px; height: 32px; border-radius: 999px; border: 0; background: var(--color-surface); color: var(--color-ink); cursor: pointer; align-items: center; justify-content: center; padding: 0; }
+.sidebar__close:hover { background: var(--color-hairline); }
+.sidebar__club-chev { color: var(--color-fog); flex-shrink: 0; }
+
+.sidebar__link { text-decoration: none; }
+.sidebar__link-icon { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; color: var(--color-graphite); flex-shrink: 0; }
+.sidebar__link.is-active .sidebar__link-icon { color: #fff; }
+
+.sidebar__link-count { padding: 2px 8px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.02em; flex-shrink: 0; }
+.sidebar__link-count--neutral { background: var(--color-surface); color: var(--color-graphite); }
+.sidebar__link-count--accent { background: var(--color-accent-soft); color: var(--color-accent); font-weight: 700; }
+.sidebar__link.is-active .sidebar__link-count--neutral { background: rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.82); }
+.sidebar__link.is-active .sidebar__link-count--accent { background: rgba(255, 255, 255, 0.16); color: #fff; }
+
+.sidebar__signout { width: 36px; height: 36px; border-radius: 10px; background: var(--color-surface); border: 1px solid var(--color-hairline); color: var(--color-graphite); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
+.sidebar__signout:hover { background: var(--color-hairline); color: var(--color-ink); }
+
+/* -------- Hamburger + drawer backdrop -------- */
+.hamburger { width: 36px; height: 36px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; color: var(--color-ink); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+.hamburger:hover { background: var(--color-surface); }
+.hamburger:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.hamburger--topbar { display: none; margin-right: 4px; }
+
+.drawer-backdrop { position: fixed; inset: 0; background: rgba(10, 10, 11, 0.4); z-index: 25; animation: drawer-fade 0.15s ease-out; }
+@keyframes drawer-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.sidebar__brand { padding: 18px 20px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .sidebar__dot { width: 10px; height: 10px; border-radius: 999px; background: var(--color-accent); }
 .sidebar__wordmark { font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); }
 .sidebar__tag { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; color: var(--color-fog); text-transform: uppercase; margin-left: 4px; }
 
-.sidebar__club { margin: 12px; padding: 8px 10px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); }
-.sidebar__club-badge { width: 28px; height: 28px; border-radius: 6px; background: var(--color-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 11px; font-weight: 700; }
-.sidebar__club-info { flex: 1; min-width: 0; }
+.sidebar__club { margin: 4px 16px 8px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; border: 1px solid var(--color-hairline); border-radius: 16px; background: var(--color-surface); cursor: pointer; text-align: left; color: var(--color-ink); font: inherit; width: calc(100% - 32px); }
+.sidebar__club:hover { border-color: var(--color-mute); }
+.sidebar__club-badge { width: 36px; height: 36px; border-radius: 10px; background: var(--color-accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.sidebar__club-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .sidebar__club-label { font-family: var(--font-body); font-size: 9px; font-weight: 600; letter-spacing: 0.14em; color: var(--color-fog); text-transform: uppercase; }
-.sidebar__club-name { font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar__club-name { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
 
 .sidebar__nav { flex: 1; overflow-y: auto; padding-bottom: 12px; }
 .sidebar__section-label { padding: 12px 20px 6px; font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 0.16em; color: var(--color-mute); text-transform: uppercase; }
@@ -294,13 +470,16 @@ const bottomTabs: TabItem[] = [
 .topbar__avatar:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
 /* -------- Mobile top nav -------- */
-.mobile-top { display: none; padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--color-hairline); align-items: center; gap: 12px; position: sticky; top: 0; z-index: 5; }
-.mobile-top__club { flex: 1; display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 8px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 12px; cursor: pointer; }
-.mobile-top__club-badge { width: 26px; height: 26px; border-radius: 6px; background: var(--color-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 10px; font-weight: 700; }
-.mobile-top__club-name { flex: 1; font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mobile-top__bell { position: relative; width: 36px; height: 36px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; color: var(--color-ink); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.mobile-top__bell-dot { position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 999px; background: var(--color-danger); border: 2px solid #fff; }
-.mobile-top__avatar { width: 36px; height: 36px; border-radius: 999px; background: var(--color-graphite); color: #fff; border: 0; padding: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 12px; font-weight: 700; cursor: pointer; }
+.mobile-top { display: none; padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--color-hairline); align-items: center; gap: 10px; position: sticky; top: 0; z-index: 5; }
+.mobile-top__club { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 40px; padding: 6px 12px 6px 6px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 14px; cursor: pointer; }
+.mobile-top__club-badge { width: 28px; height: 28px; border-radius: 8px; background: var(--color-accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.mobile-top__club-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; align-items: flex-start; }
+.mobile-top__club-label { font-family: var(--font-body); font-size: 8px; font-weight: 600; letter-spacing: 0.14em; color: var(--color-mute); text-transform: uppercase; }
+.mobile-top__club-name { font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--color-ink); letter-spacing: -0.01em; line-height: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.mobile-top__bell { position: relative; width: 40px; height: 40px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; color: var(--color-ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 0; }
+.mobile-top__bell:hover { background: var(--color-surface); }
+.mobile-top__bell-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 999px; background: var(--color-danger); border: 2px solid #fff; }
+.mobile-top__avatar { width: 40px; height: 40px; border-radius: 999px; background: var(--color-graphite); color: #fff; border: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
 .mobile-top__avatar:hover { background: var(--color-ink); }
 
 /* -------- Page area -------- */
@@ -323,11 +502,46 @@ const bottomTabs: TabItem[] = [
 .sheet__link-count { font-family: var(--font-mono); font-size: 12px; color: var(--color-fog); }
 
 /* -------- Responsive breakpoints -------- */
+
+/* Tablet + mobile: sidebar becomes an off-canvas drawer opened by the
+   hamburger button in the top bar. */
+@media (max-width: 1023px) {
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 296px;
+    height: 100dvh;
+    border-right: 0;
+    border-top-right-radius: 24px;
+    border-bottom-right-radius: 24px;
+    transform: translateX(-100%);
+    transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+    box-shadow: 12px 0 40px rgba(10, 10, 11, 0.24);
+    /* `display: none` would kill the transition — keep it in flow but
+       slide it out. Content inside is still keyboard-reachable when
+       open; when closed the transform hides it visually and we could
+       set `visibility: hidden` on close, but the transform alone stops
+       tab focus from landing on it in every browser we support. */
+  }
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+  .sidebar__close { display: inline-flex; }
+
+  .hamburger--topbar { display: inline-flex; }
+}
+
+/* Mobile-only: switch to the compact top strip + bottom tabbar. */
 @media (max-width: 767px) {
-  .sidebar { display: none; }
   .topbar { display: none; }
   .mobile-top { display: flex; }
   .tabbar { display: flex; }
   .page { padding: 20px 16px 24px; background: var(--color-surface); }
+}
+
+/* Desktop: sidebar is in-flow so backdrop / drawer state doesn't apply. */
+@media (min-width: 1024px) {
+  .drawer-backdrop { display: none; }
 }
 </style>

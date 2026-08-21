@@ -222,7 +222,8 @@ const bottomTabs: TabItem[] = [
         <div class="sidebar__user-avatar">{{ initials }}</div>
         <div class="sidebar__user-info">
           <div class="sidebar__user-name">{{ auth.user?.firstName }} {{ auth.user?.lastName }}</div>
-          <div class="sidebar__user-role">{{ auth.role ?? '' }}</div>
+          <div v-if="auth.user?.email" class="sidebar__user-email">{{ auth.user.email }}</div>
+          <div v-if="auth.role" class="sidebar__user-role">{{ auth.role }}<template v-if="club.current?.name"> · {{ club.current.name }}</template></div>
         </div>
         <button
           class="sidebar__signout"
@@ -238,20 +239,14 @@ const bottomTabs: TabItem[] = [
     </aside>
 
     <div class="main">
-      <!-- Mobile top nav. Hamburger opens the drawer (which now owns the
-           club switcher). Bell + avatar stay on the right. -->
+      <!-- Mobile top nav. Brand on the left; bell + hamburger on the
+           right. Account info + sign-out live inside the drawer. -->
       <header class="mobile-top">
-        <button
-          class="hamburger hamburger--mobile"
-          type="button"
-          aria-label="Open navigation menu"
-          :aria-expanded="drawerOpen"
-          @click="toggleDrawer"
-        >
-          <svg viewBox="0 0 18 18" fill="none" width="18" height="18" aria-hidden="true">
-            <path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-          </svg>
-        </button>
+        <div class="mobile-top__brand">
+          <span class="mobile-top__dot" aria-hidden="true"></span>
+          <span class="mobile-top__wordmark">Torny</span>
+          <span class="mobile-top__tag">CRM</span>
+        </div>
         <div class="mobile-top__actions">
           <button
             class="mobile-top__bell"
@@ -266,27 +261,27 @@ const bottomTabs: TabItem[] = [
             <span class="mobile-top__bell-dot" />
           </button>
           <button
-            class="mobile-top__avatar"
-            data-usermenu-anchor
-            aria-label="Account menu"
-            @click="toggleUserMenu"
-          >{{ initials }}</button>
+            class="hamburger hamburger--mobile"
+            type="button"
+            aria-label="Open navigation menu"
+            :aria-expanded="drawerOpen"
+            @click="toggleDrawer"
+          >
+            <svg viewBox="0 0 18 18" fill="none" width="18" height="18" aria-hidden="true">
+              <path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </button>
         </div>
       </header>
 
-      <!-- Desktop / tablet topbar. Hamburger shows at ≤1023px only. -->
+      <!-- Desktop / tablet topbar. Brand shows at ≤1023px; hamburger
+           shows at ≤1023px as the last action so it mirrors mobile. -->
       <header class="topbar">
-        <button
-          class="hamburger hamburger--topbar"
-          type="button"
-          aria-label="Open navigation menu"
-          :aria-expanded="drawerOpen"
-          @click="toggleDrawer"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
-            <path d="M3 6h18M3 12h18M3 18h18" />
-          </svg>
-        </button>
+        <div class="topbar__brand">
+          <span class="topbar__brand-dot" aria-hidden="true"></span>
+          <span class="topbar__brand-wordmark">Torny</span>
+          <span class="topbar__brand-tag">CRM</span>
+        </div>
         <div class="topbar__crumbs">
           <span class="topbar__crumb-muted">{{ club.current?.name ?? '' }}</span>
           <span class="topbar__crumb-divider">/</span>
@@ -329,6 +324,17 @@ const bottomTabs: TabItem[] = [
             @click="toggleUserMenu"
           >
             <span>{{ initials }}</span>
+          </button>
+          <button
+            class="hamburger hamburger--topbar"
+            type="button"
+            aria-label="Open navigation menu"
+            :aria-expanded="drawerOpen"
+            @click="toggleDrawer"
+          >
+            <svg viewBox="0 0 18 18" fill="none" width="18" height="18" aria-hidden="true">
+              <path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
           </button>
         </div>
       </header>
@@ -444,12 +450,17 @@ const bottomTabs: TabItem[] = [
 .sidebar__user-avatar { width: 32px; height: 32px; border-radius: 999px; background: var(--color-graphite); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 11px; font-weight: 700; }
 .sidebar__user-info { flex: 1; min-width: 0; }
 .sidebar__user-name { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar__user-role { font-family: var(--font-body); font-size: 10px; font-weight: 500; color: var(--color-fog); letter-spacing: 0.06em; text-transform: uppercase; }
+.sidebar__user-email { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.sidebar__user-role { font-family: var(--font-mono); font-size: 9px; font-weight: 600; color: var(--color-graphite); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
 /* -------- Desktop topbar -------- */
 .topbar { display: flex; align-items: center; gap: 24px; padding: 14px 32px; border-bottom: 1px solid var(--color-hairline); background: #fff; position: sticky; top: 0; z-index: 5; }
+.topbar__brand { display: none; align-items: baseline; gap: 8px; flex-shrink: 0; }
+.topbar__brand-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--color-accent); align-self: center; }
+.topbar__brand-wordmark { font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); line-height: 100%; }
+.topbar__brand-tag { font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 0.16em; color: var(--color-fog); text-transform: uppercase; }
 .topbar__crumbs { font-family: var(--font-body); font-size: 11px; display: flex; gap: 8px; align-items: center; letter-spacing: 0.14em; text-transform: uppercase; flex-shrink: 0; }
 .topbar__crumb-muted { color: var(--color-fog); }
 .topbar__crumb-divider { color: var(--color-hairline); }
@@ -470,12 +481,13 @@ const bottomTabs: TabItem[] = [
 .topbar__avatar:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
 /* -------- Mobile top nav -------- */
-.mobile-top { display: none; padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--color-hairline); align-items: center; gap: 10px; position: sticky; top: 0; z-index: 5; }
-.mobile-top__club { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 40px; padding: 6px 12px 6px 6px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 14px; cursor: pointer; }
-.mobile-top__club-badge { width: 28px; height: 28px; border-radius: 8px; background: var(--color-accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 10px; font-weight: 700; flex-shrink: 0; }
-.mobile-top__club-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; align-items: flex-start; }
-.mobile-top__club-label { font-family: var(--font-body); font-size: 8px; font-weight: 600; letter-spacing: 0.14em; color: var(--color-mute); text-transform: uppercase; }
-.mobile-top__club-name { font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--color-ink); letter-spacing: -0.01em; line-height: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.mobile-top { display: none; padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--color-hairline); align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: 0; z-index: 5; }
+.mobile-top__brand { display: inline-flex; align-items: baseline; gap: 8px; }
+.mobile-top__dot { width: 10px; height: 10px; border-radius: 999px; background: var(--color-accent); align-self: center; }
+.mobile-top__wordmark { font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); line-height: 100%; }
+.mobile-top__tag { font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 0.16em; color: var(--color-fog); text-transform: uppercase; }
+.mobile-top__actions { display: flex; align-items: center; gap: 8px; }
+.hamburger--mobile { width: 40px; height: 40px; border-radius: 12px; }
 .mobile-top__bell { position: relative; width: 40px; height: 40px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; color: var(--color-ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 0; }
 .mobile-top__bell:hover { background: var(--color-surface); }
 .mobile-top__bell-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 999px; background: var(--color-danger); border: 2px solid #fff; }
@@ -529,6 +541,9 @@ const bottomTabs: TabItem[] = [
   }
   .sidebar__close { display: inline-flex; }
 
+  .topbar__crumbs { display: none; }
+  .topbar__avatar { display: none; }
+  .topbar__brand { display: inline-flex; }
   .hamburger--topbar { display: inline-flex; }
 }
 

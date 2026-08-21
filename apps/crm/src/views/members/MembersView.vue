@@ -8,10 +8,12 @@ import CrmSpinner from '@/components/CrmSpinner.vue'
 import { useToast } from '@/composables/useToast'
 import { useMemberSearch } from '@/composables/useMemberSearch'
 import { useClubStore } from '@/stores/club'
-import { members as membersApi, ApiError, type RosterMember } from '@torny/api-client'
+import { useAuthStore } from '@/stores/auth'
+import { members as membersApi, ApiError, type PaymentMethod, type RosterMember } from '@torny/api-client'
 
 const toast = useToast()
 const clubStore = useClubStore()
+const authStore = useAuthStore()
 
 type MemberStatus = 'Active' | 'Pending' | 'Lapsed'
 type MemberRole = 'Player' | 'Committee' | 'Coach' | 'Junior' | 'Volunteer'
@@ -40,6 +42,10 @@ interface Member {
   notes?: string
   avatarUrl?: string | null
   membershipTypeId?: number | null
+  /** Raw API role — the UI's `role` collapses owner/admin into Committee for
+   *  visual grouping; this preserves the actual value for PATCH round-trips. */
+  apiRole?: 'owner' | 'admin' | 'committee' | 'player'
+  title?: string | null
 }
 
 const {
@@ -152,6 +158,8 @@ function rosterToView(r: RosterMember): Member {
     eventsAttended: 0,
     avatarUrl: r.avatar_url ?? null,
     membershipTypeId: r.membership?.type_id ?? null,
+    apiRole: r.club_role,
+    title: null,
   }
 }
 
@@ -276,9 +284,188 @@ function messageMember() {
   if (!activeMember.value) return
   toast.info(`Message composer for ${activeMember.value.name} coming next session.`)
 }
-function editMember() {
+
+// ── Edit member modal ──────────────────────────────────────────
+// Owner-only can promote to admin. Everyone else picks from committee/player.
+const callerIsOwner = computed(() => {
+  const cid = clubStore.current?.id
+  if (cid == null) return false
+  return authStore.user?.clubs?.some((c) => c.id === cid && c.role === 'owner') ?? false
+})
+
+const editOpen = ref(false)
+const editSubmitting = ref(false)
+const editError = ref<string | null>(null)
+const editForm = reactive({
+  role: 'player' as 'admin' | 'committee' | 'player',
+  title: '' as string,
+  typeId: null as number | null,
+})
+
+// Distinct tiers pulled from the roster (name → id). This is what the wizard
+// wrote to `membership_types` for this club.
+const availableTiers = computed(() => {
+  const seen = new Map<number, string>()
+  for (const m of members.value) {
+    if (m.membershipTypeId != null && !seen.has(m.membershipTypeId)) {
+      seen.set(m.membershipTypeId, m.membership)
+    }
+  }
+  return Array.from(seen.entries()).map(([id, name]) => ({ id, name }))
+})
+
+function openEditMember() {
   if (!activeMember.value) return
-  toast.info(`Edit form for ${activeMember.value.name} coming next session.`)
+  const m = activeMember.value
+  // Owner can't be edited via this endpoint (backend returns 409 owner_immutable).
+  if (m.apiRole === 'owner') {
+    toast.info("The club owner can't be edited here — use ownership transfer.")
+    return
+  }
+  editForm.role = (m.apiRole === 'admin' || m.apiRole === 'committee' || m.apiRole === 'player') ? m.apiRole : 'player'
+  editForm.title = m.title ?? ''
+  editForm.typeId = m.membershipTypeId ?? null
+  editError.value = null
+  editOpen.value = true
+}
+
+function closeEdit() {
+  editOpen.value = false
+}
+
+async function submitEdit() {
+  const m = activeMember.value
+  const cid = clubStore.current?.id
+  if (!m || cid == null) return
+  editSubmitting.value = true
+  editError.value = null
+  try {
+    await membersApi.update(cid, Number(m.id), {
+      role: editForm.role,
+      title: editForm.title.trim() || null,
+      type_id: editForm.typeId,
+    })
+    toast.success(`Updated ${m.name}.`)
+    editOpen.value = false
+    detailOpen.value = false
+    await loadRoster()
+  } catch (err) {
+    if (err instanceof ApiError) {
+      switch (err.code) {
+        case 'owner_immutable':   editError.value = "You can't edit the club owner via this form."; break
+        case 'owner_via_transfer': editError.value = "Can't set role to owner here — use ownership transfer."; break
+        case 'member_revoked':    editError.value = "This member was removed — re-add them first."; break
+        case 'unknown_type':      editError.value = 'That membership tier isn\'t on this club.'; break
+        case 'forbidden':         editError.value = "You don't have permission to change to admin."; break
+        default:                  editError.value = err.message
+      }
+    } else {
+      editError.value = (err as Error).message
+    }
+  } finally {
+    editSubmitting.value = false
+  }
+}
+
+// ── Record payment modal ───────────────────────────────────────
+const paymentOpen = ref(false)
+const paymentSubmitting = ref(false)
+const paymentError = ref<string | null>(null)
+const paymentForm = reactive({
+  amount: 0,
+  date: new Date().toISOString().slice(0, 10),
+  method: 'bank_transfer' as PaymentMethod,
+  reference: '',
+  notes: '',
+  waived: false,
+})
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function openPayment() {
+  if (!activeMember.value) return
+  const m = activeMember.value
+  if (m.apiRole && m.membershipTypeId == null) {
+    toast.info(`${m.name} has no membership tier yet — assign one via Edit first.`)
+    return
+  }
+  // Try to pre-fill the fee from any roster row on the same tier.
+  const same = members.value.find((x) => x.membershipTypeId === m.membershipTypeId && x !== m)
+  paymentForm.amount = 0
+  paymentForm.date = todayIso()
+  paymentForm.method = 'bank_transfer'
+  paymentForm.reference = ''
+  paymentForm.notes = ''
+  paymentForm.waived = false
+  paymentError.value = null
+  // membershipFee isn't stored on the local Member view; fall back to 0 for the input
+  void same
+  paymentOpen.value = true
+}
+
+function closePayment() {
+  paymentOpen.value = false
+}
+
+function toggleWaived() {
+  paymentForm.waived = !paymentForm.waived
+  if (paymentForm.waived) {
+    paymentForm.method = 'waived'
+    paymentForm.amount = 0
+  } else {
+    paymentForm.method = 'bank_transfer'
+  }
+}
+
+const canSubmitPayment = computed(() => {
+  if (paymentForm.waived) return true
+  return paymentForm.amount >= 0 && paymentForm.date.length === 10
+})
+
+async function submitPayment() {
+  const m = activeMember.value
+  const cid = clubStore.current?.id
+  if (!m || cid == null || !canSubmitPayment.value) return
+  paymentSubmitting.value = true
+  paymentError.value = null
+  try {
+    const result = await membersApi.recordPayment(cid, Number(m.id), {
+      amount: paymentForm.waived ? 0 : Number(paymentForm.amount),
+      payment_date: paymentForm.date,
+      payment_method: paymentForm.method,
+      payment_reference: paymentForm.reference.trim() || undefined,
+      notes: paymentForm.notes.trim() || undefined,
+    })
+    const verb = paymentForm.waived
+      ? 'Fees waived'
+      : result.payment_status === 'paid'
+        ? 'Marked as paid'
+        : result.payment_status === 'partial'
+          ? 'Partial payment recorded'
+          : 'Payment recorded'
+    toast.success(`${verb} for ${m.name}.`)
+    paymentOpen.value = false
+    detailOpen.value = false
+    await loadRoster()
+  } catch (err) {
+    if (err instanceof ApiError) {
+      switch (err.code) {
+        case 'invalid_amount': paymentError.value = 'Amount needs to be zero or higher.'; break
+        case 'invalid_method': paymentError.value = 'Payment method isn\'t valid.'; break
+        case 'invalid_date':   paymentError.value = 'Date needs to be YYYY-MM-DD.'; break
+        case 'forbidden':      paymentError.value = "You don't have permission to record payments."; break
+        default:               paymentError.value = err.status === 404
+          ? "This member has no membership tier yet — assign one via Edit first."
+          : err.message
+      }
+    } else {
+      paymentError.value = (err as Error).message
+    }
+  } finally {
+    paymentSubmitting.value = false
+  }
 }
 
 async function removeActiveMember() {
@@ -731,8 +918,123 @@ async function submit() {
       <template #footer>
         <button type="button" class="btn btn--danger-outline" @click="removeActiveMember">Remove</button>
         <div class="modal__foot-spacer" />
-        <button type="button" class="btn btn--outline" @click="messageMember">Send message</button>
-        <button type="button" class="btn btn--primary" @click="editMember">Edit member</button>
+        <button type="button" class="btn btn--outline" @click="openPayment">Record payment</button>
+        <button type="button" class="btn btn--primary" @click="openEditMember">Edit member</button>
+      </template>
+    </CrmModal>
+
+    <!-- Edit member modal -->
+    <CrmModal
+      :open="editOpen"
+      eyebrow="Roster"
+      :title="activeMember ? `Edit ${activeMember.name}` : 'Edit member'"
+      width="md"
+      @close="closeEdit"
+    >
+      <form class="form" @submit.prevent="submitEdit">
+        <label class="field">
+          <span class="field__label">Role</span>
+          <select v-model="editForm.role">
+            <option value="player">Player</option>
+            <option value="committee">Committee</option>
+            <option v-if="callerIsOwner" value="admin">Admin</option>
+          </select>
+          <span v-if="!callerIsOwner" class="field__hint">Only the club owner can promote to Admin.</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Title (optional)</span>
+          <input v-model="editForm.title" type="text" maxlength="80" placeholder="e.g. Secretary, Head Coach, Life Member" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Membership tier</span>
+          <select v-model.number="editForm.typeId">
+            <option :value="null">— No tier —</option>
+            <option v-for="t in availableTiers" :key="t.id" :value="t.id">{{ t.name }}</option>
+          </select>
+          <span v-if="availableTiers.length === 0" class="field__hint">Finish onboarding (Step 4) to define membership tiers.</span>
+        </label>
+
+        <p v-if="editError" class="add-error">{{ editError }}</p>
+      </form>
+
+      <template #footer>
+        <button type="button" class="btn btn--outline" @click="closeEdit" :disabled="editSubmitting">Cancel</button>
+        <button
+          type="button"
+          class="btn btn--primary"
+          :disabled="editSubmitting"
+          @click="submitEdit"
+        >{{ editSubmitting ? 'Saving…' : 'Save changes' }}</button>
+      </template>
+    </CrmModal>
+
+    <!-- Record payment modal -->
+    <CrmModal
+      :open="paymentOpen"
+      eyebrow="Roster"
+      :title="activeMember ? `Record payment — ${activeMember.name}` : 'Record payment'"
+      width="md"
+      @close="closePayment"
+    >
+      <form class="form" @submit.prevent="submitPayment">
+        <div class="switch-row">
+          <div>
+            <div class="switch-row__label">Waive fees</div>
+            <div class="switch-row__hint">For life members or complimentary access. Amount is set to $0.</div>
+          </div>
+          <button
+            type="button"
+            class="switch"
+            :class="{ 'is-on': paymentForm.waived }"
+            @click="toggleWaived"
+          ><span class="switch__knob" /></button>
+        </div>
+
+        <div class="form__row" v-if="!paymentForm.waived">
+          <label class="field">
+            <span class="field__label">Amount ($)</span>
+            <input v-model.number="paymentForm.amount" type="number" min="0" step="1" />
+          </label>
+          <label class="field">
+            <span class="field__label">Payment date</span>
+            <input v-model="paymentForm.date" type="date" />
+          </label>
+        </div>
+
+        <label class="field" v-if="!paymentForm.waived">
+          <span class="field__label">Method</span>
+          <select v-model="paymentForm.method">
+            <option value="cash">Cash</option>
+            <option value="card">Card</option>
+            <option value="bank_transfer">Bank transfer</option>
+            <option value="cheque">Cheque</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Reference (optional)</span>
+          <input v-model="paymentForm.reference" type="text" maxlength="100" placeholder="e.g. ANZ-12345, receipt #A234" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Notes (optional)</span>
+          <input v-model="paymentForm.notes" type="text" placeholder="e.g. Cleared July invoice" />
+        </label>
+
+        <p v-if="paymentError" class="add-error">{{ paymentError }}</p>
+      </form>
+
+      <template #footer>
+        <button type="button" class="btn btn--outline" @click="closePayment" :disabled="paymentSubmitting">Cancel</button>
+        <button
+          type="button"
+          class="btn btn--primary"
+          :disabled="!canSubmitPayment || paymentSubmitting"
+          @click="submitPayment"
+        >{{ paymentSubmitting ? 'Recording…' : (paymentForm.waived ? 'Waive fees' : 'Record payment') }}</button>
       </template>
     </CrmModal>
 

@@ -9,7 +9,7 @@ import { useToast } from '@/composables/useToast'
 import { useMemberSearch } from '@/composables/useMemberSearch'
 import { useClubStore } from '@/stores/club'
 import { useAuthStore } from '@/stores/auth'
-import { members as membersApi, ApiError, type PaymentMethod, type RosterMember } from '@torny/api-client'
+import { members as membersApi, ApiError, type PaymentMethod, type RosterMember, type MembersSummary, type MembershipTierListItem } from '@torny/api-client'
 
 const toast = useToast()
 const clubStore = useClubStore()
@@ -52,8 +52,14 @@ interface Member {
   /** Amount they paid on their most recent payment — from
    *  `membership.last_payment_amount`. Null when never paid. */
   lastPaymentAmount?: number | null
+  /** Sum of payments this season — from `membership.total_paid_this_season`. */
+  totalPaidThisSeason?: number | null
+  /** How much they still owe this period — from `membership.balance_owed`. */
+  balanceOwed?: number | null
   /** annual / monthly / season — drives the "$/…" suffix. */
   cadence?: 'annual' | 'monthly' | 'season' | null
+  /** Server payment status ('paid' | 'partial' | 'unpaid' | 'overdue' | 'waived'). */
+  paymentStatus?: 'paid' | 'unpaid' | 'partial' | 'overdue' | 'waived' | null
 }
 
 const {
@@ -162,16 +168,37 @@ function rosterToView(r: RosterMember): Member {
     memberNumber: r.member_number != null ? `#${r.member_number}` : '—',
     joinedAt: formatJoinedAt(r.joined_at),
     duesStatus: paymentToDues[r.membership?.payment_status ?? ''] ?? 'Paid',
-    lastActive: '—',
+    lastActive: formatLastActive(r.last_active_at),
     eventsAttended: 0,
     avatarUrl: r.avatar_url ?? null,
     membershipTypeId: r.membership?.type_id ?? null,
     apiRole: r.club_role,
-    title: null,
+    title: r.title ?? null,
+    dob: r.dob ?? undefined,
+    address: r.address ?? undefined,
+    notes: r.notes ?? undefined,
     fee: r.membership?.fee ?? r.membership?.annual_fee ?? null,
     lastPaymentAmount: r.membership?.last_payment_amount ?? null,
+    totalPaidThisSeason: r.membership?.total_paid_this_season ?? null,
+    balanceOwed: r.membership?.balance_owed ?? null,
     cadence: r.membership?.cadence ?? null,
+    paymentStatus: (r.membership?.payment_status as Member['paymentStatus']) ?? null,
   }
+}
+
+function formatLastActive(iso: string | null): string {
+  if (!iso) return '—'
+  const then = new Date(iso).getTime()
+  const diffMs = Date.now() - then
+  const mins = Math.floor(diffMs / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `${days}d ago`
+  if (days < 30) return `${Math.floor(days / 7)}w ago`
+  return new Date(iso).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 const members = ref<Member[]>([])
@@ -215,9 +242,13 @@ async function loadRoster() {
   }
 }
 
-onMounted(loadRoster)
+async function loadAll() {
+  await Promise.all([loadRoster(), loadSummary(), loadTiers()])
+}
+
+onMounted(loadAll)
 // Reload when the active club changes (e.g. via the club switcher).
-watch(() => clubStore.current?.id, loadRoster)
+watch(() => clubStore.current?.id, loadAll)
 
 const visibleSource = computed<Member[]>(() =>
   isSearching.value ? apiResults.value.map(rosterToView) : members.value,
@@ -278,23 +309,20 @@ function feeLabel(m: Member): string {
 }
 
 /**
- * Amount summary — what to show under the dues pill.
- * - Paid:      "Paid $240"
- * - Partial:   "$120 of $240"
- * - Due:       "$240 due"
- * - Overdue:   "$240 overdue"
- * - No tier:   "" (nothing to show)
+ * Amount summary — what to show under the dues pill. Follows punch-list §6:
+ * - Paid / waived:   "Paid"
+ * - Some paid:       "$120 / $240"
+ * - Nothing paid:    "Owes $240"
+ * - No tier:         "" (nothing to show)
  */
 function duesAmountLabel(m: Member): string {
   if (m.fee == null) return ''
-  const feeStr = `$${m.fee}`
-  const paidStr = m.lastPaymentAmount != null ? `$${m.lastPaymentAmount}` : null
-  switch (m.duesStatus) {
-    case 'Paid':    return paidStr ? `Paid ${paidStr}` : `Paid ${feeStr}`
-    case 'Overdue': return `${feeStr} overdue`
-    case 'Due':     return paidStr && m.lastPaymentAmount! < m.fee ? `${paidStr} of ${feeStr}` : `${feeStr} due`
-    default:        return ''
-  }
+  const status = m.paymentStatus
+  if (status === 'paid' || status === 'waived') return 'Paid'
+  const paid = m.totalPaidThisSeason ?? 0
+  if (paid > 0) return `$${paid} / $${m.fee}`
+  const owed = m.balanceOwed ?? m.fee
+  return `Owes $${owed}`
 }
 
 const duesTone: Record<DuesStatus, string> = {
@@ -316,44 +344,43 @@ function roleBadge(m: Member): { label: string; tone: string } | null {
   return null
 }
 
-// ── Roster stats (over the roster, not the search results) ────
-const rosterStats = computed(() => {
-  const rows = members.value
-  let expected = 0
-  let received = 0
-  let outstanding = 0
-  const tierCounts = new Map<string, number>()
+// ── Server-side roster summary + tier list ────────────────────
+// Replaces the old client-side sums (which used last_payment_amount and
+// undercounted by design). Summary and tier list are fetched once per club
+// change; summary is also refetched after any payment or add/remove.
+const summary = ref<MembersSummary | null>(null)
+const summaryLoading = ref(false)
+const availableTiers = ref<MembershipTierListItem[]>([])
+const tiersLoading = ref(false)
 
-  for (const m of rows) {
-    if (m.status === 'Lapsed') continue
-    const fee = m.fee ?? 0
-    expected += fee
-    if (m.duesStatus === 'Paid') {
-      received += m.lastPaymentAmount ?? fee
-    } else if (m.duesStatus === 'Due' || m.duesStatus === 'Overdue') {
-      const paid = m.lastPaymentAmount ?? 0
-      outstanding += Math.max(0, fee - paid)
-      // If they've partially paid, count that toward received too.
-      if (paid > 0 && paid < fee) received += paid
-    }
-    if (m.membership) tierCounts.set(m.membership, (tierCounts.get(m.membership) ?? 0) + 1)
+async function loadSummary() {
+  const cid = clubStore.current?.id
+  if (cid == null) { summary.value = null; return }
+  summaryLoading.value = true
+  try {
+    summary.value = await membersApi.summary(cid)
+  } catch {
+    summary.value = null
+  } finally {
+    summaryLoading.value = false
   }
+}
 
-  const collectionRate = expected > 0 ? Math.round((received / expected) * 100) : null
-  const activeCount = rows.filter((m) => m.status === 'Active').length
-  const dueCount = rows.filter((m) => m.duesStatus === 'Due' && m.status !== 'Lapsed').length
-  const overdueCount = rows.filter((m) => m.duesStatus === 'Overdue' && m.status !== 'Lapsed').length
-
-  // Most common tier
-  let topTier: { name: string; count: number } | null = null
-  for (const [name, count] of tierCounts) {
-    if (!topTier || count > topTier.count) topTier = { name, count }
+async function loadTiers() {
+  const cid = clubStore.current?.id
+  if (cid == null) { availableTiers.value = []; return }
+  tiersLoading.value = true
+  try {
+    availableTiers.value = await membersApi.listTiers(cid)
+  } catch {
+    availableTiers.value = []
+  } finally {
+    tiersLoading.value = false
   }
+}
 
-  return { expected, received, outstanding, collectionRate, activeCount, dueCount, overdueCount, topTier }
-})
-
-function fmtMoney(n: number): string {
+function fmtMoney(n: number | null | undefined): string {
+  if (n == null) return '—'
   if (n >= 1000) return `$${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`
   return `$${n}`
 }
@@ -388,20 +415,10 @@ const editError = ref<string | null>(null)
 const editForm = reactive({
   role: 'player' as 'admin' | 'committee' | 'player',
   title: '' as string,
+  notes: '' as string,
   typeId: null as number | null,
 })
 
-// Distinct tiers pulled from the roster (name → id). This is what the wizard
-// wrote to `membership_types` for this club.
-const availableTiers = computed(() => {
-  const seen = new Map<number, string>()
-  for (const m of members.value) {
-    if (m.membershipTypeId != null && !seen.has(m.membershipTypeId)) {
-      seen.set(m.membershipTypeId, m.membership)
-    }
-  }
-  return Array.from(seen.entries()).map(([id, name]) => ({ id, name }))
-})
 
 function openEditMember() {
   if (!activeMember.value) return
@@ -413,6 +430,7 @@ function openEditMember() {
   }
   editForm.role = (m.apiRole === 'admin' || m.apiRole === 'committee' || m.apiRole === 'player') ? m.apiRole : 'player'
   editForm.title = m.title ?? ''
+  editForm.notes = m.notes ?? ''
   editForm.typeId = m.membershipTypeId ?? null
   editError.value = null
   editOpen.value = true
@@ -432,12 +450,13 @@ async function submitEdit() {
     await membersApi.update(cid, Number(m.id), {
       role: editForm.role,
       title: editForm.title.trim() || null,
+      notes: editForm.notes.trim() || null,
       type_id: editForm.typeId,
     })
     toast.success(`Updated ${m.name}.`)
     editOpen.value = false
     detailOpen.value = false
-    await loadRoster()
+    await Promise.all([loadRoster(), loadSummary()])
   } catch (err) {
     if (err instanceof ApiError) {
       switch (err.code) {
@@ -537,7 +556,7 @@ async function submitPayment() {
     toast.success(`${verb} for ${m.name}.`)
     paymentOpen.value = false
     detailOpen.value = false
-    await loadRoster()
+    await Promise.all([loadRoster(), loadSummary()])
   } catch (err) {
     if (err instanceof ApiError) {
       switch (err.code) {
@@ -567,7 +586,7 @@ async function removeActiveMember() {
     await membersApi.remove(cid, Number(m.id))
     toast.success(`${m.name} removed.`)
     detailOpen.value = false
-    await loadRoster()
+    await Promise.all([loadRoster(), loadSummary()])
   } catch (err) {
     toast.error(removeErrorCopy(err))
   }
@@ -622,13 +641,10 @@ function toApiRole(role: MemberRole): 'committee' | 'player' {
   return role === 'Committee' ? 'committee' : 'player'
 }
 
-// Pluck a tier id off the current roster for the picked membership type.
-// The onboarding wizard's Step 4 owns the canonical id list — but until
-// we have a dedicated /membership-tiers endpoint this is the cheapest
-// lookup that works.
+// Resolve tier name → id via the dedicated /membership-tiers endpoint.
 function tierIdForMembership(name: MembershipType): number | undefined {
-  const hit = members.value.find((m) => m.membership === name && m.membershipTypeId != null)
-  return hit?.membershipTypeId ?? undefined
+  const hit = availableTiers.value.find((t) => t.type_name === name)
+  return hit?.id
 }
 
 async function submit() {
@@ -660,7 +676,7 @@ async function submit() {
       case 'stub_created': toast.success(`${name} added.`); break
     }
     closeAdd()
-    await loadRoster()
+    await Promise.all([loadRoster(), loadSummary()])
   } catch (err) {
     if (err instanceof ApiError) {
       switch (err.code) {
@@ -733,33 +749,32 @@ async function submit() {
       </button>
     </div>
 
-    <!-- Roster stat panels — fees expected vs collected vs outstanding -->
-    <section v-if="!rosterLoading && members.length > 0" class="stats">
+    <!-- Roster stat panels — server-side summary (brief 13 backend response) -->
+    <section v-if="summary" class="stats">
       <div class="stat-panel">
         <div class="stat-panel__label">Expected fees</div>
-        <div class="stat-panel__value">{{ fmtMoney(rosterStats.expected) }}</div>
-        <div class="stat-panel__sub">{{ rosterStats.activeCount }} active member{{ rosterStats.activeCount === 1 ? '' : 's' }}</div>
+        <div class="stat-panel__value">{{ fmtMoney(summary.expected_fees) }}</div>
+        <div class="stat-panel__sub">{{ summary.counts.active }} active member{{ summary.counts.active === 1 ? '' : 's' }}</div>
       </div>
       <div class="stat-panel stat-panel--ok">
         <div class="stat-panel__label">Collected</div>
-        <div class="stat-panel__value">{{ fmtMoney(rosterStats.received) }}</div>
+        <div class="stat-panel__value">{{ fmtMoney(summary.collected) }}</div>
         <div class="stat-panel__sub">
-          <span v-if="rosterStats.collectionRate != null">{{ rosterStats.collectionRate }}% of expected</span>
-          <span v-else>—</span>
+          <span>{{ summary.collection_rate }}% of expected</span>
         </div>
       </div>
-      <div class="stat-panel" :class="{ 'stat-panel--warn': rosterStats.outstanding > 0 }">
+      <div class="stat-panel" :class="{ 'stat-panel--warn': summary.outstanding > 0 }">
         <div class="stat-panel__label">Outstanding</div>
-        <div class="stat-panel__value">{{ fmtMoney(rosterStats.outstanding) }}</div>
+        <div class="stat-panel__value">{{ fmtMoney(summary.outstanding) }}</div>
         <div class="stat-panel__sub">
-          <template v-if="rosterStats.overdueCount > 0"><strong>{{ rosterStats.overdueCount }} overdue</strong> · </template>
-          {{ rosterStats.dueCount }} due
+          <template v-if="summary.counts.lapsed > 0"><strong>{{ summary.counts.lapsed }} lapsed</strong> · </template>
+          {{ summary.counts.pending }} pending
         </div>
       </div>
       <div class="stat-panel stat-panel--muted">
         <div class="stat-panel__label">Top tier</div>
-        <div class="stat-panel__value stat-panel__value--sm">{{ rosterStats.topTier?.name ?? '—' }}</div>
-        <div class="stat-panel__sub">{{ rosterStats.topTier?.count ?? 0 }} member{{ rosterStats.topTier?.count === 1 ? '' : 's' }}</div>
+        <div class="stat-panel__value stat-panel__value--sm">{{ summary.top_tiers[0]?.type_name ?? '—' }}</div>
+        <div class="stat-panel__sub">{{ summary.top_tiers[0]?.count ?? 0 }} member{{ summary.top_tiers[0]?.count === 1 ? '' : 's' }}</div>
       </div>
     </section>
 
@@ -1084,9 +1099,15 @@ async function submit() {
           <span class="field__label">Membership tier</span>
           <select v-model.number="editForm.typeId">
             <option :value="null">— No tier —</option>
-            <option v-for="t in availableTiers" :key="t.id" :value="t.id">{{ t.name }}</option>
+            <option v-for="t in availableTiers" :key="t.id" :value="t.id">{{ t.type_name }}</option>
           </select>
           <span v-if="availableTiers.length === 0" class="field__hint">Finish onboarding (Step 4) to define membership tiers.</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Notes (admin-only)</span>
+          <textarea v-model="editForm.notes" rows="3" placeholder="e.g. Prefers cheque payments. Life member since 2018." />
+          <span class="field__hint">Not visible to the member — for club admins only.</span>
         </label>
 
         <p v-if="editError" class="add-error">{{ editError }}</p>

@@ -11,7 +11,7 @@
 ## TL;DR
 
 - **`POST /clubs/{club_id}/members`** — add one member. Existing user → link. New email → invite by default; pass `send_invite=false` to silently create a stub user (no email).
-- **`PATCH /clubs/{club_id}/members/{user_id}`** — change role / title / membership tier. Owner-only for admin role changes; admin can shuffle committee ↔ player.
+- **`PATCH /clubs/{club_id}/members/{user_id}`** — change role / title / notes / membership tier. Owner-only for admin role changes; admin can shuffle committee ↔ player.
 - **`POST /clubs/{club_id}/members/{user_id}/payments`** — manually mark a member as paid. Records the payment + updates `payment_status` on the current membership. Supports `waived` as a first-class method for life members / complimentary access.
 - **`DELETE /clubs/{club_id}/members/{user_id}`** — soft-remove. Sets `revoked_at`; drops out of "active" counts; row stays for audit + potential re-linking.
 - **Owner + self are protected.** Can't edit/delete the owner via these endpoints (use the future ownership-transfer flow). Can't delete yourself (use a "leave club" flow).
@@ -102,13 +102,14 @@ Add one member. Mirrors the bulk-import row logic but for a single row.
 
 ## 2. `PATCH /clubs/{club_id}/members/{user_id}`  (🔒 owner or admin)
 
-Change a member's role, title, or membership tier. Partial-update — send only the fields you're changing.
+Change a member's role, title, notes, or membership tier. Partial-update — send only the fields you're changing.
 
 **Request:**
 ```json
 {
   "role":    "committee",
   "title":   "Secretary",
+  "notes":   "Prefers cheque payments.",
   "type_id": 5
 }
 ```
@@ -117,6 +118,7 @@ Change a member's role, title, or membership tier. Partial-update — send only 
 |---|---|
 | `role` | `"admin"` \| `"committee"` \| `"player"`. Only owner can add/remove `admin`; admin can shuffle committee ↔ player. `"owner"` is not allowed — use ownership transfer. |
 | `title` | String or `null` (to clear). Max 80 chars. |
+| `notes` | String or `null` (to clear). Free-text admin notes visible only to club admins on the member roster. |
 | `type_id` | Integer tier PK, or `null` (to clear the membership record's tier link — the row stays for payment history). |
 
 **Response (200):**
@@ -294,6 +296,7 @@ export const members = {
   update(clubId: number, userId: number, patch: {
     role?: 'admin' | 'committee' | 'player'
     title?: string | null
+    notes?: string | null
     type_id?: number | null
   }) {
     return authedFetch(`${CRM_BASE}/clubs/${clubId}/members/${userId}`, {

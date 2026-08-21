@@ -26,6 +26,9 @@ export type {
   PaymentMethod,
   RecordPaymentInput,
   RecordPaymentResult,
+  MembersSummary,
+  SummaryTopTier,
+  MembershipTierListItem,
 } from './resources/members'
 export * as events from './resources/events'
 export * as teams from './resources/teams'

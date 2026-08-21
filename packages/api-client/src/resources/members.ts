@@ -42,6 +42,10 @@ export interface RosterMembership {
   payment_due_date: string | null
   last_payment_date: string | null
   last_payment_amount: number | null
+  /** Sum of all payments recorded during the current season / period. */
+  total_paid_this_season: number | null
+  /** Amount still owed for the current period — `fee - total_paid_this_season`. */
+  balance_owed: number | null
 }
 
 export interface RosterMember {
@@ -59,6 +63,16 @@ export interface RosterMember {
   joined_at: string | null
   /** ISO 8601 UTC — set on lapsed rows, null on active + pending. */
   revoked_at: string | null
+  /** Date of birth `YYYY-MM-DD`, from users.dob. */
+  dob: string | null
+  /** Postal address, from users.address. */
+  address: string | null
+  /** ISO 8601 UTC — last authenticated request, coalesced to once/min. */
+  last_active_at: string | null
+  /** Club-specific title (e.g. "Secretary", "Life Member"). */
+  title: string | null
+  /** Admin-only free-text notes on this member. */
+  notes: string | null
   membership: RosterMembership | null
 }
 
@@ -154,6 +168,67 @@ export async function listRoster(
   return res.data
 }
 
+// ── Summary + tiers (brief 13 backend response) ───────────────────
+
+export interface SummaryTopTier {
+  type_id: number
+  type_name: string
+  count: number
+}
+
+export interface MembersSummary {
+  expected_fees: number
+  collected: number
+  outstanding: number
+  collection_rate: number
+  counts: {
+    total: number
+    active: number
+    pending: number
+    lapsed: number
+    pending_invites?: number
+  }
+  top_tiers: SummaryTopTier[]
+  period_start: string | null
+  period_end: string | null
+  season_id: number | null
+}
+
+export interface MembershipTierListItem {
+  id: number
+  type_name: string
+  type_code?: string | null
+  slug?: string | null
+  cadence: MembershipCadence | null
+  fee: number | null
+  is_default: boolean
+  tone?: MembershipTone | null
+}
+
+/** GET /clubs/:clubId/members/summary — server-side finance stats. */
+export async function summary(
+  clubId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<MembersSummary> {
+  const res = await authedFetch<Envelope<MembersSummary>>(
+    `${CRM_BASE}/clubs/${clubId}/members/summary`,
+    { signal: opts.signal },
+  )
+  return res.data
+}
+
+/** GET /clubs/:clubId/membership-tiers — the club's active tiers. */
+export async function listTiers(
+  clubId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<MembershipTierListItem[]> {
+  const res = await authedFetch<Envelope<{ tiers: MembershipTierListItem[] }>>(
+    `${CRM_BASE}/clubs/${clubId}/membership-tiers`,
+    { signal: opts.signal },
+  )
+  return res.data.tiers
+}
+
 // ── Add / edit / remove (brief 12) ────────────────────────────────
 
 export type AddMemberResolution = 'linked' | 'relinked' | 'invited' | 'stub_created'
@@ -186,6 +261,8 @@ export interface AddMemberResult {
 export interface UpdateMemberInput {
   role?: 'admin' | 'committee' | 'player'
   title?: string | null
+  /** Admin-only free-text notes visible on the roster. Send `null` to clear. */
+  notes?: string | null
   type_id?: number | null
 }
 

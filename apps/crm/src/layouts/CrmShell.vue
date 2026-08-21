@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterView, RouterLink, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
+import { members as membersApi } from '@torny/api-client'
 import NotificationsDropdown from '@/components/NotificationsDropdown.vue'
 import NewMenu from '@/components/NewMenu.vue'
 import UserMenu from '@/components/UserMenu.vue'
@@ -79,12 +80,47 @@ interface NavItem {
   /** `accent` = draw-attention pill (unhandled items); `neutral` = informational. */
   countTone?: 'accent' | 'neutral'
 }
-const manageNav: NavItem[] = [
+// Live counts pulled once per active club. Falls back to '—' while loading
+// so the sidebar never flashes stale numbers when the user switches clubs.
+const memberCount = ref<number | null>(null)
+
+async function loadMemberCount(clubId: number) {
+  try {
+    // limit=1 keeps the payload tiny — we only need counts.total which is
+    // returned regardless of how many rows come back.
+    const res = await membersApi.listRoster(clubId, { limit: 1, include_invites: false })
+    memberCount.value = res.counts.total
+  } catch {
+    memberCount.value = null
+  }
+}
+
+watch(
+  () => club.current?.id,
+  (id) => {
+    if (id != null && typeof id === 'number') loadMemberCount(id)
+    else memberCount.value = null
+  },
+  { immediate: true },
+)
+
+// MembersView broadcasts the fresh count after every add / remove / update so
+// the sidebar doesn't lag behind actions.
+function onRosterCountUpdate(e: Event) {
+  const detail = (e as CustomEvent).detail
+  if (typeof detail === 'number') memberCount.value = detail
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('torny:roster-count', onRosterCountUpdate)
+  onBeforeUnmount(() => window.removeEventListener('torny:roster-count', onRosterCountUpdate))
+}
+
+const manageNav = computed<NavItem[]>(() => [
   { to: '/crm/dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { to: '/crm/members', label: 'Members', icon: 'members', count: 142, countTone: 'neutral' },
+  { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? '—', countTone: 'neutral' },
   { to: '/crm/applications', label: 'Applications', icon: 'applications', count: 3, countTone: 'accent' },
   { to: '/crm/enquiries', label: 'Enquiries', icon: 'enquiries', count: 2, countTone: 'accent' },
-]
+])
 const contentNav: NavItem[] = [
   { to: '/crm/website', label: 'Website', icon: 'website' },
   { to: '/crm/events', label: 'Events', icon: 'events', count: 12, countTone: 'neutral' },
@@ -104,12 +140,12 @@ function signOut() {
 }
 
 interface TabItem { to: string; label: string; count?: number; icon: 'home' | 'members' | 'apps' | 'enquiries' | 'more' }
-const bottomTabs: TabItem[] = [
+const bottomTabs = computed<TabItem[]>(() => [
   { to: '/crm/dashboard', label: 'Home', icon: 'home' },
-  { to: '/crm/members', label: 'Members', icon: 'members' },
+  { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? undefined },
   { to: '/crm/applications', label: 'Apps', count: 3, icon: 'apps' },
   { to: '/crm/enquiries', label: 'Enquiries', count: 2, icon: 'enquiries' },
-]
+])
 </script>
 
 <template>

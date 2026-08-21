@@ -204,6 +204,8 @@ async function loadRoster() {
     })
     members.value = res.members.map(rosterToView)
     rosterCounts.value = { total: res.counts.total, active: res.counts.active }
+    // Broadcast so the shell's sidebar count refreshes without a duplicate fetch.
+    window.dispatchEvent(new CustomEvent('torny:roster-count', { detail: res.counts.total }))
   } catch (err) {
     rosterError.value = err instanceof Error ? err.message : 'Failed to load roster'
     members.value = []

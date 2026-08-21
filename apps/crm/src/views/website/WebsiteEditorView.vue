@@ -14,6 +14,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
+import ImagePicker from '@/components/ImagePicker.vue'
 import type {
   Block,
   BlockType,
@@ -430,10 +431,15 @@ const lastSavedLabel = computed(() => {
               <span class="field__label">Subheading</span>
               <textarea v-model="(selectedBlock!.props as HeroProps).subheading" rows="2" />
             </label>
-            <label class="field">
-              <span class="field__label">Image URL (optional)</span>
-              <input v-model="(selectedBlock!.props as HeroProps).imageUrl" type="text" placeholder="https://…" />
-            </label>
+            <div class="field">
+              <ImagePicker
+                v-model="(selectedBlock!.props as HeroProps).imageUrl"
+                label="Background image (optional)"
+                content-type="banner"
+                aspect="16 / 9"
+                hint="Sits behind the hero heading. PNG or JPG, under 10 MB."
+              />
+            </div>
             <div class="field__group">
               <div class="field__group-title">Primary CTA</div>
               <label class="field">
@@ -555,12 +561,12 @@ const lastSavedLabel = computed(() => {
             </label>
             <div class="field">
               <span class="field__label">Images ({{ (selectedBlock.props as GalleryProps).images.length }})</span>
-              <div v-for="(img, ii) in (selectedBlock.props as GalleryProps).images" :key="ii" class="gallery-row">
-                <input v-model="img.url" placeholder="https://…" type="text" />
-                <input v-model="img.alt" placeholder="Alt text (accessibility)" type="text" />
-                <button type="button" class="gallery-row__remove" @click="(selectedBlock.props as GalleryProps).images.splice(ii, 1)">×</button>
+              <div v-for="(img, ii) in (selectedBlock.props as GalleryProps).images" :key="ii" class="gallery-item">
+                <ImagePicker v-model="img.url" content-type="gallery" aspect="4 / 3" />
+                <input v-model="img.alt" placeholder="Alt text (for screen readers)" type="text" class="gallery-item__alt" />
+                <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as GalleryProps).images.splice(ii, 1)">Remove</button>
               </div>
-              <button type="button" class="gallery-add" @click="(selectedBlock.props as GalleryProps).images.push({ url: '', alt: '' })">+ Add image</button>
+              <button type="button" class="gallery-add" @click="(selectedBlock!.props as GalleryProps).images.push({ url: '', alt: '' })">+ Add image</button>
             </div>
           </template>
         </template>
@@ -654,10 +660,11 @@ const lastSavedLabel = computed(() => {
 .switch.is-on { background: var(--color-ink); justify-content: flex-end; }
 .switch__knob { width: 16px; height: 16px; border-radius: 999px; background: #fff; }
 
-.gallery-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; margin-top: 8px; }
-.gallery-row input { padding: 8px 10px; }
-.gallery-row__remove { width: 28px; height: 28px; border: 1px solid var(--color-hairline); background: #fff; color: var(--color-fog); border-radius: 6px; font-size: 14px; cursor: pointer; }
-.gallery-row__remove:hover { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }
+.gallery-item { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 10px; margin-top: 8px; }
+.gallery-item__alt { padding: 8px 10px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 12px; color: var(--color-ink); background: #fff; }
+.gallery-item__alt:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
+.gallery-item__remove { align-self: flex-start; background: transparent; border: 0; padding: 0; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-danger); cursor: pointer; }
+.gallery-item__remove:hover { text-decoration: underline; }
 .gallery-add { margin-top: 10px; padding: 8px 12px; background: transparent; border: 1px dashed var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 12px; color: var(--color-accent); cursor: pointer; }
 .gallery-add:hover { background: var(--color-accent-soft); }
 

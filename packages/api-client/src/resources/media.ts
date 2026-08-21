@@ -128,3 +128,41 @@ export async function uploadClubLogo(
     content_id: clubId,
   })
 }
+
+/**
+ * Generic club image upload — request URL, PUT to Cloudflare, confirm.
+ * `contentType` picks which slot on the club record the image lives in:
+ *   - 'avatar'  → club logo
+ *   - 'banner'  → hero / cover image
+ *   - 'gallery' → gallery photo (multiple allowed per club)
+ *   - 'media'   → generic (any other content block)
+ *
+ * `contentId` defaults to `clubId` for club-level images. For block-level
+ * images that need a per-block identifier, pass a numeric id (e.g. a
+ * hashed block id) — backend treats it as opaque.
+ */
+export async function uploadClubImage(
+  clubId: number,
+  file: File,
+  opts: { contentType?: MediaContentType; contentId?: number; signal?: AbortSignal } = {},
+): Promise<ConfirmedImage> {
+  const contentType = opts.contentType ?? 'media'
+  const contentId = opts.contentId ?? clubId
+
+  const { uploadUrl, imageId } = await requestUploadUrl(
+    { entity_type: 'club', entity_id: clubId, content_type: contentType, content_id: contentId },
+    { signal: opts.signal },
+  )
+
+  const form = new FormData()
+  form.append('file', file)
+  const cf = await fetch(uploadUrl, { method: 'POST', body: form, signal: opts.signal })
+  if (!cf.ok) {
+    throw new Error(`Cloudflare upload failed (${cf.status} ${cf.statusText})`)
+  }
+
+  return confirmUpload(
+    { imageId, entity_type: 'club', entity_id: clubId, content_type: contentType, content_id: contentId },
+    { signal: opts.signal },
+  )
+}

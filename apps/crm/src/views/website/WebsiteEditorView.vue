@@ -5,21 +5,27 @@
  * Vertical-list block editor. Same shell for all 6 public pages (home,
  * about, membership, events, honour-board, contact) — the active page
  * comes from the route param `pageSlug`. Each page has its own curated
- * palette + seed layout + storage bucket, so switching pages doesn't mix
- * blocks between them.
+ * palette + seed layout, and its own row in the backend's
+ * `public_site_pages` table.
  *
- * Backend endpoints (brief 16) not shipped yet — layouts persist to
- * localStorage under `torny.website.{clubId}.{pageSlug}` until they
- * land. The save/publish handlers already carry the right shape for the
- * eventual PATCH / POST /publish calls; swap the two functions when
- * ready.
+ * Persistence (brief 17):
+ * - On mount / page-switch / club-switch → `GET /clubs/:id/pages/:slug`
+ *   fills the state. Backend returns a seeded default layout if the
+ *   owner has never touched the page, so nothing looks blank.
+ * - Every edit debounces 500ms → `PATCH .../pages/:slug` with
+ *   `{ layout_draft: { blocks } }`. Full replacement.
+ * - Publish → `POST .../pages/:slug/publish`. Returns `public_url` for
+ *   the "View live" link.
+ * - LocalStorage still writes on every autosave as an offline fallback
+ *   in case the network drops mid-session.
  */
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
 import { useOnboardingStore } from '@/stores/onboarding'
 import ImagePicker from '@/components/ImagePicker.vue'
+import { ApiError, pages, type PageBlock } from '@torny/api-client'
 import type {
   Block,
   BlockType,
@@ -204,80 +210,173 @@ const SEEDS: Record<PageSlug, () => Block[]> = {
   ),
 }
 
-// ── Persistence (localStorage MVP) ────────────────────────
+// ── State ─────────────────────────────────────────────────
+interface EditorState {
+  blocks: Block[]
+  publishedBlocks: Block[] | null
+  draftUpdatedAt: string | null
+  publishedAt: string | null
+  hasUnpublishedChanges: boolean
+}
+
+const state = reactive<EditorState>({
+  blocks: [],
+  publishedBlocks: null,
+  draftUpdatedAt: null,
+  publishedAt: null,
+  hasUnpublishedChanges: false,
+})
+const selectedId = ref<string | null>(null)
+const paletteOpen = ref<null | { after: string | null }>(null)
+const loading = ref(true)
+const saving = ref(false)
+const publishing = ref(false)
+const saveError = ref<string | null>(null)
+const lastPublicUrl = ref<string | null>(null)
+
+// LocalStorage is now an offline fallback only. On load, we hit the API
+// first; on autosave, we PATCH the API and also write here so a network
+// blip doesn't lose the owner's work.
 function storageKey(slug: PageSlug): string | null {
   const cid = clubStore.current?.id
   return cid ? `torny.website.${cid}.${slug}` : null
 }
-
-interface StoredLayout {
-  blocks: Block[]
-  draftUpdatedAt: string
-  publishedAt: string | null
-  publishedBlocks: Block[] | null
-}
-
-function loadFromStorage(slug: PageSlug): StoredLayout {
+function readOffline(slug: PageSlug): Block[] | null {
   const key = storageKey(slug)
-  const empty: StoredLayout = { blocks: SEEDS[slug](), draftUpdatedAt: new Date().toISOString(), publishedAt: null, publishedBlocks: null }
-  if (!key) return empty
+  if (!key) return null
   try {
     const raw = localStorage.getItem(key)
-    if (!raw) return empty
-    const parsed = JSON.parse(raw) as StoredLayout
-    return {
-      blocks: parsed.blocks ?? SEEDS[slug](),
-      draftUpdatedAt: parsed.draftUpdatedAt ?? new Date().toISOString(),
-      publishedAt: parsed.publishedAt ?? null,
-      publishedBlocks: parsed.publishedBlocks ?? null,
-    }
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { blocks?: Block[] }
+    return parsed.blocks ?? null
   } catch {
-    return empty
+    return null
+  }
+}
+function writeOffline(slug: PageSlug, blocks: Block[]): void {
+  const key = storageKey(slug)
+  if (!key) return
+  try {
+    localStorage.setItem(key, JSON.stringify({ blocks, savedAt: new Date().toISOString() }))
+  } catch { /* full — non-fatal */ }
+}
+
+// Suppress autosave while `load()` is applying server state — otherwise
+// the assignment fires the deep-watcher and PATCHes back the same blocks.
+let suppressAutosave = false
+
+async function load(slug: PageSlug): Promise<void> {
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') return
+  loading.value = true
+  saveError.value = null
+  try {
+    const server = await pages.get(clubId, slug)
+    suppressAutosave = true
+    state.blocks = (server.layout_draft?.blocks ?? []) as unknown as Block[]
+    state.publishedBlocks = (server.layout_published?.blocks ?? null) as unknown as Block[] | null
+    state.draftUpdatedAt = server.draft_updated_at
+    state.publishedAt = server.published_at
+    state.hasUnpublishedChanges = server.has_unpublished_changes
+    selectedId.value = state.blocks[0]?.id ?? null
+    paletteOpen.value = null
+    // Overwrite the offline cache with the server's authoritative draft.
+    writeOffline(slug, state.blocks)
+  } catch (err) {
+    // Network / auth error — fall back to whatever's in localStorage.
+    const offline = readOffline(slug)
+    if (offline && offline.length > 0) {
+      suppressAutosave = true
+      state.blocks = offline
+      state.publishedBlocks = null
+      state.draftUpdatedAt = null
+      state.publishedAt = null
+      state.hasUnpublishedChanges = true
+      selectedId.value = state.blocks[0]?.id ?? null
+      toast.info('Offline — showing your last saved draft.')
+    } else {
+      // Nothing on server, nothing offline — start with the local seed.
+      suppressAutosave = true
+      state.blocks = SEEDS[slug]()
+      state.publishedBlocks = null
+      state.draftUpdatedAt = null
+      state.publishedAt = null
+      state.hasUnpublishedChanges = true
+      selectedId.value = state.blocks[0]?.id ?? null
+    }
+    if (err instanceof ApiError && err.status === 403) {
+      saveError.value = "You don't have permission to edit this club's pages."
+      toast.error(saveError.value)
+    }
+  } finally {
+    loading.value = false
+    // Allow autosave watcher to catch subsequent edits (next microtask
+    // so the assignment above doesn't fire it).
+    await Promise.resolve()
+    suppressAutosave = false
   }
 }
 
-const state = reactive<StoredLayout>(loadFromStorage(currentPage.value))
-const selectedId = ref<string | null>(state.blocks[0]?.id ?? null)
-const paletteOpen = ref<null | { after: string | null }>(null)
-const saving = ref(false)
-const publishing = ref(false)
-
-// Reload when either the active club OR the active page changes.
-watch([() => clubStore.current?.id, currentPage], ([, slug]) => {
-  const fresh = loadFromStorage(slug)
-  Object.assign(state, fresh)
-  selectedId.value = state.blocks[0]?.id ?? null
-  paletteOpen.value = null
-})
+onMounted(() => load(currentPage.value))
+watch([() => clubStore.current?.id, currentPage], ([, slug]) => load(slug))
 
 const selectedBlock = computed<Block | null>(() => state.blocks.find((b) => b.id === selectedId.value) ?? null)
 
-const hasUnpublishedChanges = computed(() => {
-  if (!state.publishedBlocks) return state.blocks.length > 0
-  return JSON.stringify(state.blocks) !== JSON.stringify(state.publishedBlocks)
-})
+const hasUnpublishedChanges = computed(() => state.hasUnpublishedChanges)
 
-function persist(): void {
-  const key = storageKey(currentPage.value)
-  if (!key) return
-  state.draftUpdatedAt = new Date().toISOString()
+// ── Autosave (real API + offline mirror) ──────────────────
+async function autosave(): Promise<void> {
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') return
+  const slug = currentPage.value
+  saving.value = true
+  saveError.value = null
+  // Always mirror to localStorage so a mid-flight failure doesn't lose work.
+  writeOffline(slug, state.blocks)
   try {
-    localStorage.setItem(key, JSON.stringify(state))
-  } catch {
-    /* localStorage full — non-fatal */
+    const res = await pages.patch(clubId, slug, {
+      blocks: state.blocks as unknown as PageBlock[],
+    })
+    state.draftUpdatedAt = res.draft_updated_at
+    state.hasUnpublishedChanges = true  // draft is now newer than published
+  } catch (err) {
+    if (err instanceof ApiError) {
+      switch (err.code) {
+        case 'too_many_blocks':
+          saveError.value = 'That page has too many blocks — keep it under 50.'
+          break
+        case 'payload_too_large':
+          saveError.value = 'Page content too large to save (200 KB max).'
+          break
+        case 'unknown_block_type':
+          saveError.value = `Unknown block type "${err.body?.type ?? ''}" — refresh to reset.`
+          break
+        case 'invalid_block_shape':
+          saveError.value = 'A block is missing required fields — refresh to reset.'
+          break
+        default:
+          saveError.value = err.status === 403
+            ? "You don't have permission to edit this club's pages."
+            : (err.message || 'Save failed — retrying will resume when the network returns.')
+      }
+      toast.error(saveError.value)
+    } else {
+      // Silent — the offline mirror caught it, we'll retry on the next edit.
+      saveError.value = 'Offline — changes saved locally and will sync when reconnected.'
+    }
+  } finally {
+    saving.value = false
   }
 }
 
 // Debounced autosave on any change to the layout.
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 function scheduleSave(): void {
+  if (suppressAutosave) return
   if (saveTimer) clearTimeout(saveTimer)
   saving.value = true
   saveTimer = setTimeout(() => {
-    persist()
-    saving.value = false
-    // Once brief 16 §2.2 lands, replace persist() with:
-    //   await pages.patch(clubId, currentPage.value, { layout_draft: { blocks: state.blocks } })
+    void autosave()
   }, 500)
 }
 
@@ -311,18 +410,32 @@ function moveBlock(id: string, dir: -1 | 1): void {
   state.blocks.splice(target, 0, block)
 }
 
-// ── Publish (mocked until brief 16 §2.3 lands) ────────────
+// ── Publish (real API) ────────────────────────────────────
 async function publish(): Promise<void> {
   if (!hasUnpublishedChanges.value) return
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') return
+  const slug = currentPage.value
   publishing.value = true
   try {
-    // Once brief 16 §2.3 lands:
-    //   await pages.publish(clubId, currentPage.value)
-    await new Promise((r) => setTimeout(r, 600))
+    const res = await pages.publish(clubId, slug)
     state.publishedBlocks = JSON.parse(JSON.stringify(state.blocks)) as Block[]
-    state.publishedAt = new Date().toISOString()
-    persist()
-    toast.success(`${PAGE_LABELS[currentPage.value]} page published.`)
+    state.publishedAt = res.published_at
+    state.hasUnpublishedChanges = false
+    lastPublicUrl.value = res.public_url
+    toast.success(`${PAGE_LABELS[slug]} page published.`)
+  } catch (err) {
+    if (err instanceof ApiError) {
+      if (err.code === 'empty_draft') {
+        toast.error('Add at least one block before publishing.')
+      } else if (err.status === 403) {
+        toast.error("You don't have permission to publish this club's pages.")
+      } else {
+        toast.error(err.message || 'Publish failed — try again in a moment.')
+      }
+    } else {
+      toast.error('Publish failed — check your connection and try again.')
+    }
   } finally {
     publishing.value = false
   }
@@ -388,7 +501,9 @@ function stripHtml(s: string): string {
 }
 
 const lastSavedLabel = computed(() => {
+  if (loading.value) return 'Loading…'
   if (saving.value) return 'Saving…'
+  if (!state.draftUpdatedAt) return ''
   const then = new Date(state.draftUpdatedAt).getTime()
   const ago = Math.max(0, Math.round((Date.now() - then) / 1000))
   if (ago < 5) return 'Saved'
@@ -408,10 +523,11 @@ const lastSavedLabel = computed(() => {
       </div>
       <div class="web__actions">
         <span class="web__save-hint">{{ lastSavedLabel }}</span>
+        <a v-if="lastPublicUrl" :href="lastPublicUrl" target="_blank" rel="noopener" class="web__live-link">View live →</a>
         <button class="btn btn--outline" @click="preview">Preview →</button>
         <button
           class="btn btn--primary"
-          :disabled="!hasUnpublishedChanges || publishing"
+          :disabled="!hasUnpublishedChanges || publishing || loading"
           @click="publish"
         >
           {{ publishing ? 'Publishing…' : hasUnpublishedChanges ? 'Publish changes' : 'Published' }}
@@ -709,6 +825,8 @@ const lastSavedLabel = computed(() => {
 .web__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-fog); margin: 0; max-width: 600px; }
 .web__actions { display: flex; gap: 10px; align-items: center; }
 .web__save-hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-right: 6px; }
+.web__live-link { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-accent); text-decoration: none; padding: 4px 10px; border-radius: 8px; }
+.web__live-link:hover { background: var(--color-accent-soft); }
 
 .btn { padding: 9px 16px; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; white-space: nowrap; }
 .btn--primary { background: var(--color-ink); color: #fff; }

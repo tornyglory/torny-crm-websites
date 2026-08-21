@@ -84,6 +84,15 @@ export type {
   OnboardingValidationError,
   SubdomainCheckResult,
 } from './resources/clubOnboarding'
+export * as pages from './resources/pages'
+export type {
+  PageSlug,
+  Block as PageBlock,
+  PageLayout,
+  PageState,
+  PatchResponse as PagePatchResponse,
+  PublishResponse as PagePublishResponse,
+} from './resources/pages'
 export * as media from './resources/media'
 export type {
   MediaEntityType,

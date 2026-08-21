@@ -17,6 +17,7 @@ const cadenceLabel = (c: string | null): string =>
 </script>
 
 <template>
+  <PageRenderer slug="membership">
   <div class="membership" :style="{ '--brand': accent } as any">
     <header class="page-head">
       <div class="page-head__eyebrow">Join us</div>
@@ -52,6 +53,7 @@ const cadenceLabel = (c: string | null): string =>
       </li>
     </ul>
   </div>
+  </PageRenderer>
 </template>
 
 <style scoped>

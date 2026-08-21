@@ -1,17 +1,21 @@
 <script setup lang="ts">
 /**
- * Website — Home page editor.
+ * Website page editor.
  *
- * Vertical-list block editor. Owner adds/reorders/deletes blocks via the
- * left column, edits the selected block's props in the right column,
- * previews in a new tab, and publishes.
+ * Vertical-list block editor. Same shell for all 6 public pages (home,
+ * about, membership, events, honour-board, contact) — the active page
+ * comes from the route param `pageSlug`. Each page has its own curated
+ * palette + seed layout + storage bucket, so switching pages doesn't mix
+ * blocks between them.
  *
- * Backend endpoints (brief 16) not shipped yet — layout persists to
- * localStorage under `torny.website.{clubId}.home` until they land. The
- * save/publish handlers already carry the right shape for the eventual
- * PATCH / POST /publish calls; swap the two functions when ready.
+ * Backend endpoints (brief 16) not shipped yet — layouts persist to
+ * localStorage under `torny.website.{clubId}.{pageSlug}` until they
+ * land. The save/publish handlers already carry the right shape for the
+ * eventual PATCH / POST /publish calls; swap the two functions when
+ * ready.
  */
 import { computed, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
 import ImagePicker from '@/components/ImagePicker.vue'
@@ -21,15 +25,49 @@ import type {
   HeroProps,
   RichTextProps,
   EventListProps,
+  HonourBoardProps,
   GalleryProps,
+  ContactFormProps,
   MembershipCtaProps,
   CtaBannerProps,
 } from '@torny/content-blocks'
 
+const route = useRoute()
+const router = useRouter()
 const toast = useToast()
 const clubStore = useClubStore()
 
-// ── Types + block palette curated for Home ─────────────────
+// ── Page slugs ────────────────────────────────────────────
+type PageSlug = 'home' | 'about' | 'membership' | 'events' | 'honour-board' | 'contact'
+const PAGE_SLUGS: PageSlug[] = ['home', 'about', 'membership', 'events', 'honour-board', 'contact']
+const PAGE_LABELS: Record<PageSlug, string> = {
+  home: 'Home',
+  about: 'About',
+  membership: 'Membership',
+  events: 'Events',
+  'honour-board': 'Honour board',
+  contact: 'Contact',
+}
+const PAGE_SUBTITLES: Record<PageSlug, string> = {
+  home: 'The front door — hero, upcoming events, a nudge to join.',
+  about: 'Who you are and what makes the club feel like home.',
+  membership: 'Show your tiers and why someone would join.',
+  events: 'What\'s coming up. Auto-pulled from the events calendar.',
+  'honour-board': 'A century of results, category by category.',
+  contact: 'How people reach the club — address, hours, contact form.',
+}
+
+const currentPage = computed<PageSlug>(() => {
+  const s = route.params.pageSlug as string | undefined
+  return s && (PAGE_SLUGS as string[]).includes(s) ? (s as PageSlug) : 'home'
+})
+
+function switchPage(slug: PageSlug): void {
+  if (slug === currentPage.value) return
+  router.push({ name: 'website', params: { pageSlug: slug } })
+}
+
+// ── Types + block palettes ────────────────────────────────
 interface PaletteItem {
   type: BlockType
   label: string
@@ -38,74 +76,81 @@ interface PaletteItem {
   defaults: () => Block['props']
 }
 
-const HOME_PALETTE: PaletteItem[] = [
-  {
-    type: 'hero',
-    label: 'Hero',
-    hint: 'Big heading, tagline, two CTAs',
-    icon: '☰',
-    defaults: (): HeroProps => ({
-      heading: clubStore.current?.name ?? 'Your club',
-      subheading: 'A friendly bowls club. New members always welcome.',
-      primaryCta: { label: 'Join us', href: '/membership' },
-      secondaryCta: { label: 'See what\'s on', href: '/events' },
-    }),
-  },
-  {
-    type: 'richText',
-    label: 'Rich text',
-    hint: 'A block of writing — history, blurb, note',
-    icon: '¶',
-    defaults: (): RichTextProps => ({
-      html: '<p>Tell your visitors about the club — history, atmosphere, what makes you different.</p>',
-    }),
-  },
-  {
-    type: 'eventList',
-    label: 'Events',
-    hint: 'Auto-pulled from your events calendar',
-    icon: '◧',
-    defaults: (): EventListProps => ({
-      heading: "What's on",
-      limit: 4,
-      upcomingOnly: true,
-    }),
-  },
-  {
-    type: 'gallery',
-    label: 'Gallery',
-    hint: 'A photo strip of your club',
-    icon: '▨',
-    defaults: (): GalleryProps => ({
-      heading: 'Around the club',
-      images: [],
-    }),
-  },
-  {
-    type: 'membershipCta',
-    label: 'Membership CTA',
-    hint: 'A block that pushes people to /membership',
-    icon: '★',
-    defaults: (): MembershipCtaProps => ({
-      heading: 'Play with us this season',
-      body: 'Whether you\'re a first-time bowler or a seasoned skip, there\'s a spot for you.',
-      ctaLabel: 'See tiers',
-      ctaHref: '/membership',
-    }),
-  },
-  {
-    type: 'ctaBanner',
-    label: 'CTA banner',
-    hint: 'A slim strip with one link',
-    icon: '▬',
-    defaults: (): CtaBannerProps => ({
-      heading: 'Have questions? Get in touch.',
-      ctaLabel: 'Contact us',
-      ctaHref: '/contact',
-      tone: 'accent',
-    }),
-  },
-]
+const clubName = (): string => clubStore.current?.name ?? 'Your club'
+
+const heroDefault = (heading: string, sub: string, cta1: [string, string], cta2?: [string, string]): HeroProps => ({
+  heading,
+  subheading: sub,
+  primaryCta: { label: cta1[0], href: cta1[1] },
+  ...(cta2 ? { secondaryCta: { label: cta2[0], href: cta2[1] } } : {}),
+})
+
+const PALETTES: Record<PageSlug, PaletteItem[]> = {
+  home: [
+    { type: 'hero', label: 'Hero', hint: 'Big heading, tagline, two CTAs', icon: '☰',
+      defaults: (): HeroProps => heroDefault(clubName(), 'A friendly bowls club. New members always welcome.', ['Join us', '/membership'], ['See what\'s on', '/events']) },
+    { type: 'richText', label: 'Rich text', hint: 'A block of writing', icon: '¶',
+      defaults: (): RichTextProps => ({ html: '<p>Tell your visitors about the club — history, atmosphere, what makes you different.</p>' }) },
+    { type: 'eventList', label: 'Events', hint: 'Auto-pulled from your events calendar', icon: '◧',
+      defaults: (): EventListProps => ({ heading: "What's on", limit: 4, upcomingOnly: true }) },
+    { type: 'gallery', label: 'Gallery', hint: 'A photo strip of the club', icon: '▨',
+      defaults: (): GalleryProps => ({ heading: 'Around the club', images: [] }) },
+    { type: 'membershipCta', label: 'Membership CTA', hint: 'Push people to /membership', icon: '★',
+      defaults: (): MembershipCtaProps => ({ heading: 'Play with us this season', body: 'Whether you\'re a first-time bowler or a seasoned skip, there\'s a spot for you.', ctaLabel: 'See tiers', ctaHref: '/membership' }) },
+    { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
+      defaults: (): CtaBannerProps => ({ heading: 'Have questions? Get in touch.', ctaLabel: 'Contact us', ctaHref: '/contact', tone: 'accent' }) },
+  ],
+  about: [
+    { type: 'hero', label: 'Hero', hint: 'Page opener', icon: '☰',
+      defaults: (): HeroProps => heroDefault('About the club', 'Our story, in short.', ['See membership', '/membership']) },
+    { type: 'richText', label: 'Rich text', hint: 'History, atmosphere, values', icon: '¶',
+      defaults: (): RichTextProps => ({ html: '<p>Founded in <strong>[year]</strong>, we\'re a community club welcoming all levels of bowler…</p>' }) },
+    { type: 'gallery', label: 'Gallery', hint: 'Photos of the greens, the pavilion, the people', icon: '▨',
+      defaults: (): GalleryProps => ({ heading: 'The club', images: [] }) },
+    { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
+      defaults: (): CtaBannerProps => ({ heading: 'Come down for a roll-up.', ctaLabel: 'Contact us', ctaHref: '/contact', tone: 'ink' }) },
+  ],
+  membership: [
+    { type: 'hero', label: 'Hero', hint: 'Page opener', icon: '☰',
+      defaults: (): HeroProps => heroDefault('Membership', 'Choose the tier that fits how you play.', ['Contact us', '/contact']) },
+    { type: 'richText', label: 'Rich text', hint: 'Benefits, discounts, joining process', icon: '¶',
+      defaults: (): RichTextProps => ({ html: '<p>Every level has full clubhouse access. Discounted first year for new joiners.</p>' }) },
+    { type: 'membershipCta', label: 'Membership CTA', hint: 'A join-us block with a button', icon: '★',
+      defaults: (): MembershipCtaProps => ({ heading: 'Ready to join?', body: 'Send us a note and we\'ll get you sorted.', ctaLabel: 'Get in touch', ctaHref: '/contact' }) },
+    { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
+      defaults: (): CtaBannerProps => ({ heading: 'Questions about a tier?', ctaLabel: 'Ask us', ctaHref: '/contact', tone: 'surface' }) },
+  ],
+  events: [
+    { type: 'hero', label: 'Hero', hint: 'Page opener', icon: '☰',
+      defaults: (): HeroProps => heroDefault("What's on", 'Tournaments, roll-ups, training nights.', ['Contact us', '/contact']) },
+    { type: 'richText', label: 'Rich text', hint: 'Intro / booking notes', icon: '¶',
+      defaults: (): RichTextProps => ({ html: '<p>Everything coming up at the club. Members can RSVP directly.</p>' }) },
+    { type: 'eventList', label: 'Events list', hint: 'The full upcoming feed', icon: '◧',
+      defaults: (): EventListProps => ({ heading: 'Upcoming', limit: 20, upcomingOnly: true }) },
+    { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
+      defaults: (): CtaBannerProps => ({ heading: 'Want to run an event?', ctaLabel: 'Tell us more', ctaHref: '/contact', tone: 'accent' }) },
+  ],
+  'honour-board': [
+    { type: 'hero', label: 'Hero', hint: 'Page opener', icon: '☰',
+      defaults: (): HeroProps => heroDefault('Honour board', 'A century of results.', ['Back to the club', '/']) },
+    { type: 'richText', label: 'Rich text', hint: 'Preamble', icon: '¶',
+      defaults: (): RichTextProps => ({ html: '<p>Winners of every competition, year by year.</p>' }) },
+    { type: 'honourBoard', label: 'Honour board', hint: 'Recent honour-board entries grouped by category', icon: '♛',
+      defaults: (): HonourBoardProps => ({ heading: undefined, yearsToShow: 10 }) },
+    { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
+      defaults: (): CtaBannerProps => ({ heading: 'Notice something missing?', ctaLabel: 'Let us know', ctaHref: '/contact', tone: 'surface' }) },
+  ],
+  contact: [
+    { type: 'hero', label: 'Hero', hint: 'Page opener', icon: '☰',
+      defaults: (): HeroProps => heroDefault('Contact', 'Say hello. We\'ll get back to you.', ['Directions', '#directions']) },
+    { type: 'richText', label: 'Rich text', hint: 'Address, hours, notes', icon: '¶',
+      defaults: (): RichTextProps => ({ html: '<p>You\'ll find us at the club most afternoons. Drop a note below or email direct.</p>' }) },
+    { type: 'contactForm', label: 'Contact form', hint: 'A simple message form', icon: '✉',
+      defaults: (): ContactFormProps => ({ heading: 'Drop us a note', submitLabel: 'Send', successMessage: 'Thanks — we\'ll be in touch.' }) },
+    { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
+      defaults: (): CtaBannerProps => ({ heading: 'Prefer to call?', ctaLabel: 'Give us a ring', ctaHref: 'tel:+', tone: 'ink' }) },
+  ],
+}
 
 const BLOCK_LABEL: Record<BlockType, string> = {
   hero: 'Hero',
@@ -118,45 +163,49 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   ctaBanner: 'CTA banner',
 }
 
-// ── State ──────────────────────────────────────────────────
+// ── Seed layouts (per page) ───────────────────────────────
 function newBlockId(): string {
   return `blk_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 }
 
-function seedHomeLayout(): Block[] {
-  const clubName = clubStore.current?.name ?? 'Your club'
-  return [
-    {
-      id: newBlockId(),
-      type: 'hero',
-      props: {
-        heading: clubName,
-        subheading: 'A friendly bowls club. New members always welcome.',
-        primaryCta: { label: 'Join us', href: '/membership' },
-        secondaryCta: { label: 'See what\'s on', href: '/events' },
-      } satisfies HeroProps,
-    },
-    {
-      id: newBlockId(),
-      type: 'eventList',
-      props: { heading: "What's on", limit: 4, upcomingOnly: true } satisfies EventListProps,
-    },
-    {
-      id: newBlockId(),
-      type: 'membershipCta',
-      props: {
-        heading: 'Play with us this season',
-        body: 'Whether you\'re a first-time bowler or a seasoned skip, there\'s a spot for you.',
-        ctaLabel: 'See tiers',
-        ctaHref: '/membership',
-      } satisfies MembershipCtaProps,
-    },
-  ]
+function seed(...blocks: Array<{ type: BlockType; props: Block['props'] }>): Block[] {
+  return blocks.map((b) => ({ id: newBlockId(), type: b.type, props: b.props }) as Block)
 }
 
-function storageKey(): string | null {
+const SEEDS: Record<PageSlug, () => Block[]> = {
+  home: () => seed(
+    { type: 'hero', props: heroDefault(clubName(), 'A friendly bowls club. New members always welcome.', ['Join us', '/membership'], ['See what\'s on', '/events']) },
+    { type: 'eventList', props: { heading: "What's on", limit: 4, upcomingOnly: true } satisfies EventListProps },
+    { type: 'membershipCta', props: { heading: 'Play with us this season', body: 'Whether you\'re a first-time bowler or a seasoned skip, there\'s a spot for you.', ctaLabel: 'See tiers', ctaHref: '/membership' } satisfies MembershipCtaProps },
+  ),
+  about: () => seed(
+    { type: 'hero', props: heroDefault('About the club', 'Our story, in short.', ['See membership', '/membership']) },
+    { type: 'richText', props: { html: `<p>Founded in <strong>[year]</strong>, ${clubName()} has been a friendly place to bowl ever since. New members and visitors are always welcome — come down for a roll-up.</p>` } satisfies RichTextProps },
+    { type: 'gallery', props: { heading: 'Around the club', images: [] } satisfies GalleryProps },
+  ),
+  membership: () => seed(
+    { type: 'hero', props: heroDefault('Membership', 'Choose the tier that fits how you play.', ['Contact us', '/contact']) },
+    { type: 'richText', props: { html: '<p>Every level has full clubhouse access. Discounted first year for new joiners.</p>' } satisfies RichTextProps },
+    { type: 'membershipCta', props: { heading: 'Ready to join?', body: 'Send us a note and we\'ll get you sorted.', ctaLabel: 'Get in touch', ctaHref: '/contact' } satisfies MembershipCtaProps },
+  ),
+  events: () => seed(
+    { type: 'hero', props: heroDefault("What's on", 'Tournaments, roll-ups, training nights.', ['Contact us', '/contact']) },
+    { type: 'eventList', props: { heading: 'Upcoming', limit: 20, upcomingOnly: true } satisfies EventListProps },
+  ),
+  'honour-board': () => seed(
+    { type: 'hero', props: heroDefault('Honour board', 'A century of results.', ['Back to the club', '/']) },
+    { type: 'honourBoard', props: { heading: undefined, yearsToShow: 10 } satisfies HonourBoardProps },
+  ),
+  contact: () => seed(
+    { type: 'hero', props: heroDefault('Contact', 'Say hello. We\'ll get back to you.', ['Directions', '#directions']) },
+    { type: 'contactForm', props: { heading: 'Drop us a note', submitLabel: 'Send', successMessage: 'Thanks — we\'ll be in touch.' } satisfies ContactFormProps },
+  ),
+}
+
+// ── Persistence (localStorage MVP) ────────────────────────
+function storageKey(slug: PageSlug): string | null {
   const cid = clubStore.current?.id
-  return cid ? `torny.website.${cid}.home` : null
+  return cid ? `torny.website.${cid}.${slug}` : null
 }
 
 interface StoredLayout {
@@ -166,35 +215,37 @@ interface StoredLayout {
   publishedBlocks: Block[] | null
 }
 
-function loadFromStorage(): StoredLayout {
-  const key = storageKey()
-  if (!key) return { blocks: seedHomeLayout(), draftUpdatedAt: new Date().toISOString(), publishedAt: null, publishedBlocks: null }
+function loadFromStorage(slug: PageSlug): StoredLayout {
+  const key = storageKey(slug)
+  const empty: StoredLayout = { blocks: SEEDS[slug](), draftUpdatedAt: new Date().toISOString(), publishedAt: null, publishedBlocks: null }
+  if (!key) return empty
   try {
     const raw = localStorage.getItem(key)
-    if (!raw) return { blocks: seedHomeLayout(), draftUpdatedAt: new Date().toISOString(), publishedAt: null, publishedBlocks: null }
+    if (!raw) return empty
     const parsed = JSON.parse(raw) as StoredLayout
     return {
-      blocks: parsed.blocks ?? seedHomeLayout(),
+      blocks: parsed.blocks ?? SEEDS[slug](),
       draftUpdatedAt: parsed.draftUpdatedAt ?? new Date().toISOString(),
       publishedAt: parsed.publishedAt ?? null,
       publishedBlocks: parsed.publishedBlocks ?? null,
     }
   } catch {
-    return { blocks: seedHomeLayout(), draftUpdatedAt: new Date().toISOString(), publishedAt: null, publishedBlocks: null }
+    return empty
   }
 }
 
-const state = reactive<StoredLayout>(loadFromStorage())
+const state = reactive<StoredLayout>(loadFromStorage(currentPage.value))
 const selectedId = ref<string | null>(state.blocks[0]?.id ?? null)
-const paletteOpen = ref<null | { after: string | null }>(null)  // null = closed; { after: 'blk-3' } = insert after that block; { after: null } = at the end
+const paletteOpen = ref<null | { after: string | null }>(null)
 const saving = ref(false)
 const publishing = ref(false)
 
-// Reload when the active club changes.
-watch(() => clubStore.current?.id, () => {
-  const fresh = loadFromStorage()
+// Reload when either the active club OR the active page changes.
+watch([() => clubStore.current?.id, currentPage], ([, slug]) => {
+  const fresh = loadFromStorage(slug)
   Object.assign(state, fresh)
   selectedId.value = state.blocks[0]?.id ?? null
+  paletteOpen.value = null
 })
 
 const selectedBlock = computed<Block | null>(() => state.blocks.find((b) => b.id === selectedId.value) ?? null)
@@ -204,9 +255,8 @@ const hasUnpublishedChanges = computed(() => {
   return JSON.stringify(state.blocks) !== JSON.stringify(state.publishedBlocks)
 })
 
-// ── Persistence (localStorage MVP) ─────────────────────────
 function persist(): void {
-  const key = storageKey()
+  const key = storageKey(currentPage.value)
   if (!key) return
   state.draftUpdatedAt = new Date().toISOString()
   try {
@@ -225,21 +275,17 @@ function scheduleSave(): void {
     persist()
     saving.value = false
     // Once brief 16 §2.2 lands, replace persist() with:
-    //   await pages.patch(clubId, 'home', { layout_draft: { blocks: state.blocks } })
+    //   await pages.patch(clubId, currentPage.value, { layout_draft: { blocks: state.blocks } })
   }, 500)
 }
 
 watch(() => state.blocks, scheduleSave, { deep: true })
 
-// ── Block ops ──────────────────────────────────────────────
+// ── Block ops ─────────────────────────────────────────────
 function addBlock(type: BlockType, afterId: string | null): void {
-  const palette = HOME_PALETTE.find((p) => p.type === type)
+  const palette = PALETTES[currentPage.value].find((p) => p.type === type)
   if (!palette) return
-  const block = {
-    id: newBlockId(),
-    type,
-    props: palette.defaults(),
-  } as Block
+  const block = { id: newBlockId(), type, props: palette.defaults() } as Block
   const idx = afterId ? state.blocks.findIndex((b) => b.id === afterId) : -1
   if (idx === -1) state.blocks.push(block)
   else state.blocks.splice(idx + 1, 0, block)
@@ -263,21 +309,30 @@ function moveBlock(id: string, dir: -1 | 1): void {
   state.blocks.splice(target, 0, block)
 }
 
-// ── Publish (mocked until brief 16 §2.3 lands) ─────────────
+// ── Publish (mocked until brief 16 §2.3 lands) ────────────
 async function publish(): Promise<void> {
   if (!hasUnpublishedChanges.value) return
   publishing.value = true
   try {
     // Once brief 16 §2.3 lands:
-    //   await pages.publish(clubId, 'home')
+    //   await pages.publish(clubId, currentPage.value)
     await new Promise((r) => setTimeout(r, 600))
     state.publishedBlocks = JSON.parse(JSON.stringify(state.blocks)) as Block[]
     state.publishedAt = new Date().toISOString()
     persist()
-    toast.success('Home page published.')
+    toast.success(`${PAGE_LABELS[currentPage.value]} page published.`)
   } finally {
     publishing.value = false
   }
+}
+
+const PREVIEW_PATHS: Record<PageSlug, string> = {
+  home: '/',
+  about: '/about',
+  membership: '/membership',
+  events: '/events',
+  'honour-board': '/honour-board',
+  contact: '/contact',
 }
 
 function preview(): void {
@@ -286,8 +341,8 @@ function preview(): void {
     toast.info('Preview needs an active club.')
     return
   }
-  // Dev — points at the club-sites local Nuxt with the tenant override.
-  window.open(`http://localhost:3001/?host=${slug}.torny.club`, '_blank', 'noopener')
+  const path = PREVIEW_PATHS[currentPage.value]
+  window.open(`http://localhost:3001${path}?host=${slug}.torny.club`, '_blank', 'noopener')
 }
 
 // ── Block summary (shown in the list row) ─────────────────
@@ -296,7 +351,9 @@ function blockSummary(block: Block): string {
     case 'hero':          return (block.props as HeroProps).heading || '(no heading)'
     case 'richText':      return stripHtml((block.props as RichTextProps).html).slice(0, 60)
     case 'eventList':     return (block.props as EventListProps).heading ?? `${(block.props as EventListProps).limit ?? 4} upcoming events`
+    case 'honourBoard':   return (block.props as HonourBoardProps).heading || `Honour board — last ${(block.props as HonourBoardProps).yearsToShow ?? 10} years`
     case 'gallery':       return `${(block.props as GalleryProps).images.length} photos`
+    case 'contactForm':   return (block.props as ContactFormProps).heading || 'Contact form'
     case 'membershipCta': return (block.props as MembershipCtaProps).heading || '(no heading)'
     case 'ctaBanner':     return (block.props as CtaBannerProps).heading || '(no heading)'
     default:              return ''
@@ -322,8 +379,8 @@ const lastSavedLabel = computed(() => {
     <header class="web__header">
       <div>
         <div class="web__eyebrow">Website</div>
-        <h1 class="web__heading">Home page</h1>
-        <p class="web__sub">Drag blocks to reorder, click to edit. Autosaves as you type — publish when you're ready.</p>
+        <h1 class="web__heading">{{ PAGE_LABELS[currentPage] }} page</h1>
+        <p class="web__sub">{{ PAGE_SUBTITLES[currentPage] }}</p>
       </div>
       <div class="web__actions">
         <span class="web__save-hint">{{ lastSavedLabel }}</span>
@@ -337,6 +394,17 @@ const lastSavedLabel = computed(() => {
         </button>
       </div>
     </header>
+
+    <nav class="page-tabs" aria-label="Website pages">
+      <button
+        v-for="slug in PAGE_SLUGS"
+        :key="slug"
+        type="button"
+        class="page-tab"
+        :class="{ 'page-tab--active': currentPage === slug }"
+        @click="switchPage(slug)"
+      >{{ PAGE_LABELS[slug] }}</button>
+    </nav>
 
     <div class="web__body">
       <!-- Block list -->
@@ -374,7 +442,7 @@ const lastSavedLabel = computed(() => {
             <button type="button" class="inserter__btn" @click="paletteOpen = { after: block.id }">+ Add block</button>
             <div v-if="paletteOpen?.after === block.id" class="palette" @click.stop>
               <button
-                v-for="p in HOME_PALETTE"
+                v-for="p in PALETTES[currentPage]"
                 :key="p.type"
                 type="button"
                 class="palette__item"
@@ -393,7 +461,7 @@ const lastSavedLabel = computed(() => {
         <!-- Palette when the page is empty (opened above the first row) -->
         <div v-if="paletteOpen && paletteOpen.after === null && state.blocks.length === 0" class="palette palette--top" @click.stop>
           <button
-            v-for="p in HOME_PALETTE"
+            v-for="p in PALETTES[currentPage]"
             :key="p.type"
             type="button"
             class="palette__item"
@@ -505,6 +573,39 @@ const lastSavedLabel = computed(() => {
             </label>
           </template>
 
+          <!-- Honour board -->
+          <template v-else-if="selectedBlock.type === 'honourBoard'">
+            <label class="field">
+              <span class="field__label">Heading (optional)</span>
+              <input v-model="(selectedBlock.props as HonourBoardProps).heading" type="text" placeholder="Leave blank for no heading" />
+            </label>
+            <label class="field">
+              <span class="field__label">Category slug (optional)</span>
+              <input v-model="(selectedBlock.props as HonourBoardProps).categorySlug" type="text" placeholder="e.g. mens-singles — leave blank for all" />
+              <span class="field__hint">Show entries from one category only. Leave blank to group all categories.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Years to show</span>
+              <input v-model.number="(selectedBlock.props as HonourBoardProps).yearsToShow" type="number" min="1" max="100" />
+            </label>
+          </template>
+
+          <!-- Contact form -->
+          <template v-else-if="selectedBlock.type === 'contactForm'">
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as ContactFormProps).heading" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Submit button label</span>
+              <input v-model="(selectedBlock.props as ContactFormProps).submitLabel" type="text" placeholder="Send" />
+            </label>
+            <label class="field">
+              <span class="field__label">Success message</span>
+              <textarea v-model="(selectedBlock.props as ContactFormProps).successMessage" rows="2" placeholder="Thanks — we'll be in touch." />
+            </label>
+          </template>
+
           <!-- Membership CTA -->
           <template v-else-if="selectedBlock.type === 'membershipCta'">
             <label class="field">
@@ -576,7 +677,7 @@ const lastSavedLabel = computed(() => {
 </template>
 
 <style scoped>
-.web { max-width: 1280px; display: flex; flex-direction: column; gap: 24px; }
+.web { max-width: 1280px; display: flex; flex-direction: column; gap: 20px; }
 
 .web__header { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
 .web__eyebrow { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; color: var(--color-fog); text-transform: uppercase; }
@@ -591,6 +692,12 @@ const lastSavedLabel = computed(() => {
 .btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 .btn--outline:hover { background: var(--color-surface); }
+
+/* Page tabs */
+.page-tabs { display: flex; gap: 4px; padding: 4px; background: var(--color-surface); border-radius: 12px; align-self: flex-start; flex-wrap: wrap; }
+.page-tab { padding: 8px 14px; background: transparent; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-fog); cursor: pointer; white-space: nowrap; transition: color 0.12s ease, background-color 0.12s ease; }
+.page-tab:hover { color: var(--color-ink); }
+.page-tab--active { background: #fff; color: var(--color-ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
 
 /* Two-column layout */
 .web__body { display: grid; grid-template-columns: 1fr 340px; gap: 24px; align-items: start; }

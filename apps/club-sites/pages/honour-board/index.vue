@@ -24,6 +24,7 @@ const byCategory = computed(() => {
 </script>
 
 <template>
+  <PageRenderer slug="honour-board">
   <div class="honour" :style="{ '--brand': accent } as any">
     <header class="page-head">
       <div class="page-head__eyebrow">A century of results</div>
@@ -49,6 +50,7 @@ const byCategory = computed(() => {
       </section>
     </div>
   </div>
+  </PageRenderer>
 </template>
 
 <style scoped>

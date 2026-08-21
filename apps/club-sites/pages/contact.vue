@@ -23,6 +23,7 @@ const mapsUrl = computed(() => {
 </script>
 
 <template>
+  <PageRenderer slug="contact">
   <div class="contact" :style="{ '--brand': accent } as any">
     <header class="page-head">
       <div class="page-head__eyebrow">Get in touch</div>
@@ -62,6 +63,7 @@ const mapsUrl = computed(() => {
       </section>
     </div>
   </div>
+  </PageRenderer>
 </template>
 
 <style scoped>

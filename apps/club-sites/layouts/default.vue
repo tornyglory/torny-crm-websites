@@ -12,6 +12,7 @@ useTheme()
       </div>
       <nav class="site__nav">
         <NuxtLink to="/">Home</NuxtLink>
+        <NuxtLink to="/about">About</NuxtLink>
         <NuxtLink to="/events">Events</NuxtLink>
         <NuxtLink to="/honour-board">Honour board</NuxtLink>
         <NuxtLink to="/membership">Membership</NuxtLink>

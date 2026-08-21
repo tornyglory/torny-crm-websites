@@ -28,6 +28,7 @@ function fmtTime(iso: string): string {
 </script>
 
 <template>
+  <PageRenderer slug="events">
   <div class="events" :style="{ '--brand': accent } as any">
     <header class="page-head">
       <div class="page-head__eyebrow">What's on</div>
@@ -59,6 +60,7 @@ function fmtTime(iso: string): string {
       </li>
     </ul>
   </div>
+  </PageRenderer>
 </template>
 
 <style scoped>

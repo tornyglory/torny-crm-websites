@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import CrmEmptyState from '@/components/CrmEmptyState.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
@@ -9,10 +9,11 @@ import { useToast } from '@/composables/useToast'
 import { useMemberSearch } from '@/composables/useMemberSearch'
 import { useClubStore } from '@/stores/club'
 import { useAuthStore } from '@/stores/auth'
-import { members as membersApi, ApiError, type PaymentMethod, type RosterMember, type MembersSummary, type MembershipTierListItem } from '@torny/api-client'
+import { members as membersApi, seasons as seasonsApi, ApiError, type PaymentMethod, type RosterMember, type MembersSummary, type MembershipTierListItem, type Season } from '@torny/api-client'
 
 const toast = useToast()
 const clubStore = useClubStore()
+const router = useRouter()
 const authStore = useAuthStore()
 
 type MemberStatus = 'Active' | 'Pending' | 'Lapsed'
@@ -60,6 +61,12 @@ interface Member {
   cadence?: 'annual' | 'monthly' | 'season' | null
   /** Server payment status ('paid' | 'partial' | 'unpaid' | 'overdue' | 'waived'). */
   paymentStatus?: 'paid' | 'unpaid' | 'partial' | 'overdue' | 'waived' | null
+  /** YYYY-MM-DD — next payment due, from `membership.payment_due_date`. */
+  paymentDueDate?: string | null
+  /** ISO 8601 UTC — most recent payment date, from `membership.last_payment_date`. */
+  lastPaymentDate?: string | null
+  /** ISO 8601 UTC — when the member was revoked (lapsed rows only). */
+  revokedAt?: string | null
 }
 
 const {
@@ -183,6 +190,9 @@ function rosterToView(r: RosterMember): Member {
     balanceOwed: r.membership?.balance_owed ?? null,
     cadence: r.membership?.cadence ?? null,
     paymentStatus: (r.membership?.payment_status as Member['paymentStatus']) ?? null,
+    paymentDueDate: r.membership?.payment_due_date ?? null,
+    lastPaymentDate: r.membership?.last_payment_date ?? null,
+    revokedAt: r.revoked_at ?? null,
   }
 }
 
@@ -243,7 +253,10 @@ async function loadRoster() {
 }
 
 async function loadAll() {
-  await Promise.all([loadRoster(), loadSummary(), loadTiers()])
+  // Reset season selection when the active club changes so the summary
+  // defaults to the new club's current season rather than a stale id.
+  selectedSeasonId.value = null
+  await Promise.all([loadRoster(), loadSummary(), loadTiers(), loadSeasons()])
 }
 
 onMounted(loadAll)
@@ -286,6 +299,18 @@ const membershipOptions = computed<MembershipType[]>(() => {
 
 function initials(m: Member) {
   return m.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
+}
+
+/**
+ * True when the member has an actual uploaded avatar. Cloudflare Images
+ * hosts our uploads on `imagedelivery.net`; anything else the server
+ * hands back (gravatar-style URLs, generic silhouettes) is a default
+ * we'd rather replace with initials.
+ */
+function hasRealAvatar(m: Member): boolean {
+  const url = m.avatarUrl
+  if (!url) return false
+  return url.includes('imagedelivery.net')
 }
 
 const statusTone: Record<MemberStatus, string> = {
@@ -331,6 +356,89 @@ const duesTone: Record<DuesStatus, string> = {
   Overdue: 'danger',
 }
 
+/**
+ * Unified "Standing" — the single pill that replaces the redundant
+ * Dues + Status pair. One tone, one label, plus a natural-language
+ * sub-line telling the story (last payment, next due, etc.).
+ *
+ * Precedence:
+ *   1. Lapsed          → "No active membership"
+ *   2. Pending invite  → "Invite sent · resend"
+ *   3. Waived fees     → "Fees waived"
+ *   4. Overdue         → "Overdue since {date}"
+ *   5. Partial payment → "$X of $Y paid"
+ *   6. Due soon        → "Due {date}"
+ *   7. Paid up         → "Last paid {date}"
+ *   8. No tier         → "No membership"
+ */
+type StandingTone = 'paid' | 'due' | 'overdue' | 'waived' | 'partial' | 'invited' | 'lapsed' | 'none'
+interface Standing {
+  tone: StandingTone
+  label: string
+  sub: string
+}
+const SHORT_DATE_FMT = new Intl.DateTimeFormat(undefined, {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+})
+function formatShortDate(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return SHORT_DATE_FMT.format(d)
+}
+function standing(m: Member): Standing {
+  if (m.status === 'Lapsed') {
+    const on = formatShortDate(m.revokedAt)
+    return { tone: 'lapsed', label: 'Lapsed', sub: on ? `Left ${on}` : 'No active membership' }
+  }
+  if (m.status === 'Pending' && (m.paymentStatus == null || m.paymentStatus === 'unpaid')) {
+    return { tone: 'invited', label: 'Invited', sub: 'Invite sent · resend' }
+  }
+  if (m.paymentStatus === 'waived') {
+    return { tone: 'waived', label: 'Waived', sub: 'Fees waived' }
+  }
+  if (m.paymentStatus === 'overdue') {
+    const since = formatShortDate(m.paymentDueDate)
+    return {
+      tone: 'overdue',
+      label: m.fee != null ? `Overdue · $${m.fee}` : 'Overdue',
+      sub: since ? `Overdue since ${since}` : 'Payment overdue',
+    }
+  }
+  if (m.paymentStatus === 'partial') {
+    const paid = m.totalPaidThisSeason ?? 0
+    return {
+      tone: 'partial',
+      label: m.fee != null ? `Part · $${paid}/$${m.fee}` : 'Partial',
+      sub: m.balanceOwed != null
+        ? `$${m.balanceOwed} outstanding${m.paymentDueDate ? ` · Due ${formatShortDate(m.paymentDueDate)}` : ''}`
+        : 'Partial payment',
+    }
+  }
+  if (m.paymentStatus === 'paid') {
+    const on = formatShortDate(m.lastPaymentDate)
+    return {
+      tone: 'paid',
+      label: m.fee != null ? `Paid · $${m.fee}` : 'Paid',
+      sub: on ? `Last paid ${on}` : 'Up to date',
+    }
+  }
+  if (m.paymentStatus === 'unpaid' || m.duesStatus === 'Due') {
+    const on = formatShortDate(m.paymentDueDate)
+    return {
+      tone: 'due',
+      label: m.fee != null ? `Due · $${m.fee}` : 'Due',
+      sub: on ? `Due ${on}` : 'Payment due',
+    }
+  }
+  if (m.fee == null) {
+    return { tone: 'none', label: 'No tier', sub: 'No membership assigned' }
+  }
+  return { tone: 'paid', label: 'Up to date', sub: 'No outstanding balance' }
+}
+
 function membershipBadge(m: Member): { label: string; tone: string } | null {
   if (m.membership === 'Life member') return { label: 'Life', tone: 'violet' }
   if (m.membership === 'Junior' || m.role === 'Junior') return { label: 'Junior', tone: 'sky' }
@@ -353,17 +461,45 @@ const summaryLoading = ref(false)
 const availableTiers = ref<MembershipTierListItem[]>([])
 const tiersLoading = ref(false)
 
+// Seasons list + which one drives the summary. `null` = server's current
+// season (its own choice); numeric id = view a past / future season without
+// changing which is current on the club.
+const seasonsList = ref<Season[]>([])
+const selectedSeasonId = ref<number | null>(null)
+
 async function loadSummary() {
   const cid = clubStore.current?.id
   if (cid == null) { summary.value = null; return }
   summaryLoading.value = true
   try {
-    summary.value = await membersApi.summary(cid)
+    summary.value = await membersApi.summary(
+      cid,
+      selectedSeasonId.value != null ? { season_id: selectedSeasonId.value } : {},
+    )
+    // Server tells us which season it actually returned — track it so the
+    // picker's selection stays in sync when we default to "current".
+    if (selectedSeasonId.value == null && summary.value?.season_id != null) {
+      selectedSeasonId.value = summary.value.season_id
+    }
   } catch {
     summary.value = null
   } finally {
     summaryLoading.value = false
   }
+}
+
+async function loadSeasons() {
+  const cid = clubStore.current?.id
+  if (cid == null) { seasonsList.value = []; return }
+  try {
+    seasonsList.value = await seasonsApi.list(cid)
+  } catch {
+    seasonsList.value = []
+  }
+}
+
+function onSeasonChange() {
+  void loadSummary()
 }
 
 async function loadTiers() {
@@ -385,20 +521,16 @@ function fmtMoney(n: number | null | undefined): string {
   return `$${n}`
 }
 
-// ── Detail modal ────────────────────────────────────────────────
-const detailOpen = ref(false)
+// ── Navigation to detail page ───────────────────────────────────
+// The detail modal was replaced by MemberDetailView (design 33).
+// `activeMember` + `detailOpen` + `closeDetail` are kept as stubs so
+// the follow-on Edit / Payment / Remove modals (which read them) still
+// compile — they'll be re-triggered from the detail page in a follow-up.
 const activeMember = ref<Member | null>(null)
-
+const detailOpen = ref(false)
+function closeDetail() { detailOpen.value = false }
 function openDetail(m: Member) {
-  activeMember.value = m
-  detailOpen.value = true
-}
-function closeDetail() {
-  detailOpen.value = false
-}
-function messageMember() {
-  if (!activeMember.value) return
-  toast.info(`Message composer for ${activeMember.value.name} coming next session.`)
+  router.push({ name: 'member-detail', params: { id: m.id } })
 }
 
 // ── Edit member modal ──────────────────────────────────────────
@@ -408,6 +540,105 @@ const callerIsOwner = computed(() => {
   if (cid == null) return false
   return authStore.user?.clubs?.some((c) => c.id === cid && c.role === 'owner') ?? false
 })
+
+/** Owner OR admin — the two roles the server accepts on season create /
+ *  set-current endpoints. Non-admins see the picker but not "New season". */
+const callerCanManageSeasons = computed(() => {
+  const cid = clubStore.current?.id
+  if (cid == null) return false
+  return (
+    authStore.user?.clubs?.some(
+      (c) => c.id === cid && (c.role === 'owner' || c.role === 'admin'),
+    ) ?? false
+  )
+})
+
+// ── New season modal ───────────────────────────────────────────
+const newSeasonOpen = ref(false)
+const newSeasonSubmitting = ref(false)
+const newSeasonError = ref<string | null>(null)
+const newSeasonFieldErrors = ref<Partial<Record<'season_name' | 'start_date' | 'end_date' | 'default_fee', string>>>({})
+const newSeasonForm = reactive({
+  season_name: '',
+  start_date: '',
+  end_date: '',
+  default_fee: '' as string,
+  description: '',
+  set_current: true,
+})
+
+function resetNewSeasonForm() {
+  newSeasonForm.season_name = ''
+  newSeasonForm.start_date = ''
+  newSeasonForm.end_date = ''
+  newSeasonForm.default_fee = ''
+  newSeasonForm.description = ''
+  newSeasonForm.set_current = true
+  newSeasonError.value = null
+  newSeasonFieldErrors.value = {}
+}
+
+function openNewSeason() {
+  resetNewSeasonForm()
+  newSeasonOpen.value = true
+}
+function closeNewSeason() {
+  if (newSeasonSubmitting.value) return
+  newSeasonOpen.value = false
+}
+
+const canSubmitNewSeason = computed(
+  () =>
+    newSeasonForm.season_name.trim().length > 0 &&
+    newSeasonForm.start_date.length > 0 &&
+    newSeasonForm.end_date.length > 0 &&
+    newSeasonForm.end_date >= newSeasonForm.start_date,
+)
+
+async function submitNewSeason() {
+  const cid = clubStore.current?.id
+  if (cid == null || !canSubmitNewSeason.value) return
+  newSeasonSubmitting.value = true
+  newSeasonError.value = null
+  newSeasonFieldErrors.value = {}
+  try {
+    const fee = newSeasonForm.default_fee.trim()
+    const created = await seasonsApi.create(cid, {
+      season_name: newSeasonForm.season_name.trim(),
+      start_date: newSeasonForm.start_date,
+      end_date: newSeasonForm.end_date,
+      default_fee: fee.length > 0 ? Number(fee) : undefined,
+      description: newSeasonForm.description.trim() || undefined,
+      set_current: newSeasonForm.set_current,
+    })
+    // Refetch seasons + summary; if the new one is now current, honour that,
+    // otherwise switch the picker to it so the owner sees zeroed numbers.
+    await loadSeasons()
+    selectedSeasonId.value = created.season_id
+    await loadSummary()
+    toast.success(`"${created.season_name}" created.`)
+    newSeasonOpen.value = false
+  } catch (err) {
+    if (err instanceof ApiError) {
+      const code = err.code ?? ''
+      const fieldMap: Record<string, keyof typeof newSeasonFieldErrors.value> = {
+        invalid_name: 'season_name',
+        invalid_start_date: 'start_date',
+        invalid_end_date: 'end_date',
+        invalid_date_range: 'end_date',
+        invalid_fee: 'default_fee',
+      }
+      const key = fieldMap[code]
+      if (key) newSeasonFieldErrors.value[key] = err.message
+      else if (code === 'season_exists') newSeasonError.value = 'A season with that name already exists.'
+      else newSeasonError.value = err.message
+    } else {
+      newSeasonError.value = err instanceof Error ? err.message : 'Failed to create season.'
+    }
+  } finally {
+    newSeasonSubmitting.value = false
+  }
+}
 
 const editOpen = ref(false)
 const editSubmitting = ref(false)
@@ -704,6 +935,33 @@ async function submit() {
         <p class="members__sub">{{ heroCounts.total }} total · {{ heroCounts.active }} active</p>
       </div>
       <div class="members__actions">
+        <label v-if="seasonsList.length > 0" class="season-picker">
+          <span class="season-picker__label">Season</span>
+          <select
+            v-model="selectedSeasonId"
+            class="season-picker__select"
+            @change="onSeasonChange"
+          >
+            <option
+              v-for="s in seasonsList"
+              :key="s.season_id"
+              :value="s.season_id"
+            >
+              {{ s.season_name }}{{ s.is_current_season ? ' · current' : '' }}
+            </option>
+          </select>
+          <svg class="season-picker__chev" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </label>
+        <button
+          v-if="callerCanManageSeasons"
+          type="button"
+          class="members__btn members__btn--outline"
+          @click="openNewSeason"
+        >
+          + New season
+        </button>
         <div class="search">
           <svg class="search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8" />
@@ -752,7 +1010,12 @@ async function submit() {
     <!-- Roster stat panels — server-side summary (brief 13 backend response) -->
     <section v-if="summary" class="stats">
       <div class="stat-panel">
-        <div class="stat-panel__label">Expected fees</div>
+        <div class="stat-panel__label">
+          Expected fees
+          <span v-if="summary.season_name" class="stat-panel__label-season">
+            · {{ summary.season_name }}<template v-if="summary.is_current_season"> · current</template>
+          </span>
+        </div>
         <div class="stat-panel__value">{{ fmtMoney(summary.expected_fees) }}</div>
         <div class="stat-panel__sub">{{ summary.counts.active }} active member{{ summary.counts.active === 1 ? '' : 's' }}</div>
       </div>
@@ -820,17 +1083,19 @@ async function submit() {
           <th>Name</th>
           <th>Email</th>
           <th>Membership</th>
-          <th>Dues</th>
-          <th>Status</th>
+          <th>Standing</th>
           <th aria-label="Actions" />
         </tr>
       </thead>
       <tbody>
-        <tr v-for="m in filtered" :key="m.id" class="row" tabindex="0" @click="openDetail(m)" @keydown.enter="openDetail(m)">
+        <tr v-for="m in filtered" :key="m.id" class="row" :class="{ 'row--lapsed': m.status === 'Lapsed' }" tabindex="0" @click="openDetail(m)" @keydown.enter="openDetail(m)">
           <td class="row__name">
             <div class="row__name-inner">
-              <div class="row__avatar" :class="{ 'row__avatar--image': m.avatarUrl }">
-                <img v-if="m.avatarUrl" :src="m.avatarUrl" :alt="m.name" />
+              <div
+                class="row__avatar"
+                :class="{ 'row__avatar--image': hasRealAvatar(m), 'row__avatar--invited': standing(m).tone === 'invited' }"
+              >
+                <img v-if="hasRealAvatar(m)" :src="m.avatarUrl!" :alt="m.name" />
                 <template v-else>{{ initials(m) }}</template>
               </div>
               <div class="row__name-text">
@@ -840,7 +1105,9 @@ async function submit() {
                   <span v-if="roleBadge(m)" class="badge" :class="`badge--${roleBadge(m)!.tone}`">{{ roleBadge(m)!.label }}</span>
                 </div>
                 <div class="row__name-sub">
-                  {{ m.memberNumber }}<template v-if="m.joinedAt !== '—'"> · joined {{ m.joinedAt }}</template>
+                  <template v-if="m.memberNumber !== '—'">{{ m.memberNumber }}</template>
+                  <template v-if="m.joinedAt !== '—'"><template v-if="m.memberNumber !== '—'"> · </template>Joined {{ m.joinedAt }}</template>
+                  <template v-if="m.phone"><template v-if="m.memberNumber !== '—' || m.joinedAt !== '—'"> · </template>{{ m.phone }}</template>
                 </div>
               </div>
             </div>
@@ -851,10 +1118,9 @@ async function submit() {
             <div v-if="feeLabel(m)" class="row__fee">{{ feeLabel(m) }}</div>
           </td>
           <td>
-            <span class="pill" :class="`pill--${duesTone[m.duesStatus]}`">{{ m.duesStatus }}</span>
-            <div v-if="duesAmountLabel(m)" class="row__dues-amount">{{ duesAmountLabel(m) }}</div>
+            <span class="standing-pill" :class="`standing-pill--${standing(m).tone}`">{{ standing(m).label }}</span>
+            <div class="row__standing-sub" :class="{ 'row__standing-sub--danger': standing(m).tone === 'overdue' }">{{ standing(m).sub }}</div>
           </td>
-          <td><span class="pill" :class="`pill--${statusTone[m.status]}`">{{ m.status }}</span></td>
           <td class="row__chev" aria-hidden="true">›</td>
         </tr>
         <template v-if="showTableSkeleton">
@@ -874,14 +1140,19 @@ async function submit() {
               </div>
             </td>
             <td><CrmSkeleton shape="text" width="70%" /></td>
-            <td><CrmSkeleton shape="text" width="55%" /></td>
-            <td><CrmSkeleton width="48px" height="18px" radius="999px" /></td>
-            <td><CrmSkeleton width="52px" height="18px" radius="999px" /></td>
+            <td>
+              <CrmSkeleton shape="text" width="55%" />
+              <CrmSkeleton shape="text" width="35%" />
+            </td>
+            <td>
+              <CrmSkeleton width="86px" height="18px" radius="999px" />
+              <CrmSkeleton shape="text" width="60%" />
+            </td>
             <td aria-hidden="true" />
           </tr>
         </template>
         <tr v-else-if="isSearching && searchError && !filtered.length">
-          <td colspan="6" class="empty">
+          <td colspan="5" class="empty">
             <CrmEmptyState
               variant="error"
               title="We couldn't run that search"
@@ -892,7 +1163,7 @@ async function submit() {
           </td>
         </tr>
         <tr v-else-if="!isSearching && rosterError && !filtered.length">
-          <td colspan="6" class="empty">
+          <td colspan="5" class="empty">
             <CrmEmptyState
               variant="error"
               title="We couldn't load the roster"
@@ -903,7 +1174,7 @@ async function submit() {
           </td>
         </tr>
         <tr v-else-if="!filtered.length">
-          <td colspan="6" class="empty">
+          <td colspan="5" class="empty">
             <CrmEmptyState
               variant="empty"
               :title="emptyTitle"
@@ -918,27 +1189,29 @@ async function submit() {
 
     <!-- Mobile card list -->
     <ul class="cards">
-      <li v-for="m in filtered" :key="m.id" class="card" tabindex="0" @click="openDetail(m)" @keydown.enter="openDetail(m)">
-        <div class="card__avatar" :class="{ 'card__avatar--image': m.avatarUrl }">
-          <img v-if="m.avatarUrl" :src="m.avatarUrl" :alt="m.name" />
+      <li v-for="m in filtered" :key="m.id" class="card" :class="{ 'card--lapsed': m.status === 'Lapsed' }" tabindex="0" @click="openDetail(m)" @keydown.enter="openDetail(m)">
+        <div
+          class="card__avatar"
+          :class="{ 'card__avatar--image': hasRealAvatar(m), 'card__avatar--invited': standing(m).tone === 'invited' }"
+        >
+          <img v-if="hasRealAvatar(m)" :src="m.avatarUrl!" :alt="m.name" />
           <template v-else>{{ initials(m) }}</template>
         </div>
         <div class="card__body">
           <div class="card__name-row">
             <div class="card__name">{{ m.name }}</div>
-            <span class="pill" :class="`pill--${statusTone[m.status]}`">{{ m.status }}</span>
+            <span class="standing-pill" :class="`standing-pill--${standing(m).tone}`">{{ standing(m).label }}</span>
           </div>
           <div class="card__badges">
             <span v-if="membershipBadge(m)" class="badge" :class="`badge--${membershipBadge(m)!.tone}`">{{ membershipBadge(m)!.label }}</span>
             <span v-if="roleBadge(m)" class="badge" :class="`badge--${roleBadge(m)!.tone}`">{{ roleBadge(m)!.label }}</span>
-            <span v-if="m.duesStatus !== 'Paid'" class="badge" :class="`badge--${duesTone[m.duesStatus]}-soft`">{{ m.duesStatus === 'Overdue' ? 'Dues overdue' : 'Dues due' }}</span>
           </div>
-          <div v-if="feeLabel(m) || duesAmountLabel(m)" class="card__fee">
-            <span v-if="feeLabel(m)">{{ feeLabel(m) }}</span>
-            <span v-if="feeLabel(m) && duesAmountLabel(m)" class="card__fee-sep">·</span>
-            <span v-if="duesAmountLabel(m)" :class="`card__fee-${duesTone[m.duesStatus]}`">{{ duesAmountLabel(m) }}</span>
+          <div class="card__meta">
+            <span>{{ m.membership }}</span>
+            <template v-if="feeLabel(m)"><span class="card__meta-sep">·</span><span class="card__meta-mono">{{ feeLabel(m) }}</span></template>
           </div>
-          <div class="card__contact">{{ m.email }}</div>
+          <div class="card__standing-sub" :class="{ 'card__standing-sub--danger': standing(m).tone === 'overdue' }">{{ standing(m).sub }}</div>
+          <div class="card__contact">{{ m.email }}<template v-if="m.phone"> · {{ m.phone }}</template></div>
         </div>
       </li>
       <template v-if="showTableSkeleton">
@@ -987,89 +1260,7 @@ async function submit() {
 
     <button class="fab" @click="openAdd">+ Add member</button>
 
-    <!-- Member detail modal -->
-    <CrmModal
-      :open="detailOpen"
-      eyebrow="Member"
-      :title="activeMember?.name ?? ''"
-      width="lg"
-      @close="closeDetail"
-    >
-      <template v-if="activeMember">
-        <div class="detail">
-          <div class="detail__hero" :class="`detail__hero--${statusTone[activeMember.status]}`">
-            <div class="detail__avatar" :class="{ 'detail__avatar--image': activeMember.avatarUrl }">
-              <img v-if="activeMember.avatarUrl" :src="activeMember.avatarUrl" :alt="activeMember.name" />
-              <template v-else>{{ initials(activeMember) }}</template>
-            </div>
-            <div class="detail__hero-body">
-              <div class="detail__hero-line">{{ activeMember.membership }} · {{ activeMember.role }}</div>
-              <div class="detail__hero-meta">
-                {{ activeMember.memberNumber }}<template v-if="activeMember.joinedAt !== '—'"> · joined {{ activeMember.joinedAt }}</template>
-              </div>
-            </div>
-            <div class="detail__hero-badges">
-              <span class="pill" :class="`pill--${statusTone[activeMember.status]}`">{{ activeMember.status }}</span>
-              <span v-if="membershipBadge(activeMember)" class="badge" :class="`badge--${membershipBadge(activeMember)!.tone}`">{{ membershipBadge(activeMember)!.label }}</span>
-              <span v-if="roleBadge(activeMember)" class="badge" :class="`badge--${roleBadge(activeMember)!.tone}`">{{ roleBadge(activeMember)!.label }}</span>
-            </div>
-          </div>
-
-          <div class="detail__stats">
-            <div class="stat" :class="`stat--${duesTone[activeMember.duesStatus]}`">
-              <div class="stat__value">{{ activeMember.duesStatus }}</div>
-              <div class="stat__label">Dues</div>
-              <div v-if="duesAmountLabel(activeMember)" class="stat__hint">{{ duesAmountLabel(activeMember) }}</div>
-              <div v-else-if="activeMember.duesNote" class="stat__hint">{{ activeMember.duesNote }}</div>
-            </div>
-            <div class="stat">
-              <div class="stat__value">{{ activeMember.eventsAttended }}</div>
-              <div class="stat__label">Events attended</div>
-            </div>
-            <div class="stat">
-              <div class="stat__value">{{ activeMember.lastActive }}</div>
-              <div class="stat__label">Last active</div>
-            </div>
-          </div>
-
-          <div class="detail__cols">
-            <section class="detail__section">
-              <div class="detail__section-title">Contact</div>
-              <dl class="dl">
-                <div class="dl__row"><dt>Email</dt><dd><a class="link" :href="`mailto:${activeMember.email}`">{{ activeMember.email }}</a></dd></div>
-                <div class="dl__row"><dt>Phone</dt><dd v-if="activeMember.phone"><a class="link" :href="`tel:${activeMember.phone.replace(/\s+/g, '')}`">{{ activeMember.phone }}</a></dd><dd v-else class="dl__empty">—</dd></div>
-                <div class="dl__row"><dt>Date of birth</dt><dd>{{ activeMember.dob ?? '—' }}</dd></div>
-                <div class="dl__row"><dt>Address</dt><dd>{{ activeMember.address || '—' }}</dd></div>
-              </dl>
-            </section>
-
-            <section class="detail__section">
-              <div class="detail__section-title">Membership</div>
-              <dl class="dl">
-                <div class="dl__row"><dt>Type</dt><dd>{{ activeMember.membership }}</dd></div>
-                <div class="dl__row"><dt>Member #</dt><dd class="dl__mono">{{ activeMember.memberNumber }}</dd></div>
-                <div class="dl__row"><dt>Joined</dt><dd>{{ activeMember.joinedAt }}</dd></div>
-                <div class="dl__row"><dt>Role</dt><dd>{{ activeMember.role }}</dd></div>
-                <div v-if="feeLabel(activeMember)" class="dl__row"><dt>Fee</dt><dd>{{ feeLabel(activeMember) }}</dd></div>
-                <div v-if="activeMember.lastPaymentAmount != null" class="dl__row"><dt>Last paid</dt><dd>${{ activeMember.lastPaymentAmount }}</dd></div>
-              </dl>
-            </section>
-          </div>
-
-          <section v-if="activeMember.notes" class="detail__notes">
-            <div class="detail__section-title">Notes</div>
-            <p>{{ activeMember.notes }}</p>
-          </section>
-        </div>
-      </template>
-
-      <template #footer>
-        <button type="button" class="btn btn--danger-outline" @click="removeActiveMember">Remove</button>
-        <div class="modal__foot-spacer" />
-        <button type="button" class="btn btn--outline" @click="openPayment">Record payment</button>
-        <button type="button" class="btn btn--primary" @click="openEditMember">Edit member</button>
-      </template>
-    </CrmModal>
+    <!-- Detail modal replaced by MemberDetailView (design 33). -->
 
     <!-- Edit member modal -->
     <CrmModal
@@ -1189,6 +1380,82 @@ async function submit() {
           :disabled="!canSubmitPayment || paymentSubmitting"
           @click="submitPayment"
         >{{ paymentSubmitting ? 'Recording…' : (paymentForm.waived ? 'Waive fees' : 'Record payment') }}</button>
+      </template>
+    </CrmModal>
+
+    <!-- New season modal (owner / admin only) -->
+    <CrmModal
+      :open="newSeasonOpen"
+      eyebrow="Seasons"
+      title="New season"
+      width="md"
+      @close="closeNewSeason"
+    >
+      <form class="form" @submit.prevent="submitNewSeason">
+        <label class="field">
+          <span class="field__label">Season name</span>
+          <input
+            v-model="newSeasonForm.season_name"
+            type="text"
+            maxlength="100"
+            placeholder="2026/27 Summer"
+            autofocus
+          />
+          <span v-if="newSeasonFieldErrors.season_name" class="field__error">{{ newSeasonFieldErrors.season_name }}</span>
+        </label>
+        <div class="form__row">
+          <label class="field">
+            <span class="field__label">Start date</span>
+            <input v-model="newSeasonForm.start_date" type="date" />
+            <span v-if="newSeasonFieldErrors.start_date" class="field__error">{{ newSeasonFieldErrors.start_date }}</span>
+          </label>
+          <label class="field">
+            <span class="field__label">End date</span>
+            <input v-model="newSeasonForm.end_date" type="date" />
+            <span v-if="newSeasonFieldErrors.end_date" class="field__error">{{ newSeasonFieldErrors.end_date }}</span>
+          </label>
+        </div>
+        <label class="field">
+          <span class="field__label">Default fee</span>
+          <input
+            v-model="newSeasonForm.default_fee"
+            type="number"
+            min="0"
+            step="1"
+            placeholder="240"
+          />
+          <span v-if="newSeasonFieldErrors.default_fee" class="field__error">{{ newSeasonFieldErrors.default_fee }}</span>
+        </label>
+        <label class="field">
+          <span class="field__label">Description</span>
+          <textarea
+            v-model="newSeasonForm.description"
+            rows="3"
+            placeholder="Optional context for committee members."
+          />
+        </label>
+        <div class="switch-row">
+          <div>
+            <div class="switch-row__label">Set as current season</div>
+            <div class="switch-row__hint">New payments + finance totals attach to this season.</div>
+          </div>
+          <button
+            type="button"
+            class="switch"
+            :class="{ 'is-on': newSeasonForm.set_current }"
+            @click="newSeasonForm.set_current = !newSeasonForm.set_current"
+          ><span class="switch__knob" /></button>
+        </div>
+        <div v-if="newSeasonError" class="form__error" role="alert">{{ newSeasonError }}</div>
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn--outline" :disabled="newSeasonSubmitting" @click="closeNewSeason">Cancel</button>
+        <button
+          type="button"
+          class="btn btn--primary"
+          :disabled="!canSubmitNewSeason || newSeasonSubmitting"
+          @click="submitNewSeason"
+        >{{ newSeasonSubmitting ? 'Creating…' : 'Create season' }}</button>
       </template>
     </CrmModal>
 
@@ -1357,6 +1624,22 @@ async function submit() {
 .row__name-sub { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 2px; }
 .row__fee { font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); margin-top: 3px; }
 .row__dues-amount { font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); margin-top: 4px; }
+.row__standing-sub { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 4px; }
+.row__standing-sub--danger { color: #991B1B; }
+.row--lapsed .row__name-inner,
+.row--lapsed td:nth-child(2),
+.row--lapsed td:nth-child(3) { opacity: 0.7; }
+.row__avatar--invited { background: var(--color-surface); color: var(--color-mute); border: 1px dashed var(--color-hairline); }
+
+.standing-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.standing-pill--paid     { background: #DCFCE7; color: #14532D; }
+.standing-pill--due      { background: #FEF3C7; color: #92400E; }
+.standing-pill--overdue  { background: #FEE2E2; color: #991B1B; }
+.standing-pill--waived   { background: var(--color-surface); color: var(--color-graphite); border: 1px solid var(--color-hairline); }
+.standing-pill--partial  { background: #FFEDD5; color: var(--color-feature-tangerine); }
+.standing-pill--invited  { background: var(--color-accent-soft); color: var(--color-accent); }
+.standing-pill--lapsed   { background: var(--color-surface); color: var(--color-fog); border: 1px solid var(--color-hairline); }
+.standing-pill--none     { background: var(--color-surface); color: var(--color-mute); border: 1px dashed var(--color-hairline); }
 .row__chev { text-align: right; color: var(--color-mute); font-size: 18px; padding-right: 20px; width: 24px; }
 .row--skeleton { cursor: default; }
 .row--skeleton:hover { background: transparent; }
@@ -1375,6 +1658,15 @@ async function submit() {
 .card__name { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card__badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
 .card__contact { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card__meta { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-family: var(--font-body); font-size: 12px; color: var(--color-ink); }
+.card__meta-sep { color: var(--color-hairline); }
+.card__meta-mono { font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); }
+.card__standing-sub { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 4px; }
+.card__standing-sub--danger { color: #991B1B; }
+.card__avatar--invited { background: var(--color-surface); color: var(--color-mute); border: 1px dashed var(--color-hairline); }
+.card--lapsed .card__avatar,
+.card--lapsed .card__meta,
+.card--lapsed .card__contact { opacity: 0.7; }
 .card__fee { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); margin-top: 6px; flex-wrap: wrap; }
 .card__fee-sep { opacity: 0.5; }
 .card__fee-ok { color: var(--color-graphite); }
@@ -1485,6 +1777,17 @@ async function submit() {
 .modal__foot-spacer { flex: 1; }
 
 .add-error { padding: 10px 12px; background: #FEE2E2; color: #991B1B; border-radius: 10px; font-family: var(--font-body); font-size: 13px; margin: 0; }
+
+.season-picker { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 32px 0 14px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; cursor: pointer; }
+.season-picker:hover { border-color: var(--color-mute); }
+.season-picker:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
+.season-picker__label { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
+.season-picker__select { appearance: none; -webkit-appearance: none; border: 0; outline: 0; background: transparent; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-ink); padding: 0; cursor: pointer; }
+.season-picker__chev { position: absolute; right: 12px; color: var(--color-fog); pointer-events: none; }
+.stat-panel__label-season { font-family: var(--font-body); font-size: 10px; font-weight: 500; color: var(--color-fog); letter-spacing: 0.04em; text-transform: none; margin-left: 2px; }
+
+.field__error { font-family: var(--font-body); font-size: 12px; color: var(--color-danger); margin-top: 4px; }
+.form__error { padding: 10px 12px; background: #FEE2E2; color: #991B1B; border-radius: 10px; font-family: var(--font-body); font-size: 13px; margin-top: 4px; }
 
 @media (max-width: 900px) {
   .detail__cols { grid-template-columns: 1fr; gap: 20px; }

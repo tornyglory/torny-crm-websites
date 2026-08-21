@@ -1,36 +1,160 @@
 import { useRuntimeConfig } from '#imports'
 
-interface Club {
-  id: string
+// ── Shapes returned by the public CRM endpoints ────────────────
+// See docs/backend-briefs/15-public-site-endpoints-live.md.
+
+export interface Club {
+  id: number
   slug: string
   name: string
-  domain: string | null
-  brandPrimary: string | null
-  logoUrl: string | null
+  primary_host: string
+  custom_hosts: string[]
+  brand_primary: string | null
+  logo_url: string | null
+  onboarded_at: string | null
 }
 
-// Naive in-memory cache; on Cloudflare Pages, use Workers KV instead so tenant
-// resolution stays sub-ms at the edge.
-const memo = new Map<string, { club: Club; expires: number }>()
-const TTL_MS = 60_000
+export interface SiteClub {
+  id: number
+  slug: string
+  name: string
+  short_description: string | null
+  tagline: string | null
+  founded_year: number | null
+  sport: string
+  sport_id: number
+  region: string | null
+  country: string | null
+  brand_primary: string | null
+  logo_url: string | null
+  onboarded_at: string | null
+}
+
+export interface SiteContact {
+  email: string | null
+  phone: string | null
+  address: string | null
+  google_maps_url: string | null
+}
+
+export interface SiteHour {
+  day: 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+  is_open: boolean
+  open: string | null
+  close: string | null
+}
+
+export interface SiteMembershipTier {
+  id: number
+  type_name: string
+  description: string | null
+  cadence: 'annual' | 'monthly' | 'season' | null
+  fee: number | null
+  is_default: boolean
+}
+
+export interface SiteEvent {
+  id: number
+  slug: string
+  title: string
+  starts_at: string
+  ends_at: string | null
+  location: string | null
+  cover_url: string | null
+  event_type: 'tournament' | 'pennant' | 'social' | 'training' | 'other' | null
+  format: string | null
+  capacity: number | null
+  rsvp_open: boolean | null
+  excerpt: string | null
+}
+
+export interface SiteHonourEntry {
+  category_slug: string
+  category_name: string
+  year: number
+  member_name: string
+  notes: string | null
+}
+
+export interface SitePagesEnabled {
+  home: boolean
+  about: boolean
+  membership: boolean
+  events: boolean
+  honour_board: boolean
+  shop: boolean
+}
+
+export interface Site {
+  club: SiteClub
+  contact: SiteContact
+  hours: SiteHour[]
+  membership_tiers: SiteMembershipTier[]
+  cadence: 'annual' | 'monthly' | 'season' | null
+  first_year_discount: boolean
+  events_upcoming: SiteEvent[]
+  honour_board_recent: SiteHonourEntry[]
+  pages_enabled: SitePagesEnabled
+}
+
+interface Envelope<T> {
+  status: 'success'
+  data: T
+}
+
+// ── Tenant resolution ─────────────────────────────────────────
+// Naive in-memory cache. On Cloudflare Pages this lives in the Worker's
+// isolate — fine for MVP. Move to Workers KV when we want cross-isolate
+// tenant lookups < 5ms warm.
+const resolveMemo = new Map<string, { club: Club | null; expires: number }>()
+const RESOLVE_TTL_MS = 60_000
+
+function normaliseHost(h: string): string {
+  return h.toLowerCase().replace(/^www\./, '').replace(/:\d+$/, '')
+}
 
 export async function resolveClubForHost(host: string): Promise<Club | null> {
-  const cached = memo.get(host)
+  const key = normaliseHost(host)
+  const cached = resolveMemo.get(key)
   if (cached && cached.expires > Date.now()) return cached.club
 
   const config = useRuntimeConfig()
   try {
-    const club = await $fetch<Club>('/clubs/resolve', {
+    const res = await $fetch<Envelope<Club>>('/clubs/resolve', {
       baseURL: config.tornyApiBaseUrl,
-      params: { host },
+      params: { host: key },
     })
-    memo.set(host, { club, expires: Date.now() + TTL_MS })
+    const club = res.data ?? null
+    resolveMemo.set(key, { club, expires: Date.now() + RESOLVE_TTL_MS })
     return club
+  } catch {
+    // 404 (unknown_host) or transport error — cache null briefly so a fresh
+    // onboarding becomes reachable within a minute of the revalidate purge.
+    resolveMemo.set(key, { club: null, expires: Date.now() + 10_000 })
+    return null
+  }
+}
+
+// Called from server/api/revalidate.post.ts to drop stale tenant lookups.
+export function invalidateHost(host: string): void {
+  resolveMemo.delete(normaliseHost(host))
+}
+
+// ── Public site payload ───────────────────────────────────────
+
+export async function fetchSite(slug: string): Promise<Site | null> {
+  const config = useRuntimeConfig()
+  try {
+    const res = await $fetch<Envelope<Site>>(`/public/clubs/${encodeURIComponent(slug)}/site`, {
+      baseURL: config.tornyApiBaseUrl,
+    })
+    return res.data ?? null
   } catch {
     return null
   }
 }
 
+// Generic passthrough for anything else on the public surface.
 export function tornyFetch<T>(path: string, opts?: Parameters<typeof $fetch>[1]): Promise<T> {
   const config = useRuntimeConfig()
   return $fetch<T>(path, { baseURL: config.tornyApiBaseUrl, ...opts })

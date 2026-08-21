@@ -192,6 +192,10 @@ export interface MembersSummary {
   period_start: string | null
   period_end: string | null
   season_id: number | null
+  /** Human-readable season label — populated when the server can attach the row. */
+  season_name?: string | null
+  /** True when the selected season is the club's active current season. */
+  is_current_season?: boolean
 }
 
 export interface MembershipTierListItem {
@@ -205,13 +209,20 @@ export interface MembershipTierListItem {
   tone?: MembershipTone | null
 }
 
-/** GET /clubs/:clubId/members/summary — server-side finance stats. */
+/**
+ * GET /clubs/:clubId/members/summary — server-side finance stats.
+ *
+ * When `season_id` is omitted the server returns the club's current season.
+ * Pass an explicit id (e.g. from `seasons.list`) to view a past season's
+ * numbers without changing which season is "current".
+ */
 export async function summary(
   clubId: number,
-  opts: { signal?: AbortSignal } = {},
+  opts: { season_id?: number; signal?: AbortSignal } = {},
 ): Promise<MembersSummary> {
+  const qs = opts.season_id != null ? `?season_id=${opts.season_id}` : ''
   const res = await authedFetch<Envelope<MembersSummary>>(
-    `${CRM_BASE}/clubs/${clubId}/members/summary`,
+    `${CRM_BASE}/clubs/${clubId}/members/summary${qs}`,
     { signal: opts.signal },
   )
   return res.data

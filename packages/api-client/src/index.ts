@@ -53,6 +53,8 @@ export type {
   ApproveClaimResponse,
   RejectClaimResponse,
 } from './resources/claims'
+export * as seasons from './resources/seasons'
+export type { Season, CreateSeasonInput } from './resources/seasons'
 export * as memberImports from './resources/memberImports'
 export type {
   ImportResolution,

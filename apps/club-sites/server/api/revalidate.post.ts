@@ -1,19 +1,33 @@
 import { defineEventHandler, readRawBody, getRequestHeader, createError } from 'h3'
+import { invalidateHost } from '~/server/utils/tornyApi'
 
 interface RevalidateBody {
-  clubId: string
-  paths: string[]
+  clubId: number
+  slug?: string
+  paths?: string[]
+  purge?: 'all'
+  reason?: string
+  hosts?: string[]
 }
 
-// Webhook called by the CRM backend when an owner publishes edits.
-// Verifies HMAC-SHA256 (Web Crypto — works on Cloudflare Workers), then purges
-// the listed URLs from CF cache.
+/**
+ * Webhook the CRM POSTs to after any save that changes public content.
+ * Verifies HMAC-SHA256 (`X-Torny-Signature: sha256=<hex>`), then:
+ *   1. Drops the in-Worker tenant-resolve cache for every known host on the club.
+ *   2. TODO: purges Cloudflare Cache API for each `${primary_host}${path}` +
+ *      each `${custom_host}${path}`. Requires CF_API_TOKEN + CF_ZONE_ID.
+ *
+ * See docs/backend-briefs/15-public-site-endpoints-live.md.
+ */
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
   const secret = config.revalidateSecret
-  if (!secret) throw createError({ statusCode: 500, statusMessage: 'Revalidate secret not set' })
+  if (!secret || secret === 'dev-secret-change-me') {
+    throw createError({ statusCode: 500, statusMessage: 'Revalidate secret not set' })
+  }
 
-  const signatureHex = getRequestHeader(event, 'x-torny-signature') ?? ''
+  const rawHeader = getRequestHeader(event, 'x-torny-signature') ?? ''
+  const signatureHex = rawHeader.startsWith('sha256=') ? rawHeader.slice('sha256='.length) : rawHeader
   const raw = (await readRawBody(event, 'utf-8')) ?? ''
 
   if (!(await verifySignature(secret, raw, signatureHex))) {
@@ -26,17 +40,25 @@ export default defineEventHandler(async (event) => {
   } catch {
     throw createError({ statusCode: 400, statusMessage: 'Body is not valid JSON' })
   }
-  if (!body?.clubId || !Array.isArray(body?.paths)) {
-    throw createError({ statusCode: 400, statusMessage: 'Missing clubId or paths' })
+  if (typeof body?.clubId !== 'number' && typeof body?.clubId !== 'string') {
+    throw createError({ statusCode: 400, statusMessage: 'Missing clubId' })
   }
 
-  // TODO: call CF purge_cache endpoint here.
-  // await purgeCloudflareCache(body.paths.map(p => `${config.public.siteUrl}${p}`))
+  // Drop the tenant lookup cache for every host on the club so the next hit
+  // to /clubs/resolve fetches fresh (picks up e.g. an onboarding-complete
+  // that flipped `onboarded_at` from null to a timestamp).
+  const hosts = body.hosts ?? []
+  for (const h of hosts) invalidateHost(h)
 
+  // TODO: call CF purge_cache here for each host × path. Placeholder response
+  // for now — the SWR windows in nuxt.config.ts self-heal within 1-5 min.
   return {
     ok: true,
     clubId: body.clubId,
-    purged: body.paths,
+    slug: body.slug,
+    reason: body.reason,
+    invalidated_hosts: hosts,
+    purged_paths: body.paths ?? [],
   }
 })
 

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "nuxt dev",
+    "dev": "PORT=3001 nuxt dev",
     "build": "nuxt build",
     "preview": "wrangler pages dev .output/public --compatibility-date=2024-10-01",
     "deploy": "nuxt build && wrangler pages deploy .output/public",

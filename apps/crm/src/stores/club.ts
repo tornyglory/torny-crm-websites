@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Club, UserClub } from '@torny/api-client'
+import { authedFetch, CRM_BASE, type Club, type UserClub } from '@torny/api-client'
+
+interface Envelope<T> { status: string; data: T }
 
 const STORAGE_KEY = 'torny.currentClub'
 
@@ -55,7 +57,36 @@ export const useClubStore = defineStore('club', () => {
       brandPrimary: null,
       logoUrl: null,
     })
+    // Fire-and-forget slug backfill. The stub above renders instantly; the
+    // full record (slug, brand, logo) fills in a moment later.
+    void hydrateFull()
   }
 
-  return { current, memberships, setCurrent, clear, syncFromUserClubs }
+  /**
+   * Backfill fields not carried by the `UserClub` stub from `/me` — most
+   * importantly `slug`, which the Website editor's Preview button (and any
+   * other public-site link) needs. Safe to call repeatedly; noops if the
+   * current club already has a slug or if the fetch fails.
+   */
+  async function hydrateFull(): Promise<void> {
+    const c = current.value
+    if (!c || c.slug) return
+    try {
+      const res = await authedFetch<Envelope<Club>>(`${CRM_BASE}/clubs/${c.id}`)
+      const full = res.data
+      if (!full) return
+      setCurrent({
+        id: full.id,
+        name: full.name ?? c.name,
+        slug: full.slug ?? null,
+        domain: full.domain ?? null,
+        brandPrimary: full.brandPrimary ?? c.brandPrimary ?? null,
+        logoUrl: full.logoUrl ?? c.logoUrl ?? null,
+      })
+    } catch {
+      /* transport failure — leave slug null, caller falls back */
+    }
+  }
+
+  return { current, memberships, setCurrent, clear, syncFromUserClubs, hydrateFull }
 })

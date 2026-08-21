@@ -335,13 +335,20 @@ const PREVIEW_PATHS: Record<PageSlug, string> = {
   contact: '/contact',
 }
 
-function preview(): void {
+async function preview(): Promise<void> {
+  // Slug isn't in the /me `clubs[]` stub. If the store hasn't backfilled
+  // it yet (fresh sign-in race), do it here on demand.
+  if (!clubStore.current?.slug) await clubStore.hydrateFull()
   const slug = clubStore.current?.slug
   if (!slug) {
-    toast.info('Preview needs an active club.')
+    toast.error("Couldn't get this club's slug — try refreshing.")
     return
   }
   const path = PREVIEW_PATHS[currentPage.value]
+  // Dev: hits the Nuxt club-sites app (port 3001, `PORT=3001 pnpm dev`).
+  // The `?host=` override lets the tenant middleware pick the right club
+  // without needing a real DNS entry. In prod this button should link to
+  // the club's live domain instead — swap when we ship staging URLs.
   window.open(`http://localhost:3001${path}?host=${slug}.torny.club`, '_blank', 'noopener')
 }
 

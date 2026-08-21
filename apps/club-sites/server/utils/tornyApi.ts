@@ -85,6 +85,9 @@ export interface SitePagesEnabled {
   shop: boolean
 }
 
+/** Slugs that map to a `pages` layout entry from brief 16 §3. */
+export type PageSlug = 'home' | 'about' | 'membership' | 'events' | 'honour-board' | 'contact'
+
 export interface Site {
   club: SiteClub
   contact: SiteContact
@@ -95,6 +98,12 @@ export interface Site {
   events_upcoming: SiteEvent[]
   honour_board_recent: SiteHonourEntry[]
   pages_enabled: SitePagesEnabled
+  /**
+   * Published block layouts per page slug — set by the CRM page-builder
+   * (brief 16). Absent slugs fall back to the hardcoded page templates
+   * in `apps/club-sites/pages/*`.
+   */
+  pages?: Partial<Record<PageSlug, { blocks: unknown[] }>>
 }
 
 interface Envelope<T> {

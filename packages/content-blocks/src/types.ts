@@ -73,3 +73,31 @@ export type Block =
   | BlockBase<'contactForm', ContactFormProps>
   | BlockBase<'membershipCta', MembershipCtaProps>
   | BlockBase<'ctaBanner', CtaBannerProps>
+
+/**
+ * Shape data-hydrated blocks (eventList, honourBoard) inject at render time.
+ * The parent page provides this via Vue's `provide()` so blocks stay
+ * data-source-agnostic and work in both the CRM preview and Nuxt sites.
+ */
+export interface BlockContext {
+  brandPrimary?: string | null
+  events?: Array<{
+    id: number | string
+    title: string
+    starts_at: string
+    ends_at?: string | null
+    location?: string | null
+    excerpt?: string | null
+    slug?: string
+  }>
+  honourEntries?: Array<{
+    category_slug: string
+    category_name: string
+    year: number
+    member_name: string
+    notes?: string | null
+  }>
+}
+
+/** Injection key. Use `Symbol.for` so multiple package versions share the same key. */
+export const BLOCK_CONTEXT_KEY = Symbol.for('torny.block-context')

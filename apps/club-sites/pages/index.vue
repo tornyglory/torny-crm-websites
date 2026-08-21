@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { BlockRenderer, BLOCK_CONTEXT_KEY, type Block, type BlockContext } from '@torny/content-blocks'
+
 const club = useClub()
 const { data: site } = await useSite()
 
@@ -10,6 +12,23 @@ const tagline = computed(
 const upcoming = computed(() => site.value?.events_upcoming ?? [])
 const tiers = computed(() => site.value?.membership_tiers ?? [])
 const accent = computed(() => club_.value?.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
+
+// If the CRM's Home editor has published a layout, render that. Otherwise
+// fall back to the hardcoded template below. `site.pages` is populated by
+// backend brief 16 §3 — until it ships, `blocks` is always null and the
+// fallback runs.
+const blocks = computed<Block[] | null>(() => {
+  const raw = site.value?.pages?.home?.blocks
+  return raw && raw.length > 0 ? (raw as unknown as Block[]) : null
+})
+
+// Provide the block context so <EventListBlock>, <HonourBoardBlock> etc.
+// can render real data. Non-data blocks (Hero, RichText, CTAs) ignore it.
+provide(BLOCK_CONTEXT_KEY, computed<BlockContext>(() => ({
+  brandPrimary: accent.value,
+  events: upcoming.value,
+  honourEntries: site.value?.honour_board_recent ?? [],
+})))
 
 useSeoMeta({
   title: () => heading.value,
@@ -33,7 +52,13 @@ function formatEventTime(iso: string): string {
 </script>
 
 <template>
-  <div class="home" :style="{ '--brand': accent } as any">
+  <!-- CRM-published block layout takes priority when present. -->
+  <div v-if="blocks" class="home home--blocks" :style="{ '--brand': accent } as any">
+    <BlockRenderer v-for="b in blocks" :key="b.id" :block="b" />
+  </div>
+
+  <!-- Fallback template — used when no layout is published yet. -->
+  <div v-else class="home" :style="{ '--brand': accent } as any">
     <section class="hero">
       <div v-if="club_?.founded_year" class="hero__eyebrow">Established {{ club_.founded_year }}</div>
       <h1 class="hero__title">{{ heading }}</h1>
@@ -87,6 +112,7 @@ function formatEventTime(iso: string): string {
 
 <style scoped>
 .home { display: flex; flex-direction: column; gap: 64px; padding: 40px 24px 80px; max-width: 1080px; margin: 0 auto; }
+.home--blocks { gap: 24px; }
 
 .hero { text-align: center; padding: 40px 0 24px; }
 .hero__eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; }

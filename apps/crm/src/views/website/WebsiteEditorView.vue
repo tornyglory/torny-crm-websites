@@ -18,6 +18,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
+import { useOnboardingStore } from '@/stores/onboarding'
 import ImagePicker from '@/components/ImagePicker.vue'
 import type {
   Block,
@@ -36,6 +37,7 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const clubStore = useClubStore()
+const onboarding = useOnboardingStore()
 
 // ── Page slugs ────────────────────────────────────────────
 type PageSlug = 'home' | 'about' | 'membership' | 'events' | 'honour-board' | 'contact'
@@ -335,11 +337,26 @@ const PREVIEW_PATHS: Record<PageSlug, string> = {
   contact: '/contact',
 }
 
+function slugify(s: string): string {
+  return s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
 async function preview(): Promise<void> {
-  // Slug isn't in the /me `clubs[]` stub. If the store hasn't backfilled
-  // it yet (fresh sign-in race), do it here on demand.
-  if (!clubStore.current?.slug) await clubStore.hydrateFull()
-  const slug = clubStore.current?.slug
+  // Prefer onboarding.subdomain — the guard already hydrated it and it's
+  // the authoritative slug the tenant middleware resolves on. Fall back to
+  // clubStore.current.slug (backfilled from /clubs/:id), then to a
+  // slugified club name so the button never dead-ends.
+  if (!onboarding.data.subdomain && !clubStore.current?.slug) {
+    // Guard should have hydrated, but on a fresh reload of /crm/website
+    // there's a race — force it.
+    await Promise.all([onboarding.hydrate(), clubStore.hydrateFull()])
+  }
+  const slug =
+    (onboarding.data.subdomain?.trim() || null) ??
+    clubStore.current?.slug ??
+    (clubStore.current?.name ? slugify(clubStore.current.name) : null)
+
   if (!slug) {
     toast.error("Couldn't get this club's slug — try refreshing.")
     return

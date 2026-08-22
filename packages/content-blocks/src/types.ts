@@ -14,12 +14,21 @@ export interface BlockBase<T extends BlockType, P> {
   props: P
 }
 
+export interface HeroStat {
+  value: string
+  label: string
+}
+
 export interface HeroProps {
   heading: string
   subheading?: string
+  eyebrow?: string
+  description?: string
   imageUrl?: string
+  mediaCaption?: string
   primaryCta?: { label: string; href: string }
   secondaryCta?: { label: string; href: string }
+  stats?: HeroStat[]
 }
 
 export interface RichTextProps {
@@ -101,3 +110,73 @@ export interface BlockContext {
 
 /** Injection key. Use `Symbol.for` so multiple package versions share the same key. */
 export const BLOCK_CONTEXT_KEY = Symbol.for('torny.block-context')
+
+/**
+ * Chrome (nav + footer) shared props. Site layouts pass these in — the
+ * components render the same in the club-sites Nuxt app and in the CRM's
+ * Website editor preview.
+ */
+
+export interface SiteChromeClub {
+  name: string
+  logoUrl?: string | null
+  /** Fallback avatar characters when no logo — usually 2–3 uppercase letters. */
+  initials?: string
+  /** Small mono strapline under the club name (e.g. "Est. 1953 · Hutt Valley"). */
+  strapline?: string
+}
+
+export interface NavLink {
+  label: string
+  href: string
+  /** Optional right-side badge, e.g. "4 THIS WEEK". */
+  badge?: string
+}
+
+export interface SiteHeaderProps {
+  club: SiteChromeClub
+  navLinks: NavLink[]
+  /** Path of the current route — used to compute the active link. */
+  currentPath?: string
+  /** Secondary members link ("Members sign in"). Hidden if not provided. */
+  signInHref?: string
+  /** Primary CTA, right-most action ("Join the club"). Hidden if not provided. */
+  primaryCta?: { label: string; href: string }
+  /** When true, the mobile hamburger button appears pressed / drawer is open. */
+  drawerOpen?: boolean
+}
+
+export interface SocialLink {
+  /** Display label (used for aria-label). */
+  label: string
+  href: string
+  /** Icon key — the component ships a small set. */
+  icon: 'instagram' | 'facebook' | 'email' | 'twitter'
+}
+
+export interface FooterNavColumn {
+  /** Uppercase mono header (e.g. "Explore"). */
+  heading: string
+  links: NavLink[]
+}
+
+export interface FooterContact {
+  addressLines?: string[]
+  email?: string
+  phone?: string
+  /** Live status pill (e.g. "Green open now"). Green dot indicator + label. */
+  status?: string
+}
+
+export interface SiteFooterProps {
+  club: SiteChromeClub
+  /** Short description under the brand column. */
+  description?: string
+  socials?: SocialLink[]
+  columns?: FooterNavColumn[]
+  contact?: FooterContact
+  /** Legal links in the bottom bar (Privacy / Terms / Cookies). */
+  legalLinks?: NavLink[]
+  /** Show the "Powered by Torny" mark. Defaults to true. */
+  poweredBy?: boolean
+}

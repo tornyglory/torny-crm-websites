@@ -130,7 +130,6 @@ const contentNav: NavItem[] = [
 ]
 const accountNav: NavItem[] = [
   { to: '/crm/communications', label: 'Communications', icon: 'communications' },
-  { to: '/crm/site-settings', label: 'Site settings', icon: 'site-settings' },
   { to: '/crm/settings', label: 'Settings', icon: 'settings' },
 ]
 

@@ -25,6 +25,7 @@ import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
 import { useOnboardingStore } from '@/stores/onboarding'
 import ImagePicker from '@/components/ImagePicker.vue'
+import WebsiteSettingsPanel, { type WebsiteSettingsSection } from '@/components/WebsiteSettingsPanel.vue'
 import { ApiError, pages, type PageBlock } from '@torny/api-client'
 import type {
   Block,
@@ -45,9 +46,12 @@ const toast = useToast()
 const clubStore = useClubStore()
 const onboarding = useOnboardingStore()
 
-// ── Page slugs ────────────────────────────────────────────
+// ── Sections (pages + settings) ──────────────────────────────
 type PageSlug = 'home' | 'about' | 'membership' | 'events' | 'honour-board' | 'contact'
 const PAGE_SLUGS: PageSlug[] = ['home', 'about', 'membership', 'events', 'honour-board', 'contact']
+const SETTINGS_SLUGS: WebsiteSettingsSection[] = ['navigation', 'brand', 'seo', 'domain', 'forms', 'analytics']
+type Section = PageSlug | WebsiteSettingsSection
+
 const PAGE_LABELS: Record<PageSlug, string> = {
   home: 'Home',
   about: 'About',
@@ -64,14 +68,47 @@ const PAGE_SUBTITLES: Record<PageSlug, string> = {
   'honour-board': 'A century of results, category by category.',
   contact: 'How people reach the club — address, hours, contact form.',
 }
+const SETTINGS_LABELS: Record<WebsiteSettingsSection, string> = {
+  navigation: 'Navigation',
+  brand: 'Brand',
+  seo: 'SEO',
+  domain: 'Domain',
+  forms: 'Forms',
+  analytics: 'Analytics',
+}
+const SETTINGS_SUBTITLES: Record<WebsiteSettingsSection, string> = {
+  navigation: 'Header + footer links. Same on every page.',
+  brand: 'Logo, favicon, colours, and typography.',
+  seo: 'Meta title, description, share card, search visibility.',
+  domain: 'Custom domain, DNS records, fallback subdomain.',
+  forms: 'Contact form, membership application, RSVPs.',
+  analytics: 'Google Analytics, Plausible, cookie banner.',
+}
 
+function isPageSlug(s: string): s is PageSlug {
+  return (PAGE_SLUGS as readonly string[]).includes(s)
+}
+function isSettingsSlug(s: string): s is WebsiteSettingsSection {
+  return (SETTINGS_SLUGS as readonly string[]).includes(s)
+}
+
+const currentSection = computed<Section>(() => {
+  const s = (route.params.pageSlug ?? route.params.section) as string | undefined
+  if (s && (isPageSlug(s) || isSettingsSlug(s))) return s
+  return 'home'
+})
 const currentPage = computed<PageSlug>(() => {
-  const s = route.params.pageSlug as string | undefined
-  return s && (PAGE_SLUGS as string[]).includes(s) ? (s as PageSlug) : 'home'
+  const s = currentSection.value
+  return isPageSlug(s) ? s : 'home'
+})
+const isSettingsView = computed(() => isSettingsSlug(currentSection.value))
+const currentSettings = computed<WebsiteSettingsSection | null>(() => {
+  const s = currentSection.value
+  return isSettingsSlug(s) ? s : null
 })
 
-function switchPage(slug: PageSlug): void {
-  if (slug === currentPage.value) return
+function switchSection(slug: Section): void {
+  if (slug === currentSection.value) return
   router.push({ name: 'website', params: { pageSlug: slug } })
 }
 
@@ -86,17 +123,44 @@ interface PaletteItem {
 
 const clubName = (): string => clubStore.current?.name ?? 'Your club'
 
-const heroDefault = (heading: string, sub: string, cta1: [string, string], cta2?: [string, string]): HeroProps => ({
+interface HeroDefaultExtras {
+  eyebrow?: string
+  description?: string
+  mediaCaption?: string
+  stats?: Array<{ value: string; label: string }>
+}
+const heroDefault = (
+  heading: string,
+  sub: string,
+  cta1: [string, string],
+  cta2?: [string, string],
+  extras: HeroDefaultExtras = {},
+): HeroProps => ({
   heading,
   subheading: sub,
+  eyebrow: extras.eyebrow,
+  description: extras.description,
+  mediaCaption: extras.mediaCaption,
+  stats: extras.stats,
   primaryCta: { label: cta1[0], href: cta1[1] },
   ...(cta2 ? { secondaryCta: { label: cta2[0], href: cta2[1] } } : {}),
 })
 
+const homeHeroExtras: HeroDefaultExtras = {
+  eyebrow: 'Est. 1953 · Hutt Valley',
+  description: 'Naenae Bowling Club has been playing on the same green in the Hutt Valley since 1953. Mixed-membership, open twilights every Friday from October to March, and bowls until you find a set you like.',
+  mediaCaption: 'Green A · Friday twilight',
+  stats: [
+    { value: '142', label: 'Members' },
+    { value: '4', label: 'Events this week' },
+    { value: '3', label: 'Greens on site' },
+  ],
+}
+
 const PALETTES: Record<PageSlug, PaletteItem[]> = {
   home: [
     { type: 'hero', label: 'Hero', hint: 'Big heading, tagline, two CTAs', icon: '☰',
-      defaults: (): HeroProps => heroDefault(clubName(), 'A friendly bowls club. New members always welcome.', ['Join us', '/membership'], ['See what\'s on', '/events']) },
+      defaults: (): HeroProps => heroDefault("Roll up whenever the sun's out.", 'A friendly bowls club. New members always welcome.', ['Join the club', '/membership'], ['See what\'s on this month', '/events'], homeHeroExtras) },
     { type: 'richText', label: 'Rich text', hint: 'A block of writing', icon: '¶',
       defaults: (): RichTextProps => ({ html: '<p>Tell your visitors about the club — history, atmosphere, what makes you different.</p>' }) },
     { type: 'eventList', label: 'Events', hint: 'Auto-pulled from your events calendar', icon: '◧',
@@ -182,7 +246,7 @@ function seed(...blocks: Array<{ type: BlockType; props: Block['props'] }>): Blo
 
 const SEEDS: Record<PageSlug, () => Block[]> = {
   home: () => seed(
-    { type: 'hero', props: heroDefault(clubName(), 'A friendly bowls club. New members always welcome.', ['Join us', '/membership'], ['See what\'s on', '/events']) },
+    { type: 'hero', props: heroDefault("Roll up whenever the sun's out.", 'A friendly bowls club. New members always welcome.', ['Join the club', '/membership'], ['See what\'s on this month', '/events'], homeHeroExtras) },
     { type: 'eventList', props: { heading: "What's on", limit: 4, upcomingOnly: true } satisfies EventListProps },
     { type: 'membershipCta', props: { heading: 'Play with us this season', body: 'Whether you\'re a first-time bowler or a seasoned skip, there\'s a spot for you.', ctaLabel: 'See tiers', ctaHref: '/membership' } satisfies MembershipCtaProps },
   ),
@@ -317,8 +381,13 @@ async function load(slug: PageSlug): Promise<void> {
   }
 }
 
-onMounted(() => load(currentPage.value))
-watch([() => clubStore.current?.id, currentPage], ([, slug]) => load(slug))
+onMounted(() => {
+  if (!isSettingsView.value) void load(currentPage.value)
+})
+watch([() => clubStore.current?.id, currentPage, isSettingsView], ([, slug, settingsActive]) => {
+  if (settingsActive) return
+  void load(slug)
+})
 
 const selectedBlock = computed<Block | null>(() => state.blocks.find((b) => b.id === selectedId.value) ?? null)
 
@@ -408,6 +477,20 @@ function moveBlock(id: string, dir: -1 | 1): void {
   if (target < 0 || target >= state.blocks.length) return
   const [block] = state.blocks.splice(idx, 1) as [Block]
   state.blocks.splice(target, 0, block)
+}
+
+function resetBlock(id: string): void {
+  const idx = state.blocks.findIndex((b) => b.id === id)
+  if (idx === -1) return
+  const block = state.blocks[idx]!
+  const palette = PALETTES[currentPage.value].find((p) => p.type === block.type)
+  if (!palette) return
+  const label = BLOCK_LABEL[block.type]
+  if (!window.confirm(`Reset ${label} to defaults? This replaces your current content for this block.`)) return
+  // Fresh id so Vue's :key sees a new block and re-mounts the inspector.
+  const fresh = { id: newBlockId(), type: block.type, props: palette.defaults() } as Block
+  state.blocks.splice(idx, 1, fresh)
+  selectedId.value = fresh.id
 }
 
 // ── Publish (real API) ────────────────────────────────────
@@ -518,10 +601,12 @@ const lastSavedLabel = computed(() => {
     <header class="web__header">
       <div>
         <div class="web__eyebrow">Website</div>
-        <h1 class="web__heading">{{ PAGE_LABELS[currentPage] }} page</h1>
-        <p class="web__sub">{{ PAGE_SUBTITLES[currentPage] }}</p>
+        <h1 v-if="isSettingsView && currentSettings" class="web__heading">{{ SETTINGS_LABELS[currentSettings] }}</h1>
+        <h1 v-else class="web__heading">{{ PAGE_LABELS[currentPage] }} page</h1>
+        <p v-if="isSettingsView && currentSettings" class="web__sub">{{ SETTINGS_SUBTITLES[currentSettings] }}</p>
+        <p v-else class="web__sub">{{ PAGE_SUBTITLES[currentPage] }}</p>
       </div>
-      <div class="web__actions">
+      <div v-if="!isSettingsView" class="web__actions">
         <span class="web__save-hint">{{ lastSavedLabel }}</span>
         <a v-if="lastPublicUrl" :href="lastPublicUrl" target="_blank" rel="noopener" class="web__live-link">View live →</a>
         <button class="btn btn--outline" @click="preview">Preview →</button>
@@ -535,18 +620,52 @@ const lastSavedLabel = computed(() => {
       </div>
     </header>
 
-    <nav class="page-tabs" aria-label="Website pages">
-      <button
-        v-for="slug in PAGE_SLUGS"
-        :key="slug"
-        type="button"
-        class="page-tab"
-        :class="{ 'page-tab--active': currentPage === slug }"
-        @click="switchPage(slug)"
-      >{{ PAGE_LABELS[slug] }}</button>
+    <nav class="section-tabs" aria-label="Website sections">
+      <div class="section-tabs__toggle" role="tablist" aria-label="Section type">
+        <button
+          type="button"
+          class="section-tabs__toggle-btn"
+          :class="{ 'section-tabs__toggle-btn--active': !isSettingsView }"
+          role="tab"
+          :aria-selected="!isSettingsView"
+          @click="switchSection('home')"
+        >Pages</button>
+        <button
+          type="button"
+          class="section-tabs__toggle-btn"
+          :class="{ 'section-tabs__toggle-btn--active': isSettingsView }"
+          role="tab"
+          :aria-selected="isSettingsView"
+          @click="switchSection('navigation')"
+        >Settings</button>
+      </div>
+      <div class="section-tabs__row" role="group" :aria-label="isSettingsView ? 'Settings' : 'Pages'">
+        <template v-if="isSettingsView">
+          <button
+            v-for="slug in SETTINGS_SLUGS"
+            :key="slug"
+            type="button"
+            class="page-tab"
+            :class="{ 'page-tab--active': currentSection === slug }"
+            @click="switchSection(slug)"
+          >{{ SETTINGS_LABELS[slug] }}</button>
+        </template>
+        <template v-else>
+          <button
+            v-for="slug in PAGE_SLUGS"
+            :key="slug"
+            type="button"
+            class="page-tab"
+            :class="{ 'page-tab--active': currentSection === slug }"
+            @click="switchSection(slug)"
+          >{{ PAGE_LABELS[slug] }}</button>
+        </template>
+      </div>
     </nav>
 
-    <div class="web__body">
+    <WebsiteSettingsPanel v-if="isSettingsView && currentSettings" :section="currentSettings" />
+
+    <div v-else class="web__body">
       <!-- Block list -->
       <section class="list">
         <div v-if="state.blocks.length === 0" class="empty">
@@ -625,29 +744,49 @@ const lastSavedLabel = computed(() => {
 
         <template v-else>
           <div class="inspector__head">
-            <div class="inspector__label">Editing</div>
-            <div class="inspector__title">{{ BLOCK_LABEL[selectedBlock.type] }}</div>
+            <div class="inspector__head-text">
+              <div class="inspector__label">Editing</div>
+              <div class="inspector__title">{{ BLOCK_LABEL[selectedBlock.type] }}</div>
+            </div>
+            <button
+              type="button"
+              class="inspector__reset"
+              @click="resetBlock(selectedBlock.id)"
+              title="Reset this block to the template defaults"
+            >
+              ↺ Reset
+            </button>
           </div>
 
           <!-- Hero -->
           <template v-if="selectedBlock.type === 'hero'">
             <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock!.props as HeroProps).eyebrow" type="text" placeholder="Est. 1953 · Hutt Valley" />
+              <span class="field__hint">Small label above the heading. Mono, uppercase.</span>
+            </label>
+            <label class="field">
               <span class="field__label">Heading</span>
               <input v-model="(selectedBlock!.props as HeroProps).heading" type="text" />
             </label>
             <label class="field">
-              <span class="field__label">Subheading</span>
-              <textarea v-model="(selectedBlock!.props as HeroProps).subheading" rows="2" />
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock!.props as HeroProps).description" rows="3" placeholder="A paragraph under the heading." />
             </label>
             <div class="field">
               <ImagePicker
                 v-model="(selectedBlock!.props as HeroProps).imageUrl"
-                label="Background image (optional)"
+                label="Media image (optional)"
                 content-type="banner"
-                aspect="16 / 9"
-                hint="Sits behind the hero heading. PNG or JPG, under 10 MB."
+                aspect="1 / 1"
+                hint="Fills the right side. Leave empty for a gradient."
               />
             </div>
+            <label class="field">
+              <span class="field__label">Media caption</span>
+              <input v-model="(selectedBlock!.props as HeroProps).mediaCaption" type="text" placeholder="Green A · Friday twilight" />
+              <span class="field__hint">Pill on the media panel. Leave empty to hide.</span>
+            </label>
             <div class="field__group">
               <div class="field__group-title">Primary CTA</div>
               <label class="field">
@@ -835,8 +974,13 @@ const lastSavedLabel = computed(() => {
 .btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 .btn--outline:hover { background: var(--color-surface); }
 
-/* Page tabs */
-.page-tabs { display: flex; gap: 4px; padding: 4px; background: var(--color-surface); border-radius: 12px; align-self: flex-start; flex-wrap: wrap; }
+/* Section tabs (pages + settings) */
+.section-tabs { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.section-tabs__toggle { display: inline-flex; gap: 4px; padding: 4px; background: var(--color-ink); border-radius: 12px; flex-shrink: 0; }
+.section-tabs__toggle-btn { padding: 8px 16px; background: transparent; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.6); cursor: pointer; white-space: nowrap; transition: color 0.12s ease, background-color 0.12s ease; }
+.section-tabs__toggle-btn:hover { background: #fff; color: var(--color-ink); }
+.section-tabs__toggle-btn--active { background: #fff; color: var(--color-ink); }
+.section-tabs__row { display: flex; gap: 4px; padding: 4px; background: var(--color-surface); border-radius: 12px; flex-wrap: wrap; }
 .page-tab { padding: 8px 14px; background: transparent; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-fog); cursor: pointer; white-space: nowrap; transition: color 0.12s ease, background-color 0.12s ease; }
 .page-tab:hover { color: var(--color-ink); }
 .page-tab--active { background: #fff; color: var(--color-ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
@@ -887,9 +1031,12 @@ const lastSavedLabel = computed(() => {
 .inspector__empty-title { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); }
 .inspector__empty-hint { font-family: var(--font-body); font-size: 12px; margin-top: 4px; }
 
-.inspector__head { padding-bottom: 12px; border-bottom: 1px solid var(--color-hairline); }
+.inspector__head { padding-bottom: 12px; border-bottom: 1px solid var(--color-hairline); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.inspector__head-text { min-width: 0; }
 .inspector__label { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
 .inspector__title { font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--color-ink); margin-top: 4px; }
+.inspector__reset { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; background: transparent; border: 1px solid var(--color-hairline); border-radius: 6px; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-fog); cursor: pointer; white-space: nowrap; transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease; }
+.inspector__reset:hover { color: var(--color-ink); border-color: var(--color-ink); background: var(--color-surface); }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-fog); }

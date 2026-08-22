@@ -23,14 +23,18 @@ export default defineNuxtConfig({
     },
   },
 
-  routeRules: {
-    '/': { swr: 300 },
-    '/events/**': { swr: 60 },
-    '/honour-board/**': { swr: 3600 },
-    '/membership': { swr: 300 },
-    '/contact': { swr: 3600 },
-    '/api/**': { cache: false },
-  },
+  routeRules: process.env.NODE_ENV === 'production'
+    ? {
+        '/': { swr: 300 },
+        '/events/**': { swr: 60 },
+        '/honour-board/**': { swr: 3600 },
+        '/membership': { swr: 300 },
+        '/contact': { swr: 3600 },
+        '/api/**': { cache: false },
+      }
+    : {
+        '/api/**': { cache: false },
+      },
 
   app: {
     head: {

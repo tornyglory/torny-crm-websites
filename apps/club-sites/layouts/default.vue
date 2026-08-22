@@ -1,49 +1,129 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
+import { SiteHeader, SiteMobileDrawer, SiteFooter } from '@torny/content-blocks'
+import type {
+  SiteChromeClub,
+  NavLink,
+  FooterNavColumn,
+  SocialLink,
+  FooterContact,
+} from '@torny/content-blocks'
+
 const club = useClub()
 useTheme()
+const route = useRoute()
+
+const drawerOpen = ref(false)
+
+// Same nav on every club site — clubs vary block content, not chrome.
+// If a page doesn't exist yet for a given club, the link still renders;
+// the target page (or a 404) is handled by the router.
+const navLinks: NavLink[] = [
+  { label: 'Home', href: '/' },
+  { label: 'About', href: '/about' },
+  { label: 'Events', href: '/events' },
+  { label: 'Honour board', href: '/honour-board' },
+  { label: 'Membership', href: '/membership' },
+  { label: 'Contact', href: '/contact' },
+]
+
+const chromeClub = computed<SiteChromeClub>(() => ({
+  name: club.value?.name ?? 'Torny',
+  logoUrl: club.value?.logo_url ?? null,
+}))
+
+const primaryCta = { label: 'Join the club', href: '/membership' }
+
+// Footer content. Same structure per tenant — the CMS will surface a
+// "site settings" panel later for clubs to override the contact block
+// and social links.
+const footerColumns: FooterNavColumn[] = [
+  {
+    heading: 'Explore',
+    links: [
+      { label: 'Home', href: '/' },
+      { label: 'About the club', href: '/about' },
+      { label: 'Events', href: '/events' },
+      { label: 'Honour board', href: '/honour-board' },
+      { label: 'Gallery', href: '/gallery' },
+    ],
+  },
+  {
+    heading: 'Play',
+    links: [
+      { label: 'Membership', href: '/membership' },
+      { label: 'Coaching', href: '/coaching' },
+      { label: 'Function hire', href: '/venue-hire' },
+      { label: 'Sponsors', href: '/sponsors' },
+      { label: 'Members sign in', href: '/sign-in' },
+    ],
+  },
+]
+
+const footerContact: FooterContact = {
+  email: 'hello@example.com',
+  phone: '(00) 000 0000',
+}
+
+const socials: SocialLink[] = [
+  { label: 'Instagram', icon: 'instagram', href: '#' },
+  { label: 'Facebook', icon: 'facebook', href: '#' },
+  { label: 'Email', icon: 'email', href: 'mailto:hello@example.com' },
+]
+
+const legalLinks: NavLink[] = [
+  { label: 'Privacy', href: '/privacy' },
+  { label: 'Terms', href: '/terms' },
+  { label: 'Cookies', href: '/cookies' },
+]
 </script>
 
 <template>
   <div class="site">
-    <header class="site__header">
-      <div class="site__brand">
-        <img v-if="club?.logoUrl" :src="club.logoUrl" :alt="club.name" class="site__logo" />
-        <span v-else class="site__wordmark">{{ club?.name ?? 'Torny' }}</span>
-      </div>
-      <nav class="site__nav">
-        <NuxtLink to="/">Home</NuxtLink>
-        <NuxtLink to="/about">About</NuxtLink>
-        <NuxtLink to="/events">Events</NuxtLink>
-        <NuxtLink to="/honour-board">Honour board</NuxtLink>
-        <NuxtLink to="/membership">Membership</NuxtLink>
-        <NuxtLink to="/contact">Contact</NuxtLink>
-      </nav>
-    </header>
+    <SiteHeader
+      :club="chromeClub"
+      :nav-links="navLinks"
+      :current-path="route.path"
+      :primary-cta="primaryCta"
+      sign-in-href="/sign-in"
+      :drawer-open="drawerOpen"
+      @toggle-drawer="drawerOpen = !drawerOpen"
+    />
+
+    <SiteMobileDrawer
+      :open="drawerOpen"
+      :club="chromeClub"
+      :nav-links="navLinks"
+      :current-path="route.path"
+      :primary-cta="primaryCta"
+      sign-in-href="/sign-in"
+      @close="drawerOpen = false"
+    />
 
     <main class="site__main">
       <slot />
     </main>
 
-    <footer class="site__footer">
-      <div>© {{ new Date().getFullYear() }} {{ club?.name }}</div>
-      <div class="site__powered">Powered by Torny</div>
-    </footer>
+    <SiteFooter
+      :club="chromeClub"
+      description="A community bowling club. Everyone welcome — bring a friend, we'll bring the bowls."
+      :socials="socials"
+      :columns="footerColumns"
+      :contact="footerContact"
+      :legal-links="legalLinks"
+    />
   </div>
 </template>
 
 <style scoped>
-.site { min-height: 100vh; display: flex; flex-direction: column; }
+.site {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
 
-.site__header { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px; border-bottom: 1px solid var(--color-hairline); background: #fff; }
-.site__brand { display: flex; align-items: center; gap: 12px; }
-.site__logo { height: 36px; width: auto; }
-.site__wordmark { font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); }
-.site__nav { display: flex; gap: 24px; }
-.site__nav a { font-family: var(--font-body); font-size: 14px; font-weight: 500; color: var(--color-ink); }
-.site__nav a.router-link-active { color: var(--color-accent); font-weight: 600; }
-
-.site__main { flex: 1; padding: 48px 32px; max-width: 1200px; margin: 0 auto; width: 100%; }
-
-.site__footer { display: flex; justify-content: space-between; align-items: center; padding: 24px 32px; border-top: 1px solid var(--color-hairline); font-family: var(--font-body); font-size: 12px; color: var(--color-fog); background: var(--color-surface); }
-.site__powered { font-family: var(--font-mono); font-size: 11px; }
+.site__main {
+  flex: 1;
+  width: 100%;
+}
 </style>

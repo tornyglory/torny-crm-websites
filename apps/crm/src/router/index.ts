@@ -68,7 +68,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'website/:pageSlug', name: 'website', component: () => import('@/views/website/WebsiteEditorView.vue') },
       { path: 'communications', name: 'communications', component: () => import('@/views/communications/CommunicationsView.vue') },
       { path: 'settings', name: 'settings', component: () => import('@/views/settings/SettingsView.vue') },
-      { path: 'site-settings', name: 'site-settings', component: () => import('@/views/site-settings/SiteSettingsView.vue') },
+      { path: 'site-settings', redirect: { name: 'website', params: { pageSlug: 'domain' } } },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

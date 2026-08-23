@@ -17,6 +17,37 @@ const notifsOpen = ref(false)
 const newMenuOpen = ref(false)
 const userMenuOpen = ref(false)
 const drawerOpen = ref(false)
+const clubMenuOpen = ref(false)
+
+const userClubs = computed(() => auth.user?.clubs ?? [])
+
+function toggleClubMenu() {
+  clubMenuOpen.value = !clubMenuOpen.value
+  if (clubMenuOpen.value) {
+    notifsOpen.value = false
+    newMenuOpen.value = false
+    userMenuOpen.value = false
+    moreOpen.value = false
+  }
+}
+
+function pickClub(c: { id: number; name?: string }) {
+  if (club.current?.id === c.id) {
+    clubMenuOpen.value = false
+    return
+  }
+  club.setCurrent({
+    id: c.id,
+    name: c.name ?? `Club #${c.id}`,
+    slug: null,
+    domain: null,
+    brandPrimary: null,
+    logoUrl: null,
+  })
+  // Full record (slug, brand, logo) backfills asynchronously via the store.
+  void club.hydrateFull()
+  clubMenuOpen.value = false
+}
 
 function toggleDrawer() {
   drawerOpen.value = !drawerOpen.value
@@ -35,13 +66,26 @@ function closeDrawer() {
 // otherwise leave the drawer open over the newly-navigated page.
 watch(() => route.fullPath, closeDrawer)
 
-// Escape key closes the drawer for keyboard users.
+// Escape key closes the drawer + club menu for keyboard users.
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && drawerOpen.value) closeDrawer()
+  if (e.key !== 'Escape') return
+  if (clubMenuOpen.value) clubMenuOpen.value = false
+  else if (drawerOpen.value) closeDrawer()
+}
+// Click-outside for the club switcher — the other popovers manage their own.
+function onDocClick(e: MouseEvent) {
+  if (!clubMenuOpen.value) return
+  const target = e.target as HTMLElement | null
+  if (target?.closest('.sidebar__club-wrap')) return
+  clubMenuOpen.value = false
 }
 if (typeof window !== 'undefined') {
   window.addEventListener('keydown', onKeydown)
-  onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+  document.addEventListener('click', onDocClick)
+  onBeforeUnmount(() => {
+    window.removeEventListener('keydown', onKeydown)
+    document.removeEventListener('click', onDocClick)
+  })
 }
 
 function toggleNotifs() {
@@ -178,16 +222,53 @@ const bottomTabs = computed<TabItem[]>(() => [
         </button>
       </div>
 
-      <button type="button" class="sidebar__club">
-        <div class="sidebar__club-badge">{{ clubInitials }}</div>
-        <div class="sidebar__club-info">
-          <div class="sidebar__club-label">Current club</div>
-          <div class="sidebar__club-name">{{ club.current?.name ?? 'Select a club' }}</div>
+      <div class="sidebar__club-wrap">
+        <button
+          type="button"
+          class="sidebar__club"
+          :class="{ 'sidebar__club--open': clubMenuOpen }"
+          :aria-expanded="clubMenuOpen ? 'true' : 'false'"
+          @click="toggleClubMenu"
+        >
+          <div class="sidebar__club-badge">{{ clubInitials }}</div>
+          <div class="sidebar__club-info">
+            <div class="sidebar__club-label">Current club</div>
+            <div class="sidebar__club-name">{{ club.current?.name ?? 'Select a club' }}</div>
+          </div>
+          <svg viewBox="0 0 16 16" fill="none" width="16" height="16" aria-hidden="true" class="sidebar__club-chev">
+            <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+
+        <div v-if="clubMenuOpen" class="club-menu" @click.stop>
+          <div class="club-menu__label">Your clubs</div>
+          <div class="club-menu__list">
+            <button
+              v-for="c in userClubs"
+              :key="c.id"
+              type="button"
+              class="club-menu__item"
+              :class="{ 'is-active': club.current?.id === c.id }"
+              @click="pickClub(c)"
+            >
+              <span class="club-menu__item-name">{{ c.name ?? `Club #${c.id}` }}</span>
+              <span v-if="club.current?.id === c.id" class="club-menu__check" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 8.5L6.5 12L13 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+            </button>
+            <div v-if="userClubs.length === 0" class="club-menu__empty">You're not on any clubs yet.</div>
+          </div>
+          <div class="club-menu__divider" />
+          <RouterLink to="/claim" class="club-menu__action" @click="clubMenuOpen = false">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
+            <span>Claim another club</span>
+          </RouterLink>
         </div>
-        <svg viewBox="0 0 16 16" fill="none" width="16" height="16" aria-hidden="true" class="sidebar__club-chev">
-          <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
+      </div>
 
       <nav class="sidebar__nav">
         <div class="sidebar__section-label">Manage</div>
@@ -466,12 +547,78 @@ const bottomTabs = computed<TabItem[]>(() => [
 .sidebar__wordmark { font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); }
 .sidebar__tag { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; color: var(--color-fog); text-transform: uppercase; margin-left: 4px; }
 
+.sidebar__club-wrap { position: relative; }
 .sidebar__club { margin: 4px 16px 8px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; border: 1px solid var(--color-hairline); border-radius: 16px; background: var(--color-surface); cursor: pointer; text-align: left; color: var(--color-ink); font: inherit; width: calc(100% - 32px); }
 .sidebar__club:hover { border-color: var(--color-mute); }
+.sidebar__club--open { border-color: var(--color-ink); }
+.sidebar__club--open .sidebar__club-chev { transform: rotate(90deg); }
+.sidebar__club-chev { transition: transform 0.15s ease; }
 .sidebar__club-badge { width: 36px; height: 36px; border-radius: 10px; background: var(--color-accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 12px; font-weight: 700; flex-shrink: 0; }
 .sidebar__club-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .sidebar__club-label { font-family: var(--font-body); font-size: 9px; font-weight: 600; letter-spacing: 0.14em; color: var(--color-fog); text-transform: uppercase; }
 .sidebar__club-name { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
+
+/* Club switcher popover */
+.club-menu {
+  position: absolute;
+  z-index: 20;
+  left: 16px;
+  right: 16px;
+  top: calc(100% + 4px);
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px -12px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.club-menu__label {
+  padding: 6px 10px 4px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-fog);
+}
+.club-menu__list { display: flex; flex-direction: column; gap: 2px; }
+.club-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-ink);
+  cursor: pointer;
+  text-align: left;
+}
+.club-menu__item:hover { background: var(--color-surface); }
+.club-menu__item.is-active { background: var(--color-surface); font-weight: 600; }
+.club-menu__item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.club-menu__check { color: var(--color-accent); flex-shrink: 0; }
+.club-menu__empty { padding: 8px 10px; font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
+.club-menu__divider { height: 1px; background: var(--color-hairline); margin: 4px 0; }
+.club-menu__action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-ink);
+  text-decoration: none;
+}
+.club-menu__action:hover { background: var(--color-surface); }
+.club-menu__action svg { color: var(--color-fog); }
 
 .sidebar__nav { flex: 1; overflow-y: auto; padding-bottom: 12px; }
 .sidebar__section-label { padding: 12px 20px 6px; font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 0.16em; color: var(--color-mute); text-transform: uppercase; }

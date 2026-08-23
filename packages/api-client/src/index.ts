@@ -110,5 +110,16 @@ export type {
   PatchParams as BlockImagePatchParams,
   ReorderResponse as BlockImageReorderResponse,
 } from './resources/blockImages'
+export * as fontPairs from './resources/fontPairs'
+export type {
+  FontPair,
+  FontPairsResponse,
+  UpdateFontPairResponse,
+} from './resources/fontPairs'
+export * as stylePresets from './resources/stylePresets'
+export type {
+  StylePresetsResponse,
+  UpdateStylePresetResponse,
+} from './resources/stylePresets'
 export { SAM_BASE, CRM_BASE, MEDIA_BASE } from './config'
 export { ApiError, authedFetch, publicFetch, TOKEN_STORAGE_KEY } from './http'

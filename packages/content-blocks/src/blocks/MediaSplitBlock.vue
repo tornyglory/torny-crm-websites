@@ -239,7 +239,7 @@ const bgClass = computed(() => (props.background === 'surface' ? 'ms--bg-surface
   padding: 14px 22px;
   background: var(--color-ink);
   color: var(--color-ground);
-  border-radius: var(--radius-pill);
+  border-radius: var(--btn-radius);
   font-family: var(--font-body);
   font-size: 14px;
   font-weight: var(--weight-semibold);

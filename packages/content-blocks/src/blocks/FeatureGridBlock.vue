@@ -128,9 +128,10 @@ const gridStyle = computed(() => ({
   flex-direction: column;
   gap: 20px;
   padding: 32px;
-  background: var(--color-ground);
-  border: 1px solid var(--color-hairline);
-  border-radius: 20px;
+  background: var(--card-bg);
+  border: var(--card-border);
+  box-shadow: var(--card-shadow);
+  border-radius: var(--radius-lg);
 }
 
 .fg__icon {

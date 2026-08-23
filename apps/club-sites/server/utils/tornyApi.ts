@@ -14,6 +14,43 @@ export interface Club {
   onboarded_at: string | null
 }
 
+export interface SiteFont {
+  family: string
+  weights: number[]
+}
+
+export interface SiteFonts {
+  slug: string
+  heading: SiteFont
+  body: SiteFont
+  mono: SiteFont
+}
+
+export interface SiteStyleRadius {
+  xs: number
+  sm: number
+  md: number
+  lg: number
+  pill: number
+}
+
+export interface SiteStyleCards {
+  background: 'surface' | 'ground'
+  border: 'hairline' | 'none'
+  shadow: 'none' | 'soft'
+}
+
+export interface SiteStyleButtons {
+  radius: number
+}
+
+export interface SiteStyle {
+  slug: string
+  radius: SiteStyleRadius
+  cards: SiteStyleCards
+  buttons: SiteStyleButtons
+}
+
 export interface SiteClub {
   id: number
   slug: string
@@ -28,6 +65,8 @@ export interface SiteClub {
   brand_primary: string | null
   logo_url: string | null
   onboarded_at: string | null
+  fonts?: SiteFonts
+  style?: SiteStyle
 }
 
 export interface SiteContact {

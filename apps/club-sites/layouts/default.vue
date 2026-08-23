@@ -10,7 +10,7 @@ import type {
 } from '@torny/content-blocks'
 
 const club = useClub()
-useTheme()
+await useTheme()
 const route = useRoute()
 
 const drawerOpen = ref(false)

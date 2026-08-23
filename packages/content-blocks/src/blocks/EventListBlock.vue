@@ -72,7 +72,7 @@ function fmtLine(iso: string): string {
 .event-list__empty { padding: 24px; background: var(--color-surface); border: 1px dashed var(--color-hairline); border-radius: 14px; font-family: var(--font-body); color: var(--color-fog); text-align: center; }
 .event-list__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 
-.event { display: flex; align-items: flex-start; gap: 16px; padding: 16px 18px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; }
+.event { display: flex; align-items: flex-start; gap: 16px; padding: 16px 18px; background: var(--card-bg); border: var(--card-border); box-shadow: var(--card-shadow); border-radius: var(--radius-md); }
 .event__date { width: 52px; height: 52px; border-radius: 10px; background: var(--brand); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; }
 .event__day { font-family: var(--font-display); font-size: 20px; font-weight: 700; line-height: 1; }
 .event__month { font-family: var(--font-body); font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 3px; }

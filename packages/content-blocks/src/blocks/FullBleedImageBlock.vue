@@ -153,7 +153,7 @@ const overlayStyle = computed(() => ({
   padding: 16px 26px;
   background: var(--color-ground);
   color: var(--color-ink);
-  border-radius: var(--radius-pill);
+  border-radius: var(--btn-radius);
   font-family: var(--font-body);
   font-size: 15px;
   font-weight: var(--weight-semibold);

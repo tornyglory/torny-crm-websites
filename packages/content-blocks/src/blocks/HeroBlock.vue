@@ -142,7 +142,7 @@ const showStats = computed(() => (props.stats?.length ?? 0) > 0)
   padding: 16px 26px;
   background: var(--color-ink);
   color: var(--color-ground);
-  border-radius: var(--radius-pill);
+  border-radius: var(--btn-radius);
   font-family: var(--font-body);
   font-size: 15px;
   font-weight: var(--weight-semibold);

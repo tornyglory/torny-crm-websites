@@ -1,6 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { authedFetch, CRM_BASE, type Club, type UserClub } from '@torny/api-client'
+import {
+  authedFetch,
+  CRM_BASE,
+  type Club,
+  type ClubFonts,
+  type ClubStyle,
+  type UserClub,
+} from '@torny/api-client'
 
 interface Envelope<T> { status: string; data: T }
 
@@ -82,11 +89,43 @@ export const useClubStore = defineStore('club', () => {
         domain: full.domain ?? null,
         brandPrimary: full.brandPrimary ?? c.brandPrimary ?? null,
         logoUrl: full.logoUrl ?? c.logoUrl ?? null,
+        fonts: full.fonts ?? c.fonts,
+        style: full.style ?? c.style,
       })
     } catch {
       /* transport failure — leave slug null, caller falls back */
     }
   }
 
-  return { current, memberships, setCurrent, clear, syncFromUserClubs, hydrateFull }
+  /**
+   * Merge in an updated fonts object without disturbing the rest of the
+   * club record. Used by the font picker after a successful PATCH so a
+   * page refresh sees the new selection immediately.
+   */
+  function setFonts(fonts: ClubFonts | undefined) {
+    const c = current.value
+    if (!c) return
+    setCurrent({ ...c, fonts })
+  }
+
+  /**
+   * Same as `setFonts` but for the style preset. Merged in isolation so
+   * neither picker overwrites the other's state.
+   */
+  function setStyle(style: ClubStyle | undefined) {
+    const c = current.value
+    if (!c) return
+    setCurrent({ ...c, style })
+  }
+
+  return {
+    current,
+    memberships,
+    setCurrent,
+    setFonts,
+    setStyle,
+    clear,
+    syncFromUserClubs,
+    hydrateFull,
+  }
 })

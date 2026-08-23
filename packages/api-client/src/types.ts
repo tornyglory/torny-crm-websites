@@ -1,6 +1,73 @@
 export type ID = string
 
 /**
+ * A single font entry within a curated pair — a Google Fonts family plus
+ * the weights the CRM asks for. Backend guarantees these are always Google
+ * Fonts families, always latin-subset compatible.
+ */
+export interface ClubFont {
+  family: string
+  weights: number[]
+}
+
+/**
+ * Resolved fonts for a club, always populated. `slug` falls back to the
+ * global default when the club hasn't picked one. See brief 22.
+ */
+export interface ClubFonts {
+  slug: string
+  heading: ClubFont
+  body: ClubFont
+  mono: ClubFont
+}
+
+export type StyleCardBackground = 'surface' | 'ground'
+export type StyleCardBorder = 'hairline' | 'none'
+export type StyleCardShadow = 'none' | 'soft'
+
+export interface StyleRadiusScale {
+  xs: number
+  sm: number
+  md: number
+  lg: number
+  pill: number
+}
+
+export interface StyleCardTreatment {
+  background: StyleCardBackground
+  border: StyleCardBorder
+  shadow: StyleCardShadow
+}
+
+export interface StyleButtonTreatment {
+  radius: number
+}
+
+/**
+ * A single style preset returned from `GET /style-presets`. See brief 23.
+ */
+export interface StylePreset {
+  slug: string
+  name: string
+  description: string
+  radius: StyleRadiusScale
+  cards: StyleCardTreatment
+  buttons: StyleButtonTreatment
+  is_default?: boolean
+}
+
+/**
+ * Resolved style for a club, always populated. `slug` falls back to the
+ * platform default (`editorial`) when the club hasn't picked one.
+ */
+export interface ClubStyle {
+  slug: string
+  radius: StyleRadiusScale
+  cards: StyleCardTreatment
+  buttons: StyleButtonTreatment
+}
+
+/**
  * Full club record. `id` is a number (matches backend integer PKs; see brief
  * 08 §Timezones + IDs). Other fields are optional so we can hydrate a stub
  * from a `UserClub` in the auth response before a full /clubs/:id load.
@@ -12,6 +79,10 @@ export interface Club {
   domain?: string | null
   brandPrimary?: string | null
   logoUrl?: string | null
+  /** Present on `/site` payloads and any full club load; absent on stubs. */
+  fonts?: ClubFonts
+  /** Present on `/site` payloads and any full club load; absent on stubs. */
+  style?: ClubStyle
 }
 
 export interface Member {

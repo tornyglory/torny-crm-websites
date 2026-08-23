@@ -331,7 +331,8 @@ const year = new Date().getFullYear()
   font-family: var(--font-display);
   font-size: 15px;
   font-weight: var(--weight-semibold);
-  letter-spacing: var(--track-tight);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--color-ground);
 }
 .site-footer__powered-dot {

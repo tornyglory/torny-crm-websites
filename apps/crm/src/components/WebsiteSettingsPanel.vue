@@ -12,7 +12,10 @@
  */
 import { computed, reactive, ref } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import FontPicker from '@/components/FontPicker.vue'
+import StylePicker from '@/components/StylePicker.vue'
 import { useToast } from '@/composables/useToast'
+import { useClubStore } from '@/stores/club'
 
 export type WebsiteSettingsSection =
   | 'navigation'
@@ -27,6 +30,17 @@ const props = defineProps<{
 }>()
 
 const toast = useToast()
+const clubStore = useClubStore()
+// Reactive so refresh + hydrateFull both light up the correct card.
+const fontSlug = computed<string | null>(() => clubStore.current?.fonts?.slug ?? null)
+const styleSlug = computed<string | null>(() => clubStore.current?.style?.slug ?? null)
+
+function onFontSlugChange(_slug: string | null) {
+  void clubStore.hydrateFull()
+}
+function onStyleSlugChange(_slug: string | null) {
+  void clubStore.hydrateFull()
+}
 
 const domain = ref({
   custom: 'kelburnbowls.co.nz',
@@ -211,15 +225,20 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
       </div>
       <div class="ws-card">
         <div class="ws-card__eyebrow">Typography</div>
-        <div class="ws-field">
-          <label>Body font</label>
-          <select v-model="brand.font">
-            <option>Inter</option>
-            <option>Space Grotesk</option>
-            <option>DM Sans</option>
-            <option>Manrope</option>
-          </select>
-        </div>
+        <FontPicker
+          :club-id="clubStore.current?.id ?? null"
+          :club-name="clubStore.current?.name"
+          :current-slug="fontSlug"
+          @update:slug="onFontSlugChange"
+        />
+      </div>
+      <div class="ws-card">
+        <div class="ws-card__eyebrow">Site style</div>
+        <StylePicker
+          :club-id="clubStore.current?.id ?? null"
+          :current-slug="styleSlug"
+          @update:slug="onStyleSlugChange"
+        />
       </div>
       <div class="ws-card">
         <div class="ws-card__eyebrow">Logo &amp; favicon</div>

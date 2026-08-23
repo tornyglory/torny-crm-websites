@@ -121,7 +121,7 @@ function pad(n: number): string {
   padding: 12px 20px;
   background: var(--color-ink);
   color: var(--color-ground);
-  border-radius: var(--radius-pill);
+  border-radius: var(--btn-radius);
   font-family: var(--font-body);
   font-size: 14px;
   font-weight: var(--weight-semibold);
@@ -142,9 +142,10 @@ function pad(n: number): string {
 }
 .faq__item--open {
   margin-bottom: 12px;
-  background: var(--color-ground);
-  border: 1px solid var(--color-hairline);
-  border-radius: 16px;
+  background: var(--card-bg);
+  border: var(--card-border);
+  box-shadow: var(--card-shadow);
+  border-radius: var(--radius-md);
   padding: 0;
 }
 

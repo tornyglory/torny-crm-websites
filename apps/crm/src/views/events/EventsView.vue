@@ -6,14 +6,25 @@ import { useToast } from '@/composables/useToast'
 const toast = useToast()
 
 type Tab = 'upcoming' | 'past'
-type Format = 'singles' | 'pairs' | 'triples' | 'fours' | 'social'
+type EventType =
+  | 'tournament'
+  | 'social'
+  | 'meeting'
+  | 'coaching'
+  | 'working-bee'
+  | 'presentation'
+  | 'fundraiser'
+  | 'function'
+  | 'other'
+type BowlsFormat = 'singles' | 'pairs' | 'triples' | 'fours' | 'other'
 
 interface EventRow {
   id: string
   title: string
-  format: Format
-  startsAt: string     // ISO — source of truth
-  endsAt: string       // ISO
+  type: EventType
+  format: BowlsFormat | null    // required for tournaments, null otherwise
+  startsAt: string              // ISO — source of truth
+  endsAt: string                // ISO
   location: string
   description?: string
   host?: string
@@ -29,17 +40,22 @@ const NOW = new Date('2026-08-20T10:00:00')
 
 const activeTab = ref<Tab>('upcoming')
 const search = ref('')
-const formatFilter = ref<'all' | Format>('all')
+const typeFilter = ref<'all' | EventType>('all')
+const formatFilter = ref<'all' | BowlsFormat>('all')
 
 const events = ref<EventRow[]>([
-  { id: 'e1', title: 'Champion of Champions — Round 1', format: 'singles', startsAt: '2026-08-22T09:00:00', endsAt: '2026-08-22T13:00:00', location: 'Green 1', description: 'Opening round of the annual singles championship. Best-of-21 ends knock-out format. Bring lunch — cafe closed until noon.', host: 'Marcus Tuilagi', rsvpYes: 24, rsvpMaybe: 4, rsvpNo: 2, capacity: 32, isPublished: true },
-  { id: 'e2', title: 'Twilight Triples', format: 'triples', startsAt: '2026-08-26T17:30:00', endsAt: '2026-08-26T20:30:00', location: 'Green 2 & 3', description: 'Casual mid-week triples. Rounds run to 12 ends. BBQ and bar open from 5pm — book a table for after.', host: 'Denise Peters', rsvpYes: 18, rsvpMaybe: 6, rsvpNo: 3, capacity: 24, isPublished: true },
-  { id: 'e3', title: 'Ladies Open Fours', format: 'fours', startsAt: '2026-09-05T10:00:00', endsAt: '2026-09-05T16:00:00', location: 'All greens', description: 'Regional open — teams from Petone, Kelburn, and Naenae. Prize-giving at the clubrooms from 4:30pm.', host: 'Jo Kirk', rsvpYes: 36, rsvpMaybe: 8, rsvpNo: 4, capacity: 40, isPublished: true },
-  { id: 'e4', title: 'Sunday Social Roll-up', format: 'social', startsAt: '2026-09-13T13:00:00', endsAt: '2026-09-13T16:00:00', location: 'Green 1', description: 'Bring anyone — members, non-members, kids. Sausages on. Suggested $5 koha to cover the bar.', host: 'Sione Vagana', rsvpYes: 8, rsvpMaybe: 3, rsvpNo: 1, capacity: 20, isPublished: false },
-  { id: 'e5', title: 'Wellington Regional Pairs', format: 'pairs', startsAt: '2026-09-19T09:00:00', endsAt: '2026-09-19T17:00:00', location: 'Away — Petone Central', description: 'Away round — pairs qualifiers. Meet at the club at 8am, van leaving 8:15 sharp.', host: 'Tama Wong', rsvpYes: 12, rsvpMaybe: 2, rsvpNo: 6, capacity: 16, isPublished: true },
-  { id: 'e6', title: 'Mid-week Mens Pairs', format: 'pairs', startsAt: '2026-08-06T18:00:00', endsAt: '2026-08-06T21:00:00', location: 'Green 2', description: 'Weekly Thursday night pairs. Consistent turnout — winners announced end of season.', rsvpYes: 22, rsvpMaybe: 0, rsvpNo: 0, capacity: 24, isPublished: true },
-  { id: 'e7', title: 'Winter Championship — Semis', format: 'singles', startsAt: '2026-07-25T09:00:00', endsAt: '2026-07-25T15:00:00', location: 'Green 1 & 2', description: 'Semi-finals of the winter singles. Best two through to the final in August.', host: 'Marcus Tuilagi', rsvpYes: 16, rsvpMaybe: 0, rsvpNo: 0, capacity: 16, isPublished: true },
-  { id: 'e8', title: 'Junior Coaching — Term 3 Week 6', format: 'social', startsAt: '2026-08-10T16:00:00', endsAt: '2026-08-10T17:30:00', location: 'Green 3', description: 'Weekly junior session. Under-14 pathway players — bring water and sunscreen.', host: 'Tama Wong', rsvpYes: 11, rsvpMaybe: 2, rsvpNo: 1, capacity: 20, isPublished: true },
+  { id: 'e1', title: 'Champion of Champions — Round 1', type: 'tournament', format: 'singles', startsAt: '2026-08-22T09:00:00', endsAt: '2026-08-22T13:00:00', location: 'Green 1', description: 'Opening round of the annual singles championship. Best-of-21 ends knock-out format. Bring lunch — cafe closed until noon.', host: 'Marcus Tuilagi', rsvpYes: 24, rsvpMaybe: 4, rsvpNo: 2, capacity: 32, isPublished: true },
+  { id: 'e2', title: 'Twilight Triples', type: 'tournament', format: 'triples', startsAt: '2026-08-26T17:30:00', endsAt: '2026-08-26T20:30:00', location: 'Green 2 & 3', description: 'Casual mid-week triples. Rounds run to 12 ends. BBQ and bar open from 5pm — book a table for after.', host: 'Denise Peters', rsvpYes: 18, rsvpMaybe: 6, rsvpNo: 3, capacity: 24, isPublished: true },
+  { id: 'e3', title: 'Ladies Open Fours', type: 'tournament', format: 'fours', startsAt: '2026-09-05T10:00:00', endsAt: '2026-09-05T16:00:00', location: 'All greens', description: 'Regional open — teams from Petone, Kelburn, and Naenae. Prize-giving at the clubrooms from 4:30pm.', host: 'Jo Kirk', rsvpYes: 36, rsvpMaybe: 8, rsvpNo: 4, capacity: 40, isPublished: true },
+  { id: 'e4', title: 'Sunday Social Roll-up', type: 'social', format: null, startsAt: '2026-09-13T13:00:00', endsAt: '2026-09-13T16:00:00', location: 'Green 1', description: 'Bring anyone — members, non-members, kids. Sausages on. Suggested $5 koha to cover the bar.', host: 'Sione Vagana', rsvpYes: 8, rsvpMaybe: 3, rsvpNo: 1, capacity: 20, isPublished: false },
+  { id: 'e5', title: 'Wellington Regional Pairs', type: 'tournament', format: 'pairs', startsAt: '2026-09-19T09:00:00', endsAt: '2026-09-19T17:00:00', location: 'Away — Petone Central', description: 'Away round — pairs qualifiers. Meet at the club at 8am, van leaving 8:15 sharp.', host: 'Tama Wong', rsvpYes: 12, rsvpMaybe: 2, rsvpNo: 6, capacity: 16, isPublished: true },
+  { id: 'e6', title: 'Annual Prize Giving', type: 'presentation', format: null, startsAt: '2026-09-28T18:30:00', endsAt: '2026-09-28T22:00:00', location: 'Clubrooms', description: 'End-of-season awards night. Champion of Champions, most-improved, and the coveted Skip of the Year. Dress: smart casual. Tickets $25 members / $35 guests.', host: 'Grace Whittaker', rsvpYes: 96, rsvpMaybe: 12, rsvpNo: 4, capacity: 120, isPublished: true },
+  { id: 'e7', title: 'Green A Working Bee', type: 'working-bee', format: null, startsAt: '2026-09-06T08:00:00', endsAt: '2026-09-06T12:00:00', location: 'Green A', description: 'Pre-season prep — coring, top-dressing, and edge trim. Coffee and bacon rolls at 10. Wear old clothes and closed shoes.', host: 'Tāne Rahupene', rsvpYes: 14, rsvpMaybe: 3, rsvpNo: 2, capacity: 30, isPublished: true },
+  { id: 'e8', title: 'AGM — 2026', type: 'meeting', format: null, startsAt: '2026-09-24T19:00:00', endsAt: '2026-09-24T21:00:00', location: 'Clubrooms', description: 'Annual General Meeting. Financials, committee elections, and next-year planning. All members welcome; quorum is 30.', host: 'Committee', rsvpYes: 28, rsvpMaybe: 8, rsvpNo: 3, capacity: 60, isPublished: true },
+  { id: 'e9', title: 'Learn-to-Bowl · Term 4', type: 'coaching', format: null, startsAt: '2026-10-11T10:00:00', endsAt: '2026-10-11T11:30:00', location: 'Green 3', description: 'First of an 8-week beginner series. No experience needed, all equipment provided. Bring flat-soled shoes.', host: 'Sarah Kim', rsvpYes: 9, rsvpMaybe: 4, rsvpNo: 0, capacity: 12, isPublished: true },
+  { id: 'e10', title: 'Quiz Night · Junior Team Fundraiser', type: 'fundraiser', format: null, startsAt: '2026-09-20T19:00:00', endsAt: '2026-09-20T22:30:00', location: 'Clubrooms', description: 'Six-person teams, $10 a head, bar open all night. Proceeds fund the juniors\' trip to Nationals.', host: 'Denise Peters', rsvpYes: 42, rsvpMaybe: 18, rsvpNo: 5, capacity: 80, isPublished: true },
+  { id: 'e11', title: 'Mid-week Mens Pairs', type: 'tournament', format: 'pairs', startsAt: '2026-08-06T18:00:00', endsAt: '2026-08-06T21:00:00', location: 'Green 2', description: 'Weekly Thursday night pairs. Consistent turnout — winners announced end of season.', rsvpYes: 22, rsvpMaybe: 0, rsvpNo: 0, capacity: 24, isPublished: true },
+  { id: 'e12', title: 'Winter Championship — Semis', type: 'tournament', format: 'singles', startsAt: '2026-07-25T09:00:00', endsAt: '2026-07-25T15:00:00', location: 'Green 1 & 2', description: 'Semi-finals of the winter singles. Best two through to the final in August.', host: 'Marcus Tuilagi', rsvpYes: 16, rsvpMaybe: 0, rsvpNo: 0, capacity: 16, isPublished: true },
 ])
 
 // ── Filtering ─────────────────────────────────────────────────
@@ -62,6 +78,7 @@ const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
   return byTab.value
     .filter((e) => {
+      if (typeFilter.value !== 'all' && e.type !== typeFilter.value) return false
       if (formatFilter.value !== 'all' && e.format !== formatFilter.value) return false
       if (!q) return true
       return (
@@ -69,7 +86,8 @@ const filtered = computed(() => {
         e.location.toLowerCase().includes(q) ||
         (e.description ?? '').toLowerCase().includes(q) ||
         (e.host ?? '').toLowerCase().includes(q) ||
-        e.format.toLowerCase().includes(q)
+        (e.format ?? '').toLowerCase().includes(q) ||
+        e.type.toLowerCase().includes(q)
       )
     })
     .sort((a, b) => {
@@ -79,15 +97,37 @@ const filtered = computed(() => {
     })
 })
 
-const formatCounts = computed(() => {
+// Format chips only make sense when scoping to tournaments.
+const formatFilterVisible = computed(() =>
+  typeFilter.value === 'all' || typeFilter.value === 'tournament',
+)
+
+const typeCounts = computed(() => {
   const src = byTab.value
+  const zero = {
+    all: src.length,
+    tournament: 0,
+    social: 0,
+    meeting: 0,
+    coaching: 0,
+    'working-bee': 0,
+    presentation: 0,
+    fundraiser: 0,
+    function: 0,
+    other: 0,
+  } as Record<'all' | EventType, number>
+  for (const e of src) zero[e.type] += 1
+  return zero
+})
+
+const formatCounts = computed(() => {
+  const src = byTab.value.filter((e) => typeFilter.value === 'all' || e.type === typeFilter.value)
   return {
     all: src.length,
     singles: src.filter((e) => e.format === 'singles').length,
     pairs:   src.filter((e) => e.format === 'pairs').length,
     triples: src.filter((e) => e.format === 'triples').length,
     fours:   src.filter((e) => e.format === 'fours').length,
-    social:  src.filter((e) => e.format === 'social').length,
   }
 })
 
@@ -135,20 +175,56 @@ function fillPct(e: EventRow): number {
   return Math.min(100, Math.round(((e.rsvpYes + e.rsvpMaybe) / e.capacity) * 100))
 }
 
-const formatColour: Record<Format, string> = {
+const formatColour: Record<BowlsFormat, string> = {
   singles: 'var(--color-feature-mint)',
   pairs:   'var(--color-accent)',
   triples: 'var(--color-feature-tangerine)',
   fours:   'var(--color-feature-violet)',
-  social:  'var(--color-graphite)',
+  other:   'var(--color-graphite)',
 }
 
-const formatLabel: Record<Format, string> = {
+const formatLabel: Record<BowlsFormat, string> = {
   singles: 'Singles',
   pairs:   'Pairs',
   triples: 'Triples',
   fours:   'Fours',
-  social:  'Social',
+  other:   'Other',
+}
+
+const typeLabel: Record<EventType, string> = {
+  tournament:    'Tournament',
+  social:        'Social',
+  meeting:       'Meeting',
+  coaching:      'Coaching',
+  'working-bee': 'Working bee',
+  presentation:  'Presentation',
+  fundraiser:    'Fundraiser',
+  function:      'Function',
+  other:         'Other',
+}
+
+// Accent bar down the left of each card, and dot on the type chip.
+const typeColour: Record<EventType, string> = {
+  tournament:    'var(--color-accent)',
+  social:        'var(--color-feature-mint)',
+  meeting:       'var(--color-graphite)',
+  coaching:      'var(--color-feature-tangerine)',
+  'working-bee': '#B45309',
+  presentation:  'var(--color-feature-violet)',
+  fundraiser:    '#E85D5D',
+  function:      '#0369A1',
+  other:         'var(--color-mute)',
+}
+
+const TYPE_ORDER: EventType[] = [
+  'tournament', 'social', 'meeting', 'coaching', 'working-bee',
+  'presentation', 'fundraiser', 'function', 'other',
+]
+
+function eventSecondaryLine(e: EventRow): string {
+  // Non-tournaments show the type; tournaments show the bowls format.
+  if (e.type === 'tournament' && e.format) return formatLabel[e.format]
+  return typeLabel[e.type]
 }
 
 function eventBadge(e: EventRow): { label: string; tone: string } | null {
@@ -186,7 +262,8 @@ function editEvent() {
 const createOpen = ref(false)
 const emptyForm = () => ({
   title: '',
-  format: 'social' as Format,
+  type: 'tournament' as EventType,
+  format: 'singles' as BowlsFormat,
   date: '',
   startTime: '',
   endTime: '',
@@ -196,6 +273,7 @@ const emptyForm = () => ({
   syncCalendar: true,
 })
 const form = reactive(emptyForm())
+const formNeedsFormat = computed(() => form.type === 'tournament')
 
 function openCreate() {
   Object.assign(form, emptyForm())
@@ -215,7 +293,8 @@ function submit() {
   events.value.unshift({
     id: `e${Date.now()}`,
     title: form.title.trim(),
-    format: form.format,
+    type: form.type,
+    format: form.type === 'tournament' ? form.format : null,
     startsAt,
     endsAt,
     location: form.location.trim() || 'TBC',
@@ -230,8 +309,8 @@ function submit() {
 }
 
 const emptyMessage = computed(() => {
-  if (search.value.trim() || formatFilter.value !== 'all') {
-    return { title: 'No matches', hint: 'Try clearing the search or format filter.' }
+  if (search.value.trim() || typeFilter.value !== 'all' || formatFilter.value !== 'all') {
+    return { title: 'No matches', hint: 'Try clearing the search or filters.' }
   }
   return activeTab.value === 'upcoming'
     ? { title: 'No events scheduled', hint: 'Click "+ New event" to get one on the calendar.' }
@@ -255,11 +334,11 @@ const emptyMessage = computed(() => {
 
     <div class="toolbar">
       <div class="tabs">
-        <button class="tab" :class="{ 'is-active': activeTab === 'upcoming' }" @click="activeTab = 'upcoming'; formatFilter = 'all'">
+        <button class="tab" :class="{ 'is-active': activeTab === 'upcoming' }" @click="activeTab = 'upcoming'; typeFilter = 'all'; formatFilter = 'all'">
           <span>Upcoming</span>
           <span class="tab__count">{{ counts.upcoming }}</span>
         </button>
-        <button class="tab" :class="{ 'is-active': activeTab === 'past' }" @click="activeTab = 'past'; formatFilter = 'all'">
+        <button class="tab" :class="{ 'is-active': activeTab === 'past' }" @click="activeTab = 'past'; typeFilter = 'all'; formatFilter = 'all'">
           <span>Past</span>
           <span class="tab__count">{{ counts.past }}</span>
         </button>
@@ -278,9 +357,32 @@ const emptyMessage = computed(() => {
 
     <div class="chips">
       <button
-        v-for="fmt in (['all', 'singles', 'pairs', 'triples', 'fours', 'social'] as const)"
-        :key="fmt"
         class="chip"
+        :class="{ 'is-active': typeFilter === 'all' }"
+        @click="typeFilter = 'all'; formatFilter = 'all'"
+      >
+        <span class="chip__label">All types</span>
+        <span class="chip__count">{{ typeCounts.all }}</span>
+      </button>
+      <button
+        v-for="t in TYPE_ORDER"
+        :key="t"
+        class="chip"
+        :class="{ 'is-active': typeFilter === t }"
+        :disabled="typeCounts[t] === 0"
+        @click="typeFilter = t; if (t !== 'tournament') formatFilter = 'all'"
+      >
+        <span class="chip__dot" :style="{ background: typeColour[t] }" />
+        <span class="chip__label">{{ typeLabel[t] }}</span>
+        <span class="chip__count">{{ typeCounts[t] }}</span>
+      </button>
+    </div>
+
+    <div v-if="formatFilterVisible" class="chips chips--sub">
+      <button
+        v-for="fmt in (['all', 'singles', 'pairs', 'triples', 'fours'] as const)"
+        :key="fmt"
+        class="chip chip--sm"
         :class="{ 'is-active': formatFilter === fmt }"
         @click="formatFilter = fmt"
       >
@@ -292,7 +394,7 @@ const emptyMessage = computed(() => {
 
     <ul v-if="filtered.length" class="list">
       <li v-for="e in filtered" :key="e.id" class="event" tabindex="0" @click="openDetail(e)" @keydown.enter="openDetail(e)">
-        <div class="event__format" :style="{ background: formatColour[e.format] }" />
+        <div class="event__format" :style="{ background: typeColour[e.type] }" />
         <div class="event__main">
           <div class="event__title-row">
             <h3 class="event__title">{{ e.title }}</h3>
@@ -303,7 +405,7 @@ const emptyMessage = computed(() => {
             <span class="event__sep">·</span>
             <span>{{ e.location }}</span>
             <span class="event__sep">·</span>
-            <span class="event__format-label">{{ formatLabel[e.format] }}</span>
+            <span class="event__format-label">{{ eventSecondaryLine(e) }}</span>
           </div>
           <div class="event__when">{{ timeUntilLabel(e.startsAt) }}</div>
         </div>
@@ -320,7 +422,7 @@ const emptyMessage = computed(() => {
     <div v-else class="empty">
       <div class="empty__title">{{ emptyMessage.title }}</div>
       <div class="empty__hint">{{ emptyMessage.hint }}</div>
-      <button v-if="activeTab === 'upcoming' && !search && formatFilter === 'all'" class="btn btn--primary empty__cta" @click="openCreate">+ New event</button>
+      <button v-if="activeTab === 'upcoming' && !search && typeFilter === 'all' && formatFilter === 'all'" class="btn btn--primary empty__cta" @click="openCreate">+ New event</button>
     </div>
 
     <!-- Detail modal -->
@@ -333,9 +435,9 @@ const emptyMessage = computed(() => {
     >
       <template v-if="activeEvent">
         <div class="detail">
-          <div class="detail__hero" :style="{ '--hero-accent': formatColour[activeEvent.format] } as any">
+          <div class="detail__hero" :style="{ '--hero-accent': typeColour[activeEvent.type] } as any">
             <div class="detail__hero-body">
-              <div class="detail__hero-line">{{ formatLabel[activeEvent.format] }} · {{ activeEvent.location }}</div>
+              <div class="detail__hero-line">{{ eventSecondaryLine(activeEvent) }} · {{ activeEvent.location }}</div>
               <div class="detail__hero-meta">{{ formatRange(activeEvent.startsAt, activeEvent.endsAt) }} · {{ timeUntilLabel(activeEvent.startsAt) }}</div>
             </div>
             <div class="detail__hero-badges">
@@ -370,8 +472,9 @@ const emptyMessage = computed(() => {
               <dl class="dl">
                 <div class="dl__row"><dt>When</dt><dd>{{ formatRange(activeEvent.startsAt, activeEvent.endsAt) }}</dd></div>
                 <div class="dl__row"><dt>Where</dt><dd>{{ activeEvent.location }}</dd></div>
-                <div class="dl__row"><dt>Format</dt><dd>{{ formatLabel[activeEvent.format] }}</dd></div>
-                <div class="dl__row"><dt>Capacity</dt><dd>{{ activeEvent.capacity }} players</dd></div>
+                <div class="dl__row"><dt>Type</dt><dd>{{ typeLabel[activeEvent.type] }}</dd></div>
+                <div v-if="activeEvent.type === 'tournament' && activeEvent.format" class="dl__row"><dt>Format</dt><dd>{{ formatLabel[activeEvent.format] }}</dd></div>
+                <div class="dl__row"><dt>Capacity</dt><dd>{{ activeEvent.capacity }} {{ activeEvent.type === 'tournament' ? 'players' : 'attendees' }}</dd></div>
               </dl>
             </section>
 
@@ -411,15 +514,21 @@ const emptyMessage = computed(() => {
           <span class="field__label">Title</span>
           <input v-model="form.title" type="text" placeholder="Twilight Triples" autofocus />
         </label>
-        <div class="form__row">
+        <div class="form__row" :class="{ 'form__row--three': formNeedsFormat }">
           <label class="field">
+            <span class="field__label">Type</span>
+            <select v-model="form.type">
+              <option v-for="t in TYPE_ORDER" :key="t" :value="t">{{ typeLabel[t] }}</option>
+            </select>
+          </label>
+          <label v-if="formNeedsFormat" class="field">
             <span class="field__label">Format</span>
             <select v-model="form.format">
               <option value="singles">Singles</option>
               <option value="pairs">Pairs</option>
               <option value="triples">Triples</option>
               <option value="fours">Fours</option>
-              <option value="social">Social roll-up</option>
+              <option value="other">Other</option>
             </select>
           </label>
           <label class="field">
@@ -499,11 +608,14 @@ const emptyMessage = computed(() => {
 .search__clear { position: absolute; right: 8px; width: 22px; height: 22px; border-radius: 999px; background: var(--color-surface); border: 0; color: var(--color-graphite); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .search__clear:hover { background: var(--color-hairline); color: var(--color-ink); }
 
-/* Format chips */
+/* Filter chips */
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips--sub { padding-left: 2px; }
 .chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--color-hairline); background: #fff; border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-graphite); cursor: pointer; }
-.chip:hover { border-color: var(--color-mute); }
+.chip:hover:not(:disabled) { border-color: var(--color-mute); }
+.chip:disabled { opacity: 0.4; cursor: not-allowed; }
 .chip.is-active { background: var(--color-ink); border-color: var(--color-ink); color: #fff; font-weight: 600; }
+.chip--sm { padding: 4px 10px; font-size: 11px; }
 .chip__dot { width: 8px; height: 8px; border-radius: 999px; }
 .chip__count { font-family: var(--font-mono); font-size: 10px; padding: 1px 7px; background: var(--color-surface); color: var(--color-fog); border-radius: 999px; }
 .chip.is-active .chip__count { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); }

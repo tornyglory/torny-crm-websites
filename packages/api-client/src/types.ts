@@ -27,6 +27,19 @@ export interface Member {
   joinedAt: string
 }
 
+export type EventType =
+  | 'tournament'
+  | 'social'
+  | 'meeting'
+  | 'coaching'
+  | 'working-bee'
+  | 'presentation'
+  | 'fundraiser'
+  | 'function'
+  | 'other'
+
+export type BowlsFormat = 'singles' | 'pairs' | 'triples' | 'fours' | 'other'
+
 export interface Event {
   id: ID
   clubId: ID
@@ -35,7 +48,10 @@ export interface Event {
   description: string | null
   startsAt: string
   endsAt: string
-  format: 'singles' | 'pairs' | 'triples' | 'fours' | 'other'
+  /** The kind of event — tournament, social, meeting, etc. */
+  eventType: EventType
+  /** Only present for tournaments; null for other event types. */
+  format: BowlsFormat | null
   location: string | null
   rsvpOpen: boolean
 }

@@ -102,5 +102,13 @@ export type {
   RequestUploadParams,
   ConfirmParams,
 } from './resources/media'
+export * as blockImages from './resources/blockImages'
+export type {
+  BlockImage,
+  UploadUrlResponse as BlockImageUploadUrlResponse,
+  ConfirmParams as BlockImageConfirmParams,
+  PatchParams as BlockImagePatchParams,
+  ReorderResponse as BlockImageReorderResponse,
+} from './resources/blockImages'
 export { SAM_BASE, CRM_BASE, MEDIA_BASE } from './config'
 export { ApiError, authedFetch, publicFetch, TOKEN_STORAGE_KEY } from './http'

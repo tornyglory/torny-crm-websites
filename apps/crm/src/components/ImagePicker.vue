@@ -1,37 +1,63 @@
 <script setup lang="ts">
 /**
- * Reusable image picker. Handles the full Cloudflare direct-upload dance:
- * request URL → POST file to CF → confirm → emit final CDN URL.
+ * Reusable image picker.
  *
- * v-model'd on the URL string. Empty string / null / undefined = no image.
- * Aspect prop controls the preview shape (e.g. `16 / 9` for hero, `1` for
- * square logo, `4 / 3` for gallery thumbnails).
+ * Two modes, chosen at prop level:
+ *
+ *   1. Block-scoped (page builder) — pass `pageSlug` + `blockId`. Uploads
+ *      go through the block-images API (brief 18): upload-url → CF POST
+ *      → confirm. Emits both `update:modelValue` (public URL) and
+ *      `update:imageId` (row id) so the parent can track ownership for
+ *      later PATCH/DELETE.
+ *
+ *   2. Legacy club-scoped — omit `pageSlug` and `blockId`. Uploads use
+ *      the old `media.uploadClubImage()` flow. Used by the club logo /
+ *      avatar picker and anywhere that isn't a block prop yet.
+ *
+ * v-modelled on the URL string. `v-model:imageId` gets you the row id
+ * for block-scoped mode. Empty string / null / undefined = no image.
  */
 import { ref, computed } from 'vue'
-import { media, ApiError, type MediaContentType } from '@torny/api-client'
+import {
+  blockImages,
+  media,
+  ApiError,
+  type MediaContentType,
+  type PageSlug,
+} from '@torny/api-client'
 import { useClubStore } from '@/stores/club'
 
 const props = withDefaults(defineProps<{
   modelValue: string | null | undefined
-  /** Cloudflare content_type slot — `banner` for hero, `gallery` for photos, `media` for anything else. */
+  /** Row id from the block-images API. Optional; only set in block-scoped mode. */
+  imageId?: number | null
+  /** Passing pageSlug + blockId switches on block-scoped upload. */
+  pageSlug?: PageSlug
+  blockId?: string
+  /** Alt text saved with the image on `confirm`. Only applied in block-scoped mode. */
+  alt?: string
+  caption?: string
+  /** Cloudflare content_type slot for the legacy club-scoped flow. */
   contentType?: MediaContentType
-  /** CSS aspect-ratio for the preview area. */
   aspect?: string
-  /** Max file size in MB (rejected client-side before upload). */
   maxSizeMb?: number
-  /** Optional label rendered above the picker. */
   label?: string
-  /** Free-text hint under the label. */
   hint?: string
 }>(), {
+  imageId: null,
   contentType: 'media',
   aspect: '16 / 9',
   maxSizeMb: 10,
   label: '',
   hint: '',
+  alt: '',
+  caption: '',
 })
 
-const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+const emit = defineEmits<{
+  'update:modelValue': [value: string]
+  'update:imageId': [value: number | null]
+}>()
 
 const clubStore = useClubStore()
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -39,9 +65,9 @@ const uploading = ref(false)
 const error = ref<string | null>(null)
 const localPreview = ref<string | null>(null)
 
-// Prefer a fresh local preview (from URL.createObjectURL) while uploading —
-// falls back to the confirmed CDN URL after the upload lands.
 const previewUrl = computed(() => localPreview.value ?? props.modelValue ?? null)
+
+const isBlockScoped = computed(() => Boolean(props.pageSlug && props.blockId))
 
 const ACCEPTED = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml'
 const ACCEPTED_MIME = new Set(ACCEPTED.split(','))
@@ -54,7 +80,6 @@ function openPicker() {
 async function onFile(e: Event) {
   const target = e.target as HTMLInputElement
   const file = target.files?.[0]
-  // Reset the input so the same file can be re-picked after an error.
   target.value = ''
   if (!file) return
 
@@ -75,26 +100,43 @@ async function onFile(e: Event) {
     return
   }
 
-  // Swap in the local object-URL preview immediately for perceived responsiveness.
   if (localPreview.value) URL.revokeObjectURL(localPreview.value)
   localPreview.value = URL.createObjectURL(file)
   uploading.value = true
 
   try {
-    const confirmed = await media.uploadClubImage(clubId, file, {
-      contentType: props.contentType,
-    })
-    // Prefer public_url; the confirmed shape also exposes thumbnail_url / avatar_url.
-    emit('update:modelValue', confirmed.public_url)
+    if (isBlockScoped.value) {
+      // Replace-on-upload: soft-delete the previous image so the block
+      // doesn't leave orphans hanging around before publish reconciles.
+      const prevId = props.imageId
+      const confirmed = await blockImages.upload(clubId, props.pageSlug!, props.blockId!, file, {
+        alt: props.alt,
+        caption: props.caption,
+      })
+      if (prevId != null) {
+        // Fire-and-forget — a failed delete here isn't user-facing.
+        blockImages
+          .remove(clubId, props.pageSlug!, props.blockId!, prevId)
+          .catch(() => { /* ignore */ })
+      }
+      emit('update:modelValue', confirmed.public_url)
+      emit('update:imageId', confirmed.id)
+    } else {
+      const confirmed = await media.uploadClubImage(clubId, file, {
+        contentType: props.contentType,
+      })
+      emit('update:modelValue', confirmed.public_url)
+    }
   } catch (err) {
     if (err instanceof ApiError) {
-      error.value = err.status === 403
-        ? "You don't have permission to upload images for this club."
-        : (err.message || 'Upload failed')
+      error.value = err.code === 'too_many_images'
+        ? 'This block already has 20 images — remove one first.'
+        : err.status === 403
+          ? "You don't have permission to upload images for this club."
+          : (err.message || 'Upload failed')
     } else {
       error.value = err instanceof Error ? err.message : 'Upload failed'
     }
-    // Roll the preview back to whatever was previously stored (may be null).
     if (localPreview.value) URL.revokeObjectURL(localPreview.value)
     localPreview.value = null
   } finally {
@@ -102,12 +144,25 @@ async function onFile(e: Event) {
   }
 }
 
-function remove() {
+async function remove() {
   if (uploading.value) return
+  const clubId = clubStore.current?.id
+  const prevId = props.imageId
+
   if (localPreview.value) URL.revokeObjectURL(localPreview.value)
   localPreview.value = null
   error.value = null
+
   emit('update:modelValue', '')
+  emit('update:imageId', null)
+
+  // Best-effort clean up server-side. Publish reconciliation would catch
+  // this eventually — this just makes it immediate.
+  if (isBlockScoped.value && typeof clubId === 'number' && prevId != null) {
+    try {
+      await blockImages.remove(clubId, props.pageSlug!, props.blockId!, prevId)
+    } catch { /* ignore */ }
+  }
 }
 </script>
 

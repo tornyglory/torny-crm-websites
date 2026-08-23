@@ -14,7 +14,7 @@ const props = defineProps<{
   open: boolean
   eyebrow?: string
   title: string
-  width?: 'sm' | 'md' | 'lg'
+  width?: 'sm' | 'md' | 'lg' | 'xl'
 }>()
 
 const emit = defineEmits<{ (e: 'close'): void }>()
@@ -111,6 +111,7 @@ watch(() => props.open, (v) => lockScroll(v))
 .crm-modal__card--sm { max-width: 400px; }
 .crm-modal__card--md { max-width: 560px; }
 .crm-modal__card--lg { max-width: 780px; }
+.crm-modal__card--xl { max-width: 1200px; }
 
 .crm-modal__head {
   display: flex;

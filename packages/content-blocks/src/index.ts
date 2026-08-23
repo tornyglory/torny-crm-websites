@@ -7,6 +7,15 @@ export { default as GalleryBlock } from './blocks/GalleryBlock.vue'
 export { default as ContactFormBlock } from './blocks/ContactFormBlock.vue'
 export { default as MembershipCtaBlock } from './blocks/MembershipCtaBlock.vue'
 export { default as CtaBannerBlock } from './blocks/CtaBannerBlock.vue'
+export { default as MediaSplitBlock } from './blocks/MediaSplitBlock.vue'
+export { default as SectionTitleBlock } from './blocks/SectionTitleBlock.vue'
+export { default as PullQuoteBlock } from './blocks/PullQuoteBlock.vue'
+export { default as FeatureGridBlock } from './blocks/FeatureGridBlock.vue'
+export { default as FaqAccordionBlock } from './blocks/FaqAccordionBlock.vue'
+export { default as FullBleedImageBlock } from './blocks/FullBleedImageBlock.vue'
+export { default as TimelineBlock } from './blocks/TimelineBlock.vue'
+export { default as TwoColumnBlock } from './blocks/TwoColumnBlock.vue'
+export { default as DividerBlock } from './blocks/DividerBlock.vue'
 
 // Site chrome — same shell on every club site, tenant data (name, logo,
 // --color-accent) plumbed via props. Clubs vary content, not chrome.

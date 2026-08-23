@@ -25,6 +25,7 @@ import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
 import { useOnboardingStore } from '@/stores/onboarding'
 import ImagePicker from '@/components/ImagePicker.vue'
+import BlockPaletteDialog from '@/components/BlockPaletteDialog.vue'
 import WebsiteSettingsPanel, { type WebsiteSettingsSection } from '@/components/WebsiteSettingsPanel.vue'
 import { ApiError, pages, type PageBlock } from '@torny/api-client'
 import type {
@@ -38,6 +39,18 @@ import type {
   ContactFormProps,
   MembershipCtaProps,
   CtaBannerProps,
+  MediaSplitProps,
+  SectionTitleProps,
+  PullQuoteProps,
+  FeatureGridProps,
+  FeatureGridItem,
+  FaqAccordionProps,
+  FaqItem,
+  FullBleedImageProps,
+  TimelineProps,
+  TimelineEntry,
+  TwoColumnProps,
+  DividerProps,
 } from '@torny/content-blocks'
 
 const route = useRoute()
@@ -157,6 +170,126 @@ const homeHeroExtras: HeroDefaultExtras = {
   ],
 }
 
+// ── Editorial-block default builders ─────────────────────────
+const mediaSplitDefault = (mediaSide: 'left' | 'right' = 'left'): MediaSplitProps => ({
+  mediaSide,
+  background: mediaSide === 'right' ? 'surface' : 'ground',
+  eyebrow: 'Our story · Chapter one',
+  heading: 'Three greens, seventy-three summers, one very stubborn hedge.',
+  bodyParagraphs: [
+    'We opened on land the council forgot about. A few returned servicemen laid the first green by hand — twelve months of level checks, borrowed rollers, and one memorable delivery of the wrong topsoil.',
+    'Seventy-three years later, we\'re still here. Still on the same block. Still watching the same weathervane spin.',
+  ],
+  primaryCta: { label: 'Read the full history', href: '/about' },
+  secondaryCta: { label: 'See the timeline', href: '/about#timeline' },
+  mediaCaption: 'Green A · 1972',
+})
+
+const sectionTitleDefault = (): SectionTitleProps => ({
+  eyebrow: 'About the club',
+  heading: 'A community of people who like each other and love the game.',
+  body: 'One hundred and forty-two members, from beginners on their first lesson to skips who\'ve played every Saturday for thirty years. Everyone gets the same welcome.',
+})
+
+const pullQuoteDefault = (): PullQuoteProps => ({
+  quote: 'Rangi taught me the weight of a wounded jack in one Thursday morning. Thirty years later I\'m still working on the line.',
+  authorName: 'Grace Whittaker',
+  authorRole: 'Club President · Member since 1996',
+  authorInitials: 'GW',
+})
+
+const featureGridDefault = (): FeatureGridProps => ({
+  eyebrow: 'What you get',
+  heading: 'More than a bowling club.',
+  columns: 4,
+  items: [
+    { icon: 'target', iconTone: 'accent', title: 'Three greens, one keeper', body: 'Our greenkeeper has looked after our surfaces for years. They roll consistent, they run true.', linkLabel: 'Meet the greenkeeper', linkHref: '/about' } satisfies FeatureGridItem,
+    { icon: 'people', iconTone: 'mint', title: '142 members, all sorts', body: 'Retired teachers, tradies, students. Bring who you are.', linkLabel: 'Meet the club', linkHref: '/about' } satisfies FeatureGridItem,
+    { icon: 'star', iconTone: 'amber', title: 'A wall full of names', body: '73 seasons of Champion of Champions, 41 unique winners on the honour board.', linkLabel: 'Honour board', linkHref: '/honour-board' } satisfies FeatureGridItem,
+    { icon: 'calendar', iconTone: 'violet', title: 'Something on every week', body: 'Twilights, pennant, coaching, function nights. Even the quiet weeks have coffee at 10.', linkLabel: 'See calendar', linkHref: '/events' } satisfies FeatureGridItem,
+  ],
+})
+
+const faqAccordionDefault = (): FaqAccordionProps => ({
+  eyebrow: 'First-timer questions',
+  heading: 'Whatever you\'re wondering, someone else asked first.',
+  supportText: 'Still stuck? Drop us a note — we usually reply within a day.',
+  cta: { label: 'Ask us anything', href: '/contact' },
+  items: [
+    { question: 'Do I need any gear to come along?', answer: 'Not a thing. We\'ve got bowls in every weight and enough flat-soled shoes to fit most feet. Wear something comfortable — long trousers and a collared top are fine for socials.' } satisfies FaqItem,
+    { question: 'What\'s the age range at the club?', answer: 'Our youngest member is 14 and our oldest is 89. Most of the club sits between 40 and 70, but everyone plays together — no separate groups.' } satisfies FaqItem,
+    { question: 'Is there parking on-site?', answer: 'Yes, free parking behind the clubhouse. Overflow street parking on match days.' } satisfies FaqItem,
+    { question: 'Can I hire the clubhouse for a private event?', answer: 'Absolutely. The clubhouse holds up to 80 seated or 120 standing. Contact us for pricing and dates.' } satisfies FaqItem,
+    { question: 'How do I join a pennant team?', answer: 'Speak to Sarah — our selectors watch every Friday twilight to see how the summer bowls are running. Teams are picked in September.' } satisfies FaqItem,
+  ],
+})
+
+const fullBleedImageDefault = (): FullBleedImageProps => ({
+  eyebrow: 'One night a year',
+  heading: 'The whole club under one roof.',
+  cta: { label: 'Book Champions night', href: '/events' },
+  topBadge: { label: 'Champions night · Mar 2026', tone: 'amber' },
+  bottomCaption: '142 members going',
+  overlayOpacity: 0.35,
+})
+
+const timelineDefault = (): TimelineProps => ({
+  eyebrow: 'Milestones · 1953 – 2026',
+  heading: 'Seventy-three years, in short.',
+  entries: [
+    { year: '1953', yearLabel: 'Year one', title: 'Green A opened by hand', body: 'A dozen returned servicemen level the first surface over twelve months. First game played on Boxing Day.', tag: 'Founding' } satisfies TimelineEntry,
+    { year: '1968', title: 'Green B and the clubhouse extension', body: 'Membership passes 60. Second green laid on the neighbouring section, clubhouse doubled in size.' } satisfies TimelineEntry,
+    { year: '1984', yearLabel: 'First title', title: 'First Champion of Champions', body: 'Alfie Whakatane wins the inaugural club singles championship, 21–19. The honour board starts, and it hasn\'t stopped.', highlighted: true, avatarInitials: 'AW' } satisfies TimelineEntry,
+    { year: '2004', title: 'Tāne takes over the greens', body: 'Head greenkeeper Tāne Rahupene joins. Consistent surfaces for twenty-two seasons and counting.' } satisfies TimelineEntry,
+    { year: '2020', yearLabel: 'Interrupted', yearTone: 'danger', title: 'No Champion of Champions', body: 'The first year the championship wasn\'t held. Members still turned up on Fridays anyway.' } satisfies TimelineEntry,
+    { year: '2026', yearLabel: 'This year', yearTone: 'accent', title: '142 members, three greens, new website', body: 'You\'re looking at the result.' } satisfies TimelineEntry,
+  ],
+})
+
+const twoColumnDefault = (): TwoColumnProps => ({
+  eyebrow: 'The way we play',
+  heading: 'Two houses, one game.',
+  background: 'surface',
+  columns: [
+    { eyebrow: 'Friday twilight', eyebrowTone: 'accent', heading: 'Social, whites optional', bodyParagraphs: [
+      'Named after the sun on the greens at 6pm. This is where most of our members started — no team required, no ranking, no expectations. Bring a plate for the shared table, bring a friend if you\'ve got one.',
+      'Coaching help is on the sidelines every Friday. Ask for a walk-through of stance and delivery.',
+    ] },
+    { eyebrow: 'Saturday pennant', eyebrowTone: 'amber', heading: 'Whites, teams, results', bodyParagraphs: [
+      'Saturday pennant runs October to March. We enter three teams across two grades.',
+      'Whites are required. Ties optional. Selectors watch every Friday twilight to see how the summer bowls are running.',
+    ] },
+  ],
+})
+
+const dividerDefault = (variant: DividerProps['variant'] = 'hairline'): DividerProps => ({
+  variant,
+  label: variant === 'label' ? 'Section break' : undefined,
+  height: variant === 'spacer' ? 64 : undefined,
+})
+
+// Palette entries reused across multiple pages.
+const EDITORIAL_PALETTE = [
+  { type: 'mediaSplit' as const, label: 'Media + text', hint: 'Image on one side, story on the other', icon: '◨',
+    defaults: () => mediaSplitDefault('left') },
+  { type: 'sectionTitle' as const, label: 'Section title', hint: 'A centered display heading', icon: '¶',
+    defaults: () => sectionTitleDefault() },
+  { type: 'pullQuote' as const, label: 'Pull quote', hint: 'A big centered testimonial', icon: '"',
+    defaults: () => pullQuoteDefault() },
+  { type: 'featureGrid' as const, label: 'Feature grid', hint: '4 columns of icon + copy', icon: '▤',
+    defaults: () => featureGridDefault() },
+  { type: 'faqAccordion' as const, label: 'FAQ', hint: 'Expandable question rows', icon: '?',
+    defaults: () => faqAccordionDefault() },
+  { type: 'fullBleedImage' as const, label: 'Full-bleed image', hint: 'A big picture with a CTA', icon: '◪',
+    defaults: () => fullBleedImageDefault() },
+  { type: 'timeline' as const, label: 'Timeline', hint: 'Milestones by year', icon: '⌘',
+    defaults: () => timelineDefault() },
+  { type: 'twoColumn' as const, label: 'Two-column text', hint: 'Side-by-side text columns', icon: '║',
+    defaults: () => twoColumnDefault() },
+  { type: 'divider' as const, label: 'Divider', hint: 'Section break line, label, or spacer', icon: '—',
+    defaults: () => dividerDefault('hairline') },
+]
+
 const PALETTES: Record<PageSlug, PaletteItem[]> = {
   home: [
     { type: 'hero', label: 'Hero', hint: 'Big heading, tagline, two CTAs', icon: '☰',
@@ -171,6 +304,7 @@ const PALETTES: Record<PageSlug, PaletteItem[]> = {
       defaults: (): MembershipCtaProps => ({ heading: 'Play with us this season', body: 'Whether you\'re a first-time bowler or a seasoned skip, there\'s a spot for you.', ctaLabel: 'See tiers', ctaHref: '/membership' }) },
     { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
       defaults: (): CtaBannerProps => ({ heading: 'Have questions? Get in touch.', ctaLabel: 'Contact us', ctaHref: '/contact', tone: 'accent' }) },
+    ...EDITORIAL_PALETTE,
   ],
   about: [
     { type: 'hero', label: 'Hero', hint: 'Page opener', icon: '☰',
@@ -181,6 +315,7 @@ const PALETTES: Record<PageSlug, PaletteItem[]> = {
       defaults: (): GalleryProps => ({ heading: 'The club', images: [] }) },
     { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
       defaults: (): CtaBannerProps => ({ heading: 'Come down for a roll-up.', ctaLabel: 'Contact us', ctaHref: '/contact', tone: 'ink' }) },
+    ...EDITORIAL_PALETTE,
   ],
   membership: [
     { type: 'hero', label: 'Hero', hint: 'Page opener', icon: '☰',
@@ -191,6 +326,7 @@ const PALETTES: Record<PageSlug, PaletteItem[]> = {
       defaults: (): MembershipCtaProps => ({ heading: 'Ready to join?', body: 'Send us a note and we\'ll get you sorted.', ctaLabel: 'Get in touch', ctaHref: '/contact' }) },
     { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
       defaults: (): CtaBannerProps => ({ heading: 'Questions about a tier?', ctaLabel: 'Ask us', ctaHref: '/contact', tone: 'surface' }) },
+    ...EDITORIAL_PALETTE,
   ],
   events: [
     { type: 'hero', label: 'Hero', hint: 'Page opener', icon: '☰',
@@ -233,6 +369,15 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   contactForm: 'Contact form',
   membershipCta: 'Membership CTA',
   ctaBanner: 'CTA banner',
+  mediaSplit: 'Media + text',
+  sectionTitle: 'Section title',
+  pullQuote: 'Pull quote',
+  featureGrid: 'Feature grid',
+  faqAccordion: 'FAQ',
+  fullBleedImage: 'Full-bleed image',
+  timeline: 'Timeline',
+  twoColumn: 'Two-column text',
+  divider: 'Divider',
 }
 
 // ── Seed layouts (per page) ───────────────────────────────
@@ -576,6 +721,15 @@ function blockSummary(block: Block): string {
     case 'contactForm':   return (block.props as ContactFormProps).heading || 'Contact form'
     case 'membershipCta': return (block.props as MembershipCtaProps).heading || '(no heading)'
     case 'ctaBanner':     return (block.props as CtaBannerProps).heading || '(no heading)'
+    case 'mediaSplit':    return (block.props as MediaSplitProps).heading || '(no heading)'
+    case 'sectionTitle':  return (block.props as SectionTitleProps).heading || '(no heading)'
+    case 'pullQuote':     return stripHtml((block.props as PullQuoteProps).quote).slice(0, 60)
+    case 'featureGrid':   return (block.props as FeatureGridProps).heading || `${(block.props as FeatureGridProps).items.length} features`
+    case 'faqAccordion':  return (block.props as FaqAccordionProps).heading || `${(block.props as FaqAccordionProps).items.length} questions`
+    case 'fullBleedImage':return (block.props as FullBleedImageProps).heading || '(no heading)'
+    case 'timeline':      return (block.props as TimelineProps).heading || `${(block.props as TimelineProps).entries.length} milestones`
+    case 'twoColumn':     return (block.props as TwoColumnProps).heading || 'Two-column text'
+    case 'divider':       return `Divider · ${(block.props as DividerProps).variant ?? 'hairline'}`
     default:              return ''
   }
 }
@@ -670,7 +824,8 @@ const lastSavedLabel = computed(() => {
       <section class="list">
         <div v-if="state.blocks.length === 0" class="empty">
           <div class="empty__title">Empty page.</div>
-          <div class="empty__hint">Add your first block below to get started.</div>
+          <div class="empty__hint">Pick your first block to get started.</div>
+          <button type="button" class="btn btn--primary" @click="paletteOpen = { after: null }">+ Add block</button>
         </div>
 
         <template v-for="(block, i) in state.blocks" :key="block.id">
@@ -697,43 +852,18 @@ const lastSavedLabel = computed(() => {
           </article>
 
           <!-- Insert-here slot below every block -->
-          <div class="inserter" :class="{ 'inserter--open': paletteOpen?.after === block.id }">
+          <div class="inserter">
             <button type="button" class="inserter__btn" @click="paletteOpen = { after: block.id }">+ Add block</button>
-            <div v-if="paletteOpen?.after === block.id" class="palette" @click.stop>
-              <button
-                v-for="p in PALETTES[currentPage]"
-                :key="p.type"
-                type="button"
-                class="palette__item"
-                @click="addBlock(p.type, block.id)"
-              >
-                <span class="palette__icon">{{ p.icon }}</span>
-                <span class="palette__label">
-                  <span class="palette__name">{{ p.label }}</span>
-                  <span class="palette__hint">{{ p.hint }}</span>
-                </span>
-              </button>
-            </div>
           </div>
         </template>
-
-        <!-- Palette when the page is empty (opened above the first row) -->
-        <div v-if="paletteOpen && paletteOpen.after === null && state.blocks.length === 0" class="palette palette--top" @click.stop>
-          <button
-            v-for="p in PALETTES[currentPage]"
-            :key="p.type"
-            type="button"
-            class="palette__item"
-            @click="addBlock(p.type, null)"
-          >
-            <span class="palette__icon">{{ p.icon }}</span>
-            <span class="palette__label">
-              <span class="palette__name">{{ p.label }}</span>
-              <span class="palette__hint">{{ p.hint }}</span>
-            </span>
-          </button>
-        </div>
       </section>
+
+      <BlockPaletteDialog
+        :open="paletteOpen !== null"
+        :items="PALETTES[currentPage]"
+        @close="paletteOpen = null"
+        @select="(t) => addBlock(t, paletteOpen?.after ?? null)"
+      />
 
       <!-- Inspector -->
       <aside class="inspector">
@@ -776,8 +906,11 @@ const lastSavedLabel = computed(() => {
             <div class="field">
               <ImagePicker
                 v-model="(selectedBlock!.props as HeroProps).imageUrl"
+                :image-id="(selectedBlock!.props as HeroProps).imageId ?? null"
+                @update:image-id="(v) => (selectedBlock!.props as HeroProps).imageId = v"
+                :page-slug="currentPage"
+                :block-id="selectedBlock!.id"
                 label="Media image (optional)"
-                content-type="banner"
                 aspect="1 / 1"
                 hint="Fills the right side. Leave empty for a gradient."
               />
@@ -948,6 +1081,367 @@ const lastSavedLabel = computed(() => {
               </div>
               <button type="button" class="gallery-add" @click="(selectedBlock!.props as GalleryProps).images.push({ url: '', alt: '' })">+ Add image</button>
             </div>
+          </template>
+
+          <!-- Media split -->
+          <template v-else-if="selectedBlock.type === 'mediaSplit'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock!.props as MediaSplitProps).eyebrow" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <textarea v-model="(selectedBlock!.props as MediaSplitProps).heading" rows="2" />
+            </label>
+            <div class="field">
+              <span class="field__label">Body paragraphs</span>
+              <textarea
+                v-for="(_, pi) in (selectedBlock!.props as MediaSplitProps).bodyParagraphs ?? []"
+                :key="pi"
+                v-model="(selectedBlock!.props as MediaSplitProps).bodyParagraphs![pi]"
+                rows="3"
+              />
+              <button type="button" class="gallery-add" @click="((selectedBlock!.props as MediaSplitProps).bodyParagraphs ??= []).push('')">+ Add paragraph</button>
+            </div>
+            <label class="field">
+              <span class="field__label">Media side</span>
+              <select v-model="(selectedBlock!.props as MediaSplitProps).mediaSide">
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Background</span>
+              <select v-model="(selectedBlock!.props as MediaSplitProps).background">
+                <option value="ground">White</option>
+                <option value="surface">Surface</option>
+              </select>
+            </label>
+            <div class="field">
+              <ImagePicker
+                v-model="(selectedBlock!.props as MediaSplitProps).imageUrl"
+                :page-slug="currentPage"
+                :block-id="selectedBlock!.id"
+                label="Media image"
+                aspect="7 / 6"
+              />
+            </div>
+            <label class="field">
+              <span class="field__label">Media caption</span>
+              <input v-model="(selectedBlock!.props as MediaSplitProps).mediaCaption" type="text" />
+            </label>
+            <div class="field__group">
+              <div class="field__group-title">Primary CTA</div>
+              <label class="field">
+                <span class="field__label">Label</span>
+                <input :value="(selectedBlock!.props as MediaSplitProps).primaryCta?.label ?? ''"
+                       @input="e => (selectedBlock!.props as MediaSplitProps).primaryCta = { label: (e.target as HTMLInputElement).value, href: (selectedBlock!.props as MediaSplitProps).primaryCta?.href ?? '' }"
+                       type="text" />
+              </label>
+              <label class="field">
+                <span class="field__label">Link</span>
+                <input :value="(selectedBlock!.props as MediaSplitProps).primaryCta?.href ?? ''"
+                       @input="e => (selectedBlock!.props as MediaSplitProps).primaryCta = { label: (selectedBlock!.props as MediaSplitProps).primaryCta?.label ?? '', href: (e.target as HTMLInputElement).value }"
+                       type="text" />
+              </label>
+            </div>
+            <div class="field__group">
+              <div class="field__group-title">Secondary CTA</div>
+              <label class="field">
+                <span class="field__label">Label</span>
+                <input :value="(selectedBlock!.props as MediaSplitProps).secondaryCta?.label ?? ''"
+                       @input="e => (selectedBlock!.props as MediaSplitProps).secondaryCta = { label: (e.target as HTMLInputElement).value, href: (selectedBlock!.props as MediaSplitProps).secondaryCta?.href ?? '' }"
+                       type="text" />
+              </label>
+              <label class="field">
+                <span class="field__label">Link</span>
+                <input :value="(selectedBlock!.props as MediaSplitProps).secondaryCta?.href ?? ''"
+                       @input="e => (selectedBlock!.props as MediaSplitProps).secondaryCta = { label: (selectedBlock!.props as MediaSplitProps).secondaryCta?.label ?? '', href: (e.target as HTMLInputElement).value }"
+                       type="text" />
+              </label>
+            </div>
+          </template>
+
+          <!-- Section title -->
+          <template v-else-if="selectedBlock.type === 'sectionTitle'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock!.props as SectionTitleProps).eyebrow" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <textarea v-model="(selectedBlock!.props as SectionTitleProps).heading" rows="3" />
+            </label>
+            <label class="field">
+              <span class="field__label">Body</span>
+              <textarea v-model="(selectedBlock!.props as SectionTitleProps).body" rows="3" />
+            </label>
+            <label class="field">
+              <span class="field__label">Alignment</span>
+              <select v-model="(selectedBlock!.props as SectionTitleProps).align">
+                <option value="center">Center</option>
+                <option value="left">Left</option>
+              </select>
+            </label>
+          </template>
+
+          <!-- Pull quote -->
+          <template v-else-if="selectedBlock.type === 'pullQuote'">
+            <label class="field">
+              <span class="field__label">Quote</span>
+              <textarea v-model="(selectedBlock!.props as PullQuoteProps).quote" rows="4" />
+            </label>
+            <label class="field">
+              <span class="field__label">Author name</span>
+              <input v-model="(selectedBlock!.props as PullQuoteProps).authorName" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Author role</span>
+              <input v-model="(selectedBlock!.props as PullQuoteProps).authorRole" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Author initials</span>
+              <input v-model="(selectedBlock!.props as PullQuoteProps).authorInitials" type="text" maxlength="3" />
+              <span class="field__hint">Used when no avatar image is set.</span>
+            </label>
+            <div class="field">
+              <ImagePicker
+                v-model="(selectedBlock!.props as PullQuoteProps).authorAvatarUrl"
+                :page-slug="currentPage"
+                :block-id="selectedBlock!.id"
+                label="Author avatar (optional)"
+                aspect="1 / 1"
+              />
+            </div>
+          </template>
+
+          <!-- Feature grid -->
+          <template v-else-if="selectedBlock.type === 'featureGrid'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock!.props as FeatureGridProps).eyebrow" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock!.props as FeatureGridProps).heading" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Columns</span>
+              <select v-model.number="(selectedBlock!.props as FeatureGridProps).columns">
+                <option :value="2">2</option>
+                <option :value="3">3</option>
+                <option :value="4">4</option>
+              </select>
+            </label>
+            <div class="field">
+              <span class="field__label">Features ({{ (selectedBlock!.props as FeatureGridProps).items.length }})</span>
+              <div v-for="(item, fi) in (selectedBlock!.props as FeatureGridProps).items" :key="fi" class="field__group">
+                <div class="field__group-title">#{{ fi + 1 }}</div>
+                <input v-model="item.title" placeholder="Title" type="text" />
+                <textarea v-model="item.body" placeholder="Body" rows="2" />
+                <input v-model="item.linkLabel" placeholder="Link label" type="text" />
+                <input v-model="item.linkHref" placeholder="Link href (e.g. /about)" type="text" />
+                <select v-model="item.icon">
+                  <option value="target">Target</option>
+                  <option value="people">People</option>
+                  <option value="star">Star</option>
+                  <option value="calendar">Calendar</option>
+                  <option value="trophy">Trophy</option>
+                  <option value="sparkle">Sparkle</option>
+                  <option value="coffee">Coffee</option>
+                  <option value="bolt">Bolt</option>
+                </select>
+                <select v-model="item.iconTone">
+                  <option value="accent">Accent (blue)</option>
+                  <option value="mint">Mint</option>
+                  <option value="tangerine">Tangerine</option>
+                  <option value="violet">Violet</option>
+                  <option value="sky">Sky</option>
+                  <option value="amber">Amber</option>
+                </select>
+                <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as FeatureGridProps).items.splice(fi, 1)">Remove</button>
+              </div>
+              <button type="button" class="gallery-add" @click="(selectedBlock!.props as FeatureGridProps).items.push({ title: 'New feature', body: '', icon: 'star', iconTone: 'accent' })">+ Add feature</button>
+            </div>
+          </template>
+
+          <!-- FAQ accordion -->
+          <template v-else-if="selectedBlock.type === 'faqAccordion'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock!.props as FaqAccordionProps).eyebrow" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <textarea v-model="(selectedBlock!.props as FaqAccordionProps).heading" rows="2" />
+            </label>
+            <label class="field">
+              <span class="field__label">Support text</span>
+              <textarea v-model="(selectedBlock!.props as FaqAccordionProps).supportText" rows="2" />
+            </label>
+            <div class="field__group">
+              <div class="field__group-title">CTA</div>
+              <label class="field">
+                <span class="field__label">Label</span>
+                <input :value="(selectedBlock!.props as FaqAccordionProps).cta?.label ?? ''"
+                       @input="e => (selectedBlock!.props as FaqAccordionProps).cta = { label: (e.target as HTMLInputElement).value, href: (selectedBlock!.props as FaqAccordionProps).cta?.href ?? '' }"
+                       type="text" />
+              </label>
+              <label class="field">
+                <span class="field__label">Link</span>
+                <input :value="(selectedBlock!.props as FaqAccordionProps).cta?.href ?? ''"
+                       @input="e => (selectedBlock!.props as FaqAccordionProps).cta = { label: (selectedBlock!.props as FaqAccordionProps).cta?.label ?? '', href: (e.target as HTMLInputElement).value }"
+                       type="text" />
+              </label>
+            </div>
+            <div class="field">
+              <span class="field__label">Questions ({{ (selectedBlock!.props as FaqAccordionProps).items.length }})</span>
+              <div v-for="(q, qi) in (selectedBlock!.props as FaqAccordionProps).items" :key="qi" class="field__group">
+                <div class="field__group-title">#{{ qi + 1 }}</div>
+                <input v-model="q.question" placeholder="Question" type="text" />
+                <textarea v-model="q.answer" placeholder="Answer" rows="3" />
+                <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as FaqAccordionProps).items.splice(qi, 1)">Remove</button>
+              </div>
+              <button type="button" class="gallery-add" @click="(selectedBlock!.props as FaqAccordionProps).items.push({ question: 'New question', answer: '' })">+ Add question</button>
+            </div>
+          </template>
+
+          <!-- Full-bleed image -->
+          <template v-else-if="selectedBlock.type === 'fullBleedImage'">
+            <div class="field">
+              <ImagePicker
+                v-model="(selectedBlock!.props as FullBleedImageProps).imageUrl"
+                :page-slug="currentPage"
+                :block-id="selectedBlock!.id"
+                label="Background image"
+                aspect="16 / 9"
+              />
+            </div>
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock!.props as FullBleedImageProps).eyebrow" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <textarea v-model="(selectedBlock!.props as FullBleedImageProps).heading" rows="2" />
+            </label>
+            <label class="field">
+              <span class="field__label">Subheading</span>
+              <textarea v-model="(selectedBlock!.props as FullBleedImageProps).subheading" rows="2" />
+            </label>
+            <label class="field">
+              <span class="field__label">Overlay darkness</span>
+              <input v-model.number="(selectedBlock!.props as FullBleedImageProps).overlayOpacity" type="number" min="0" max="1" step="0.05" />
+              <span class="field__hint">0 = clear, 1 = solid.</span>
+            </label>
+            <div class="field__group">
+              <div class="field__group-title">CTA</div>
+              <label class="field">
+                <span class="field__label">Label</span>
+                <input :value="(selectedBlock!.props as FullBleedImageProps).cta?.label ?? ''"
+                       @input="e => (selectedBlock!.props as FullBleedImageProps).cta = { label: (e.target as HTMLInputElement).value, href: (selectedBlock!.props as FullBleedImageProps).cta?.href ?? '' }"
+                       type="text" />
+              </label>
+              <label class="field">
+                <span class="field__label">Link</span>
+                <input :value="(selectedBlock!.props as FullBleedImageProps).cta?.href ?? ''"
+                       @input="e => (selectedBlock!.props as FullBleedImageProps).cta = { label: (selectedBlock!.props as FullBleedImageProps).cta?.label ?? '', href: (e.target as HTMLInputElement).value }"
+                       type="text" />
+              </label>
+            </div>
+            <label class="field">
+              <span class="field__label">Top badge label</span>
+              <input :value="(selectedBlock!.props as FullBleedImageProps).topBadge?.label ?? ''"
+                     @input="e => (selectedBlock!.props as FullBleedImageProps).topBadge = { label: (e.target as HTMLInputElement).value, tone: (selectedBlock!.props as FullBleedImageProps).topBadge?.tone ?? 'green' }"
+                     type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Bottom caption</span>
+              <input v-model="(selectedBlock!.props as FullBleedImageProps).bottomCaption" type="text" />
+            </label>
+          </template>
+
+          <!-- Timeline -->
+          <template v-else-if="selectedBlock.type === 'timeline'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock!.props as TimelineProps).eyebrow" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock!.props as TimelineProps).heading" type="text" />
+            </label>
+            <div class="field">
+              <span class="field__label">Entries ({{ (selectedBlock!.props as TimelineProps).entries.length }})</span>
+              <div v-for="(entry, ei) in (selectedBlock!.props as TimelineProps).entries" :key="ei" class="field__group">
+                <div class="field__group-title">#{{ ei + 1 }}</div>
+                <input v-model="entry.year" placeholder="Year (e.g. 1953)" type="text" />
+                <input v-model="entry.yearLabel" placeholder="Year label (e.g. Year one)" type="text" />
+                <input v-model="entry.title" placeholder="Title" type="text" />
+                <textarea v-model="entry.body" placeholder="Description" rows="2" />
+                <input v-model="entry.tag" placeholder="Tag (e.g. Founding)" type="text" />
+                <label class="field">
+                  <span class="field__label">Highlight this entry</span>
+                  <input v-model="entry.highlighted" type="checkbox" />
+                </label>
+                <input v-if="entry.highlighted" v-model="entry.avatarInitials" placeholder="Avatar initials" type="text" maxlength="3" />
+                <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as TimelineProps).entries.splice(ei, 1)">Remove</button>
+              </div>
+              <button type="button" class="gallery-add" @click="(selectedBlock!.props as TimelineProps).entries.push({ year: '', title: '' })">+ Add entry</button>
+            </div>
+          </template>
+
+          <!-- Two-column text -->
+          <template v-else-if="selectedBlock.type === 'twoColumn'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock!.props as TwoColumnProps).eyebrow" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock!.props as TwoColumnProps).heading" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Background</span>
+              <select v-model="(selectedBlock!.props as TwoColumnProps).background">
+                <option value="surface">Surface</option>
+                <option value="ground">White</option>
+              </select>
+            </label>
+            <div v-for="(col, ci) in (selectedBlock!.props as TwoColumnProps).columns" :key="ci" class="field__group">
+              <div class="field__group-title">Column {{ ci + 1 }}</div>
+              <input v-model="col.eyebrow" placeholder="Eyebrow" type="text" />
+              <input v-model="col.heading" placeholder="Heading" type="text" />
+              <textarea
+                v-for="(_, pi) in col.bodyParagraphs ?? []"
+                :key="pi"
+                v-model="col.bodyParagraphs![pi]"
+                placeholder="Paragraph"
+                rows="3"
+              />
+              <button type="button" class="gallery-add" @click="(col.bodyParagraphs ??= []).push('')">+ Paragraph</button>
+            </div>
+          </template>
+
+          <!-- Divider -->
+          <template v-else-if="selectedBlock.type === 'divider'">
+            <label class="field">
+              <span class="field__label">Style</span>
+              <select v-model="(selectedBlock!.props as DividerProps).variant">
+                <option value="hairline">Hairline</option>
+                <option value="label">Label</option>
+                <option value="dots">Dots</option>
+                <option value="spacer">Spacer</option>
+              </select>
+            </label>
+            <label v-if="(selectedBlock!.props as DividerProps).variant === 'label'" class="field">
+              <span class="field__label">Label</span>
+              <input v-model="(selectedBlock!.props as DividerProps).label" type="text" />
+            </label>
+            <label v-if="(selectedBlock!.props as DividerProps).variant === 'spacer'" class="field">
+              <span class="field__label">Height (px)</span>
+              <input v-model.number="(selectedBlock!.props as DividerProps).height" type="number" min="8" max="200" />
+            </label>
           </template>
         </template>
       </aside>

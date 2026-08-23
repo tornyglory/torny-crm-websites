@@ -7,6 +7,15 @@ export type BlockType =
   | 'contactForm'
   | 'membershipCta'
   | 'ctaBanner'
+  | 'mediaSplit'
+  | 'sectionTitle'
+  | 'pullQuote'
+  | 'featureGrid'
+  | 'faqAccordion'
+  | 'fullBleedImage'
+  | 'timeline'
+  | 'twoColumn'
+  | 'divider'
 
 export interface BlockBase<T extends BlockType, P> {
   id: string
@@ -25,6 +34,8 @@ export interface HeroProps {
   eyebrow?: string
   description?: string
   imageUrl?: string
+  /** Row id from the block-images API — needed for later DELETE/PATCH. */
+  imageId?: number | null
   mediaCaption?: string
   primaryCta?: { label: string; href: string }
   secondaryCta?: { label: string; href: string }
@@ -73,6 +84,116 @@ export interface CtaBannerProps {
   tone?: 'accent' | 'ink' | 'surface'
 }
 
+// ── Editorial blocks (Paper "Editorial blocks" sets) ─────────────
+
+export interface MediaSplitBadge {
+  label: string
+  tone?: 'green' | 'blue' | 'amber' | 'ink'
+}
+export interface MediaSplitProps {
+  eyebrow?: string
+  heading: string
+  bodyParagraphs?: string[]
+  checklist?: string[]
+  primaryCta?: { label: string; href: string }
+  /** Rendered as a plain text (with an underline) after the primary CTA. */
+  secondaryText?: string
+  secondaryCta?: { label: string; href: string }
+  imageUrl?: string
+  mediaCaption?: string
+  topBadge?: MediaSplitBadge
+  mediaSide?: 'left' | 'right'
+  background?: 'ground' | 'surface'
+}
+
+export interface SectionTitleProps {
+  eyebrow?: string
+  heading: string
+  body?: string
+  align?: 'center' | 'left'
+}
+
+export interface PullQuoteProps {
+  quote: string
+  authorName?: string
+  authorRole?: string
+  authorInitials?: string
+  authorAvatarUrl?: string
+}
+
+export interface FeatureGridItem {
+  icon?: 'target' | 'people' | 'star' | 'calendar' | 'trophy' | 'sparkle' | 'coffee' | 'bolt'
+  iconTone?: 'accent' | 'mint' | 'tangerine' | 'violet' | 'sky' | 'amber'
+  title: string
+  body?: string
+  linkLabel?: string
+  linkHref?: string
+}
+export interface FeatureGridProps {
+  eyebrow?: string
+  heading?: string
+  columns?: 2 | 3 | 4
+  items: FeatureGridItem[]
+}
+
+export interface FaqItem {
+  question: string
+  answer: string
+}
+export interface FaqAccordionProps {
+  eyebrow?: string
+  heading?: string
+  supportText?: string
+  cta?: { label: string; href: string }
+  items: FaqItem[]
+}
+
+export interface FullBleedImageProps {
+  imageUrl?: string
+  overlayOpacity?: number
+  eyebrow?: string
+  heading: string
+  subheading?: string
+  cta?: { label: string; href: string }
+  topBadge?: { label: string; tone?: 'green' | 'blue' | 'amber' }
+  bottomCaption?: string
+}
+
+export interface TimelineEntry {
+  year: string
+  yearLabel?: string
+  yearTone?: 'default' | 'danger' | 'accent'
+  title: string
+  body?: string
+  tag?: string
+  highlighted?: boolean
+  avatarInitials?: string
+}
+export interface TimelineProps {
+  eyebrow?: string
+  heading?: string
+  entries: TimelineEntry[]
+}
+
+export interface TwoColumnItem {
+  eyebrow?: string
+  eyebrowTone?: 'accent' | 'amber' | 'mint' | 'violet' | 'danger'
+  heading?: string
+  bodyParagraphs?: string[]
+}
+export interface TwoColumnProps {
+  eyebrow?: string
+  heading?: string
+  background?: 'ground' | 'surface'
+  columns: [TwoColumnItem, TwoColumnItem]
+}
+
+export interface DividerProps {
+  variant?: 'hairline' | 'label' | 'dots' | 'spacer'
+  label?: string
+  height?: number
+}
+
 export type Block =
   | BlockBase<'hero', HeroProps>
   | BlockBase<'richText', RichTextProps>
@@ -82,6 +203,15 @@ export type Block =
   | BlockBase<'contactForm', ContactFormProps>
   | BlockBase<'membershipCta', MembershipCtaProps>
   | BlockBase<'ctaBanner', CtaBannerProps>
+  | BlockBase<'mediaSplit', MediaSplitProps>
+  | BlockBase<'sectionTitle', SectionTitleProps>
+  | BlockBase<'pullQuote', PullQuoteProps>
+  | BlockBase<'featureGrid', FeatureGridProps>
+  | BlockBase<'faqAccordion', FaqAccordionProps>
+  | BlockBase<'fullBleedImage', FullBleedImageProps>
+  | BlockBase<'timeline', TimelineProps>
+  | BlockBase<'twoColumn', TwoColumnProps>
+  | BlockBase<'divider', DividerProps>
 
 /**
  * Shape data-hydrated blocks (eventList, honourBoard) inject at render time.

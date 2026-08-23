@@ -36,6 +36,10 @@ export * as honourBoard from './resources/honour-board'
 export * as communications from './resources/communications'
 export * as devices from './resources/devices'
 export * as clubs from './resources/clubs'
+export type {
+  BrandAssetsPatch,
+  BrandAssetsResponse,
+} from './resources/clubs'
 export * as directory from './resources/directory'
 export type { DirectoryClub, ClubSearchParams, ClubSearchResult } from './resources/directory'
 export * as auth from './resources/auth'

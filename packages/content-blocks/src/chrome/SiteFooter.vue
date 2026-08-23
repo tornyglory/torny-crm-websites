@@ -166,12 +166,12 @@ const year = new Date().getFullYear()
 }
 .site-footer__logo-wrap {
   background: transparent;
-  overflow: hidden;
+  overflow: visible;
 }
 .site-footer__logo {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 .site-footer__brand-text {
   display: flex;

@@ -64,6 +64,7 @@ export interface SiteClub {
   country: string | null
   brand_primary: string | null
   logo_url: string | null
+  favicon_url: string | null
   onboarded_at: string | null
   fonts?: SiteFonts
   style?: SiteStyle

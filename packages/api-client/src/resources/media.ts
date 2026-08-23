@@ -15,7 +15,23 @@ import { authedFetch } from '../http'
 // ── Types ─────────────────────────────────────────────────────────
 
 export type MediaEntityType = 'club' | 'user' | 'moment' | 'event'
-export type MediaContentType = 'avatar' | 'banner' | 'gallery' | 'media'
+/**
+ * Backend-accepted `content_type` slugs for the `/media/images/*` endpoints.
+ * Matches the server-side whitelist — passing anything else returns a 400.
+ */
+export type MediaContentType =
+  | 'avatar'
+  | 'banner'
+  | 'gallery'
+  | 'profile'
+  | 'cover'
+  | 'hero'
+  | 'page'
+  | 'event'
+  | 'moment'
+  | 'story'
+  | 'post'
+  | 'rink_profile'
 
 export interface UploadUrlResponse {
   /** Cloudflare direct-upload URL — single-use, cross-origin POST. */
@@ -131,11 +147,11 @@ export async function uploadClubLogo(
 
 /**
  * Generic club image upload — request URL, PUT to Cloudflare, confirm.
- * `contentType` picks which slot on the club record the image lives in:
- *   - 'avatar'  → club logo
+ * `contentType` picks which slot on the club record the image lives in.
+ * Common choices for club-level assets:
+ *   - 'avatar'  → club logo / favicon
  *   - 'banner'  → hero / cover image
  *   - 'gallery' → gallery photo (multiple allowed per club)
- *   - 'media'   → generic (any other content block)
  *
  * `contentId` defaults to `clubId` for club-level images. For block-level
  * images that need a per-block identifier, pass a numeric id (e.g. a
@@ -146,7 +162,7 @@ export async function uploadClubImage(
   file: File,
   opts: { contentType?: MediaContentType; contentId?: number; signal?: AbortSignal } = {},
 ): Promise<ConfirmedImage> {
-  const contentType = opts.contentType ?? 'media'
+  const contentType = opts.contentType ?? 'gallery'
   const contentId = opts.contentId ?? clubId
 
   const { uploadUrl, imageId } = await requestUploadUrl(

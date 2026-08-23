@@ -111,12 +111,12 @@ function isActive(href: string) {
 
 .site-header__logo-wrap {
   background: transparent;
-  overflow: hidden;
+  overflow: visible;
 }
 .site-header__logo {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .site-header__brand-text {

@@ -15,6 +15,7 @@ import CrmModal from '@/components/modals/CrmModal.vue'
 import FontPicker from '@/components/FontPicker.vue'
 import StylePicker from '@/components/StylePicker.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
+import { ApiError, clubs } from '@torny/api-client'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
 
@@ -56,13 +57,46 @@ const domain = ref({
   ],
 })
 
+// Reactive view of the persisted brand assets. Two-way with the store so
+// a successful PATCH round-trip lights up other CRM surfaces too.
+const brandLogoUrl = computed<string>({
+  get: () => clubStore.current?.logoUrl ?? '',
+  set: (value) => {
+    void persistBrandAsset('logo_url', value)
+  },
+})
+const brandFaviconUrl = computed<string>({
+  get: () => clubStore.current?.faviconUrl ?? '',
+  set: (value) => {
+    void persistBrandAsset('favicon_url', value)
+  },
+})
+
 const brand = ref({
   primary: clubStore.current?.brandPrimary ?? '#2563EB',
   accent: '#16A34A',
   font: 'Inter',
-  logoUrl: clubStore.current?.logoUrl ?? '',
-  faviconUrl: '',
 })
+
+async function persistBrandAsset(field: 'logo_url' | 'favicon_url', value: string) {
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') {
+    toast.error('No active club — refresh and try again.')
+    return
+  }
+  const payload = { [field]: value || null } as Record<'logo_url' | 'favicon_url', string | null>
+  try {
+    const res = await clubs.updateBrandAssets(clubId, payload)
+    clubStore.setBrandAssets({
+      logoUrl: res.logo_url,
+      faviconUrl: res.favicon_url,
+    })
+    toast.success(value ? `${field === 'logo_url' ? 'Logo' : 'Favicon'} saved.` : `${field === 'logo_url' ? 'Logo' : 'Favicon'} removed.`)
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : `Could not save ${field.replace('_', ' ')}`
+    toast.error(msg || 'Could not save')
+  }
+}
 
 const seo = ref({
   metaTitle: 'Kelburn Bowling Club — Wellington',
@@ -210,7 +244,7 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
         <div class="ws-brand-assets">
           <div class="ws-brand-asset">
             <ImagePicker
-              v-model="brand.logoUrl"
+              v-model="brandLogoUrl"
               content-type="avatar"
               aspect="1 / 1"
               label="Logo"
@@ -219,8 +253,8 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
           </div>
           <div class="ws-brand-asset">
             <ImagePicker
-              v-model="brand.faviconUrl"
-              content-type="media"
+              v-model="brandFaviconUrl"
+              content-type="avatar"
               aspect="1 / 1"
               label="Favicon"
               hint="32×32 PNG. Shows in the browser tab."

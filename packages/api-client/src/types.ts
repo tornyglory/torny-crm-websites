@@ -79,6 +79,7 @@ export interface Club {
   domain?: string | null
   brandPrimary?: string | null
   logoUrl?: string | null
+  faviconUrl?: string | null
   /** Present on `/site` payloads and any full club load; absent on stubs. */
   fonts?: ClubFonts
   /** Present on `/site` payloads and any full club load; absent on stubs. */

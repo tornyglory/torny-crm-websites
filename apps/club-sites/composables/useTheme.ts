@@ -53,10 +53,15 @@ export async function useTheme() {
   const fonts = computed<SiteFonts | undefined>(() => site.value?.club?.fonts)
   const style = computed<SiteStyle | undefined>(() => site.value?.club?.style)
 
+  const favicon = computed<string | null>(() => site.value?.club?.favicon_url ?? null)
+
   useHead({
     link: computed(() => {
+      const links: Array<Record<string, string>> = []
       const f = fonts.value
-      return f ? [{ rel: 'stylesheet', href: googleFontsHref(f) }] : []
+      if (f) links.push({ rel: 'stylesheet', href: googleFontsHref(f) })
+      if (favicon.value) links.push({ rel: 'icon', href: favicon.value })
+      return links
     }),
     style: computed(() => {
       const declarations: string[] = []

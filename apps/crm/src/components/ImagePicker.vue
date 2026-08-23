@@ -45,7 +45,7 @@ const props = withDefaults(defineProps<{
   hint?: string
 }>(), {
   imageId: null,
-  contentType: 'media',
+  contentType: 'gallery',
   aspect: '16 / 9',
   maxSizeMb: 10,
   label: '',

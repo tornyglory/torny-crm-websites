@@ -89,6 +89,7 @@ export const useClubStore = defineStore('club', () => {
         domain: full.domain ?? null,
         brandPrimary: full.brandPrimary ?? c.brandPrimary ?? null,
         logoUrl: full.logoUrl ?? c.logoUrl ?? null,
+        faviconUrl: full.faviconUrl ?? c.faviconUrl ?? null,
         fonts: full.fonts ?? c.fonts,
         style: full.style ?? c.style,
       })
@@ -118,12 +119,27 @@ export const useClubStore = defineStore('club', () => {
     setCurrent({ ...c, style })
   }
 
+  /**
+   * Merge in updated logo/favicon URLs after a successful brand-assets
+   * PATCH. Either field can be omitted, `null` clears, string sets.
+   */
+  function setBrandAssets(patch: { logoUrl?: string | null; faviconUrl?: string | null }) {
+    const c = current.value
+    if (!c) return
+    setCurrent({
+      ...c,
+      ...(patch.logoUrl !== undefined ? { logoUrl: patch.logoUrl } : {}),
+      ...(patch.faviconUrl !== undefined ? { faviconUrl: patch.faviconUrl } : {}),
+    })
+  }
+
   return {
     current,
     memberships,
     setCurrent,
     setFonts,
     setStyle,
+    setBrandAssets,
     clear,
     syncFromUserClubs,
     hydrateFull,

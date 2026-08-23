@@ -14,6 +14,7 @@ import { computed, reactive, ref } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import FontPicker from '@/components/FontPicker.vue'
 import StylePicker from '@/components/StylePicker.vue'
+import ImagePicker from '@/components/ImagePicker.vue'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
 
@@ -56,11 +57,11 @@ const domain = ref({
 })
 
 const brand = ref({
-  primary: '#2563EB',
+  primary: clubStore.current?.brandPrimary ?? '#2563EB',
   accent: '#16A34A',
   font: 'Inter',
-  logoName: 'kelburn-mark.svg',
-  faviconName: 'kelburn-favicon.png',
+  logoUrl: clubStore.current?.logoUrl ?? '',
+  faviconUrl: '',
 })
 
 const seo = ref({
@@ -205,6 +206,30 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
     <!-- Brand -->
     <template v-else-if="props.section === 'brand'">
       <div class="ws-card">
+        <div class="ws-card__eyebrow">Logo &amp; favicon</div>
+        <div class="ws-brand-assets">
+          <div class="ws-brand-asset">
+            <ImagePicker
+              v-model="brand.logoUrl"
+              content-type="avatar"
+              aspect="1 / 1"
+              label="Logo"
+              hint="Square, PNG or SVG. Shows in the header, footer, and open-graph share card."
+            />
+          </div>
+          <div class="ws-brand-asset">
+            <ImagePicker
+              v-model="brand.faviconUrl"
+              content-type="media"
+              aspect="1 / 1"
+              label="Favicon"
+              hint="32×32 PNG. Shows in the browser tab."
+              :max-size-mb="1"
+            />
+          </div>
+        </div>
+      </div>
+      <div class="ws-card">
         <div class="ws-card__eyebrow">Colours</div>
         <div class="ws-colours">
           <div class="ws-colour">
@@ -239,25 +264,6 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
           :current-slug="styleSlug"
           @update:slug="onStyleSlugChange"
         />
-      </div>
-      <div class="ws-card">
-        <div class="ws-card__eyebrow">Logo &amp; favicon</div>
-        <div class="ws-upload-grid">
-          <div class="ws-upload">
-            <div class="ws-upload__label">Logo (SVG or PNG)</div>
-            <div class="ws-upload__chip">
-              <span class="ws-mono">{{ brand.logoName }}</span>
-              <button class="ws-link" @click="replaceUpload('logo')">Replace</button>
-            </div>
-          </div>
-          <div class="ws-upload">
-            <div class="ws-upload__label">Favicon (32×32 PNG)</div>
-            <div class="ws-upload__chip">
-              <span class="ws-mono">{{ brand.faviconName }}</span>
-              <button class="ws-link" @click="replaceUpload('favicon')">Replace</button>
-            </div>
-          </div>
-        </div>
       </div>
     </template>
 
@@ -506,6 +512,10 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 .ws-upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ws-upload__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); margin-bottom: 8px; }
 .ws-upload__chip { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--color-surface); border-radius: 8px; }
+
+.ws-brand-assets { display: grid; grid-template-columns: 140px 96px; gap: 20px; align-items: start; }
+.ws-brand-asset { display: flex; flex-direction: column; }
+@media (max-width: 767px) { .ws-brand-assets { grid-template-columns: 140px 96px; } }
 
 .ws-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .ws-field label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }

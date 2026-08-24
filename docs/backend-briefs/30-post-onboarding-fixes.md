@@ -12,8 +12,9 @@
 
 1. **`GET /clubs/:id` on CRM_BASE (`byi59x19m4…`) is missing `Access-Control-Allow-Origin`.** Every other route on that stack returns CORS headers fine; just this one is broken. Blocks the CRM's `hydrateFull()` and any code path that reads the club record.
 2. **`POST /clubs/:id/onboarding/complete` isn't seeding the six system pages** (`home`, `about`, `membership`, `events`, `honour-board`, `contact`). The Website editor's `GET /clubs/:id/pages/home` returns 404, so `POST /clubs/:id/pages/home/publish` also 404s. Owners can't publish anything until every page row is manually created.
+3. **`POST /clubs/:id/onboarding/complete` isn't writing `subdomain` / `primary_host` to the `clubs` table.** New club (id=5) hits `/clubs/resolve?host=<slug>.torny.club` and gets 404 — the Preview button and the live site both land on the tenant-not-found page.
 
-Both need backend changes only — frontend is correct and can't paper over them.
+All three are the same finalize-transaction gap — frontend is correct and can't paper over them.
 
 ---
 
@@ -183,10 +184,64 @@ POST /clubs/5/pages/home/publish  → 200 with public_url
 
 ---
 
-## 3. Priority
+## 3. Also missing on complete — `clubs.subdomain` / `clubs.primary_host`
 
-- **Issue 2 (missing pages) is a hard block** — new-club owners literally cannot publish their site until this is fixed. Both a backfill and a fix on the complete endpoint are needed.
-- **Issue 1 (CORS)** is a cosmetic degradation — the CRM sidebar shows initials instead of the club logo, and links to `undefined.torny.club` — but no user flow is fully broken. Ship together for a clean pass.
+### Symptom
+
+Clicking **Preview site** in the CRM's Website editor for club 5 opens the Nuxt club-sites dev server:
+
+```
+http://localhost:3001/?host=nae-nae-bowling-club.torny.club
+```
+
+The Nuxt tenant middleware calls the backend:
+
+```
+GET /clubs/resolve?host=nae-nae-bowling-club.torny.club  →  404 unknown_host
+```
+
+Landing on the fallback page: **"Club not found for host"**.
+
+Melbourne (id=3) resolves fine at `melbourne-bowling-club.torny.club` — proving the `/clubs/resolve` endpoint itself works. The regression is that club 5 doesn't have `primary_host` (or `subdomain`) populated in the `clubs` table.
+
+### What needs to change
+
+Same finalize transaction as Issue 2 — when a club onboards, `POST /clubs/:id/onboarding/complete` should copy the wizard's `subdomain` field into the `clubs` table:
+
+```
+clubs
+  subdomain     ← onboarding_data.subdomain   (e.g. 'nae-nae-bowling-club')
+  primary_host  ← <subdomain>.torny.club       (or leave computed at read time)
+```
+
+`GET /clubs/resolve?host=<slug>.torny.club` should match either an exact `primary_host` row or the derived `<subdomain>.torny.club` value — however Melbourne's row is set up, replicate that for new completions.
+
+### Idempotency
+
+- Complete endpoint already returns `already_onboarded` on second call — safe to re-run in a backfill.
+- Subdomain uniqueness constraint (already enforced by `GET /subdomains/check` during Step 6) means the finalize can trust the wizard's value.
+
+### Backfill
+
+Same story as Issue 2 — club 5 needs `subdomain` set retroactively. If the wizard's `onboarding_data.subdomain` is still stored on the row, the migration is trivial (`UPDATE clubs SET subdomain = onboarding_data->>'subdomain' WHERE onboarded_at IS NOT NULL AND subdomain IS NULL`).
+
+### Verification
+
+```bash
+curl -i 'https://byi59x19m4.execute-api.ap-southeast-2.amazonaws.com/Prod/clubs/resolve?host=nae-nae-bowling-club.torny.club'
+```
+
+Expect 200 with `data.id = 5` after the fix / backfill.
+
+---
+
+## 4. Priority
+
+- **Issue 2 (missing pages)** — hard block on publishing.
+- **Issue 3 (missing subdomain)** — hard block on Preview / live site — the new club is unreachable via its subdomain.
+- **Issue 1 (CORS)** — cosmetic (sidebar shows initials, "View live site" links to `undefined.torny.club`).
+
+All three are the same "onboarding complete isn't fully finalising the club record" pattern — ideally fixed in one pass with a shared backfill migration for any clubs onboarded post-regression.
 
 ---
 

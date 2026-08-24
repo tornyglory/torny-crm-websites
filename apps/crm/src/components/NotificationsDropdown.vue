@@ -104,8 +104,8 @@ const notifs = ref<Notif[]>([
     body: 'Achievement auto-suggested for grant.',
     when: '3d',
     unread: false,
-    primaryAction: { label: 'Grant', route: '/crm/achievements' },
-    destination: '/crm/achievements',
+    primaryAction: { label: 'Add to honour board', route: '/crm/honour-board' },
+    destination: '/crm/honour-board',
   },
 ])
 

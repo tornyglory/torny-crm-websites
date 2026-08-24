@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterView, RouterLink, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
+import { useClubSettingsStore } from '@/stores/clubSettings'
 import { members as membersApi } from '@torny/api-client'
 import NotificationsDropdown from '@/components/NotificationsDropdown.vue'
 import NewMenu from '@/components/NewMenu.vue'
@@ -11,7 +12,26 @@ import CrmToast from '@/components/CrmToast.vue'
 
 const auth = useAuthStore()
 const club = useClubStore()
+const settingsStore = useClubSettingsStore()
 const route = useRoute()
+
+/** Fetch the club settings payload once on mount + when the active club
+ *  changes. This is how the shell surfaces the persisted logo without
+ *  relying on the CORS-blocked GET /clubs/:id endpoint. */
+async function loadSettings() {
+  const cid = club.current?.id
+  if (typeof cid === 'number' && settingsStore.loadedClubId !== cid) {
+    await settingsStore.fetch(cid)
+  }
+}
+onMounted(loadSettings)
+watch(() => club.current?.id, loadSettings)
+
+/** Logo URL with fallback chain — settings payload wins, club store
+ *  covers the pre-fetch moment (from a previous session's localStorage). */
+const clubLogoUrl = computed<string | null>(
+  () => settingsStore.data?.brand?.logo_url ?? club.current?.logoUrl ?? null,
+)
 const moreOpen = ref(false)
 const notifsOpen = ref(false)
 const newMenuOpen = ref(false)
@@ -113,7 +133,7 @@ const crumbTitle = computed(() => String(route.name ?? '').replace(/-/g, ' '))
 
 type NavIcon =
   | 'dashboard' | 'members' | 'applications' | 'enquiries'
-  | 'website' | 'events' | 'teams' | 'honour' | 'achievements'
+  | 'website' | 'events' | 'teams' | 'honour'
   | 'communications' | 'site-settings' | 'settings'
 
 interface NavItem {
@@ -170,7 +190,6 @@ const contentNav: NavItem[] = [
   { to: '/crm/events', label: 'Events', icon: 'events', count: 12, countTone: 'neutral' },
   { to: '/crm/teams', label: 'Team selections', icon: 'teams', count: 4, countTone: 'neutral' },
   { to: '/crm/honour-board', label: 'Honour board', icon: 'honour', count: 11, countTone: 'neutral' },
-  { to: '/crm/achievements', label: 'Achievements', icon: 'achievements' },
 ]
 const accountNav: NavItem[] = [
   { to: '/crm/communications', label: 'Communications', icon: 'communications' },
@@ -230,11 +249,11 @@ const bottomTabs = computed<TabItem[]>(() => [
           :aria-expanded="clubMenuOpen ? 'true' : 'false'"
           @click="toggleClubMenu"
         >
-          <div class="sidebar__club-badge" :class="{ 'sidebar__club-badge--logo': club.current?.logoUrl }">
+          <div class="sidebar__club-badge" :class="{ 'sidebar__club-badge--logo': !!clubLogoUrl }">
             <img
-              v-if="club.current?.logoUrl"
-              :src="club.current.logoUrl"
-              :alt="`${club.current.name} logo`"
+              v-if="clubLogoUrl"
+              :src="clubLogoUrl"
+              :alt="`${club.current?.name ?? 'Club'} logo`"
               class="sidebar__club-logo"
             />
             <span v-else>{{ clubInitials }}</span>
@@ -315,7 +334,6 @@ const bottomTabs = computed<TabItem[]>(() => [
             <svg v-else-if="item.icon === 'events'" width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="4" width="13" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 7.5h13M6 2.5v3M12 2.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
             <svg v-else-if="item.icon === 'teams'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M6 3.5h6a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5z" stroke="currentColor" stroke-width="1.5"/><path d="M7 2.5h4v2H7zM7 8h4M7 11h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
             <svg v-else-if="item.icon === 'honour'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M5 2.5h8v5.5a4 4 0 1 1-8 0V2.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5 4.5H3v2a2 2 0 0 0 2 2M13 4.5h2v2a2 2 0 0 1-2 2M6 15.5h6M9 11.5v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            <svg v-else-if="item.icon === 'achievements'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M12 3H6v3a3 3 0 1 0 6 0V3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 8.5A3.5 3.5 0 1 1 4 15.5M14 8.5A3.5 3.5 0 1 0 14 15.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           </span>
           <span class="sidebar__link-label">{{ item.label }}</span>
           <span

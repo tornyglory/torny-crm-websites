@@ -63,7 +63,6 @@ const routes: RouteRecordRaw[] = [
       { path: 'teams', name: 'teams', component: () => import('@/views/teams/TeamsView.vue') },
       { path: 'teams/:id', name: 'team-editor', component: () => import('@/views/teams/TeamEditorView.vue') },
       { path: 'honour-board', name: 'honour-board', component: () => import('@/views/honour-board/HonourBoardView.vue') },
-      { path: 'achievements', name: 'achievements', component: () => import('@/views/achievements/AchievementsView.vue') },
       { path: 'website', redirect: { name: 'website', params: { pageSlug: 'home' } } },
       { path: 'website/:pageSlug', name: 'website', component: () => import('@/views/website/WebsiteEditorView.vue') },
       { path: 'communications', name: 'communications', component: () => import('@/views/communications/CommunicationsView.vue') },

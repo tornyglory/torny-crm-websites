@@ -151,5 +151,21 @@ export type {
   UpdateNavigationInput,
   UpdateNavigationResponse,
 } from './resources/navigation'
+export * as clubSettings from './resources/clubSettings'
+export type {
+  ClubSettings,
+  SettingsIdentity,
+  SettingsLocation,
+  SettingsFacility,
+  SettingsContact,
+  SettingsHour,
+  SettingsMembership,
+  SettingsMembershipTier,
+  SettingsBrand,
+  SettingsNavigation,
+  SettingsSEO,
+  SettingsPublishing,
+  SettingsPage,
+} from './resources/clubSettings'
 export { SAM_BASE, CRM_BASE, MEDIA_BASE } from './config'
 export { ApiError, authedFetch, publicFetch, TOKEN_STORAGE_KEY } from './http'

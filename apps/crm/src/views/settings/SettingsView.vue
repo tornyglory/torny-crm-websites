@@ -1,11 +1,29 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import ImagePicker from '@/components/ImagePicker.vue'
 import { useToast } from '@/composables/useToast'
 import { useOnboardingStore, type MembershipTier } from '@/stores/onboarding'
+import { useClubStore } from '@/stores/club'
+import { useClubSettingsStore } from '@/stores/clubSettings'
+import { ApiError, clubs } from '@torny/api-client'
 
 const toast = useToast()
 const onboarding = useOnboardingStore()
+const clubStore = useClubStore()
+const settingsStore = useClubSettingsStore()
+
+// Fetch the one-shot settings payload on mount + whenever the active club
+// changes. Reads brand.logo_url / favicon_url out of this response instead
+// of relying on localStorage or the CORS-blocked `GET /clubs/:id` route.
+async function loadSettings() {
+  const cid = clubStore.current?.id
+  if (typeof cid === 'number') {
+    await settingsStore.fetch(cid)
+  }
+}
+onMounted(loadSettings)
+watch(() => clubStore.current?.id, loadSettings)
 
 type SectionKey =
   | 'club'
@@ -85,94 +103,47 @@ function saveHours() {
   toast.success('Opening hours saved.')
 }
 
-// ── Brand (shared with onboarding store) ───────────────────────
+// ── Brand ──────────────────────────────────────────────────────
 const brandSwatches = ['#2563EB', '#DC2626', '#16A34A', '#EA580C', '#7C3AED', '#0F766E', '#0A0A0B']
-const logoFileInput = ref<HTMLInputElement | null>(null)
 
-const brandWordmark = computed(() => {
-  const name = onboarding.data.clubName || 'Your club'
-  const parts = name.split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return 'YC'
-  if (parts.length === 1) return (parts[0] ?? '').slice(0, 12)
-  return parts.map((p: string) => p.charAt(0)).slice(0, 4).join('').toUpperCase()
+/**
+ * Logo / favicon two-way binding — reads from `settingsStore.data.brand`
+ * (populated by `GET /clubs/:id/settings` on mount) and writes through
+ * `PATCH /clubs/:id/brand-assets`. Merge the PATCH response back into both
+ * the settings store (so the page keeps showing it after save) and the
+ * club store (so the sidebar / other surfaces stay in sync).
+ *
+ * Do NOT read from `clubStore.current.logoUrl` alone — that's populated by
+ * `hydrateFull()` which hits the CORS-blocked `GET /clubs/:id` (brief 30).
+ */
+const brandLogoUrl = computed<string>({
+  get: () => settingsStore.data?.brand?.logo_url ?? clubStore.current?.logoUrl ?? '',
+  set: (value) => { void persistBrandAsset('logo_url', value) },
+})
+const brandFaviconUrl = computed<string>({
+  get: () => settingsStore.data?.brand?.favicon_url ?? clubStore.current?.faviconUrl ?? '',
+  set: (value) => { void persistBrandAsset('favicon_url', value) },
 })
 
-const logoUploading = ref(false)
-const logoError = ref<string | null>(null)
-
-function openLogoPicker() {
-  logoFileInput.value?.click()
-}
-
-async function onLogoFile(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  logoError.value = null
-
-  // Reject anything not image/*
-  if (!file.type.startsWith('image/')) {
-    logoError.value = 'That doesn\'t look like an image. Use a PNG, JPG, or SVG.'
+async function persistBrandAsset(field: 'logo_url' | 'favicon_url', value: string) {
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') {
+    toast.error('No active club — refresh and try again.')
     return
   }
-  // Guard against ridiculous uploads
-  if (file.size > 5 * 1024 * 1024) {
-    logoError.value = 'Keep it under 5MB — we\'ll resize before uploading.'
-    return
-  }
-
-  logoUploading.value = true
+  const payload = { [field]: value || null } as Record<'logo_url' | 'favicon_url', string | null>
   try {
-    // Read the file as data URL first for preview.
-    const dataUrl = await readFileAsDataUrl(file)
-    // Downscale raster images to 512×512 max so the localStorage blob stays
-    // small. SVGs bypass canvas — they'd rasterise for no reason.
-    const finalUrl = file.type === 'image/svg+xml'
-      ? dataUrl
-      : await downscaleImage(dataUrl, 512)
-    onboarding.data.logoName = file.name
-    onboarding.data.logoDataUrl = finalUrl
+    const res = await clubs.updateBrandAssets(clubId, payload)
+    settingsStore.patchBrand({ logo_url: res.logo_url, favicon_url: res.favicon_url })
+    clubStore.setBrandAssets({
+      logoUrl: res.logo_url,
+      faviconUrl: res.favicon_url,
+    })
+    toast.success(value ? `${field === 'logo_url' ? 'Logo' : 'Favicon'} saved.` : `${field === 'logo_url' ? 'Logo' : 'Favicon'} removed.`)
   } catch (err) {
-    logoError.value = `Couldn't read that image — ${(err as Error).message}`
-  } finally {
-    logoUploading.value = false
-    // Allow picking the same file again by clearing the input's value.
-    if (logoFileInput.value) logoFileInput.value.value = ''
+    const msg = err instanceof ApiError ? err.message : `Could not save ${field.replace('_', ' ')}`
+    toast.error(msg || 'Could not save')
   }
-}
-
-function removeLogo() {
-  onboarding.data.logoName = null
-  onboarding.data.logoDataUrl = null
-  logoError.value = null
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(new Error('read failed'))
-    reader.readAsDataURL(file)
-  })
-}
-
-function downscaleImage(dataUrl: string, maxSide: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      const scale = Math.min(1, maxSide / Math.max(img.width, img.height))
-      const w = Math.round(img.width * scale)
-      const h = Math.round(img.height * scale)
-      const canvas = document.createElement('canvas')
-      canvas.width = w
-      canvas.height = h
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return reject(new Error('canvas not supported'))
-      ctx.drawImage(img, 0, 0, w, h)
-      resolve(canvas.toDataURL('image/png'))
-    }
-    img.onerror = () => reject(new Error('image decode failed'))
-    img.src = dataUrl
-  })
 }
 
 function saveBrand() {
@@ -339,36 +310,23 @@ function sendInvite() {
 
             <div class="brand-grid">
               <div class="brand-card">
-                <div class="field__label">Logo</div>
-                <div class="logo">
-                  <div class="logo__drop" :class="{ 'has-image': !!onboarding.data.logoDataUrl }" @click="openLogoPicker" role="button" tabindex="0">
-                    <img v-if="onboarding.data.logoDataUrl" :src="onboarding.data.logoDataUrl" alt="Club logo" class="logo__drop-img" />
-                    <span v-else-if="logoUploading" class="logo__drop-spin" />
-                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M12 5v14M5 12h14" /></svg>
-                  </div>
-                  <div class="logo__body">
-                    <div class="logo__title">{{ onboarding.data.logoName ? 'Change logo' : 'Upload logo' }}</div>
-                    <div class="logo__hint">{{ onboarding.data.logoName || 'PNG, JPG or SVG · square works best · under 5MB' }}</div>
-                    <div class="logo__actions">
-                      <button type="button" class="logo__btn" @click="openLogoPicker" :disabled="logoUploading">{{ logoUploading ? 'Reading…' : 'Choose file' }}</button>
-                      <button v-if="onboarding.data.logoDataUrl" type="button" class="logo__remove" @click="removeLogo">Remove</button>
-                    </div>
-                    <input ref="logoFileInput" type="file" accept="image/png,image/jpeg,image/svg+xml" hidden @change="onLogoFile" />
-                  </div>
-                </div>
-                <div v-if="logoError" class="logo__error">{{ logoError }}</div>
+                <ImagePicker
+                  v-model="brandLogoUrl"
+                  content-type="avatar"
+                  aspect="1 / 1"
+                  label="Logo"
+                  hint="Square, PNG or SVG. Shows in the header, footer, and open-graph share card."
+                />
               </div>
-              <div class="brand-card brand-card--preview">
-                <div class="field__label">Preview</div>
-                <div class="preview" :style="{ background: onboarding.data.accentColour + '14', borderColor: onboarding.data.accentColour + '33' }">
-                  <span v-if="onboarding.data.logoDataUrl" class="preview__logo">
-                    <img :src="onboarding.data.logoDataUrl" alt="Logo preview" />
-                  </span>
-                  <span v-else class="preview__mark" :style="{ background: onboarding.data.accentColour }">
-                    <span class="preview__mark-dot" />
-                  </span>
-                  <span class="preview__wordmark">{{ brandWordmark }}</span>
-                </div>
+              <div class="brand-card">
+                <ImagePicker
+                  v-model="brandFaviconUrl"
+                  content-type="avatar"
+                  aspect="1 / 1"
+                  label="Favicon"
+                  hint="32×32 PNG. Shows in the browser tab."
+                  :max-size-mb="1"
+                />
               </div>
             </div>
 
@@ -869,34 +827,11 @@ function sendInvite() {
 .hour-row__closed { grid-column: 3 / -1; font-family: var(--font-body); font-size: 13px; color: var(--color-fog); font-style: italic; }
 
 /* ── Brand ───────────────────────────────────────────────────── */
-.brand-grid { display: grid; grid-template-columns: 1fr 260px; gap: 12px; margin-top: 16px; }
+.brand-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
 .brand-card { padding: 20px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 14px; display: flex; flex-direction: column; gap: 12px; }
-.brand-card--preview { display: flex; flex-direction: column; gap: 12px; }
+/* Constrain the ImagePicker drop-zone so 1:1 avatars don't blow out the card height. */
+.brand-card :deep(.picker__frame) { max-width: 160px; }
 .brand-grid + .brand-card { margin-top: 12px; }
-.logo { display: flex; align-items: center; gap: 14px; }
-.logo__drop { width: 72px; height: 72px; border-radius: 14px; background: #fff; border: 1px dashed var(--color-hairline); display: inline-flex; align-items: center; justify-content: center; color: var(--color-mute); cursor: pointer; flex-shrink: 0; overflow: hidden; position: relative; }
-.logo__drop:hover { border-color: var(--color-accent); color: var(--color-accent); }
-.logo__drop.has-image { border-style: solid; padding: 6px; }
-.logo__drop-img { width: 100%; height: 100%; object-fit: contain; display: block; }
-.logo__drop-spin { width: 22px; height: 22px; border: 2px solid var(--color-hairline); border-top-color: var(--color-accent); border-radius: 999px; animation: logo-spin 0.8s linear infinite; }
-@keyframes logo-spin { to { transform: rotate(360deg); } }
-.logo__body { flex: 1; min-width: 0; }
-.logo__title { font-family: var(--font-display); font-size: 14px; font-weight: 600; color: var(--color-ink); }
-.logo__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.logo__actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.logo__btn { padding: 7px 12px; background: var(--color-ink); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
-.logo__btn:hover:not(:disabled) { background: var(--color-graphite); }
-.logo__btn:disabled { opacity: 0.6; cursor: default; }
-.logo__remove { background: transparent; border: 0; padding: 0; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-danger); cursor: pointer; }
-.logo__remove:hover { text-decoration: underline; }
-.logo__error { padding: 8px 10px; background: #FEE2E2; color: #991B1B; border-radius: 8px; font-family: var(--font-body); font-size: 12px; }
-
-.preview { height: 78px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; width: 100%; gap: 12px; border: 1px solid; padding: 0 16px; }
-.preview__mark { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.preview__mark-dot { width: 8px; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.7); }
-.preview__logo { width: 44px; height: 44px; border-radius: 10px; background: #fff; display: inline-flex; align-items: center; justify-content: center; padding: 4px; box-shadow: 0 1px 2px rgba(10, 10, 11, 0.06); flex-shrink: 0; }
-.preview__logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
-.preview__wordmark { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--color-ink); }
 
 .accent-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .accent-sub { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }

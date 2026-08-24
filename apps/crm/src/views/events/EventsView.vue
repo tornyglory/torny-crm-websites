@@ -80,7 +80,7 @@ async function loadEvents() {
 const byTab = computed(() => {
   const now = nowTick.value
   return events.value.filter((e) => {
-    const start = new Date(e.starts_at).getTime()
+    const start = new Date(e.start_datetime).getTime()
     return activeTab.value === 'upcoming' ? start >= now : start < now
   })
 })
@@ -88,8 +88,8 @@ const byTab = computed(() => {
 const counts = computed(() => {
   const now = nowTick.value
   return {
-    upcoming: events.value.filter((e) => new Date(e.starts_at).getTime() >= now).length,
-    past: events.value.filter((e) => new Date(e.starts_at).getTime() < now).length,
+    upcoming: events.value.filter((e) => new Date(e.start_datetime).getTime() >= now).length,
+    past: events.value.filter((e) => new Date(e.start_datetime).getTime() < now).length,
   }
 })
 
@@ -109,8 +109,8 @@ const filtered = computed(() => {
       )
     })
     .sort((a, b) => {
-      const da = new Date(a.starts_at).getTime()
-      const db = new Date(b.starts_at).getTime()
+      const da = new Date(a.start_datetime).getTime()
+      const db = new Date(b.start_datetime).getTime()
       return activeTab.value === 'upcoming' ? da - db : db - da
     })
 })
@@ -196,13 +196,9 @@ function timeUntilLabel(iso: string): string {
   return formatDate(iso)
 }
 
-function fillPct(e: Event): number {
-  if (e.capacity == null || e.capacity <= 0) return 0
-  return Math.min(
-    100,
-    Math.round(((e.rsvp_going_count + e.rsvp_maybe_count) / e.capacity) * 100),
-  )
-}
+// RSVP counts aren't returned by the CRUD list endpoint (they're
+// public-shape only), so the CRM's roster row surfaces capacity + open
+// state rather than a fill bar.
 
 const formatColour: Record<BowlsFormat, string> = {
   singles: 'var(--color-feature-mint)',
@@ -244,12 +240,7 @@ function eventSecondaryLine(e: Event): string {
 
 function eventBadge(e: Event): { label: string; tone: string } | null {
   if (!e.is_published) return { label: 'Draft', tone: 'mute' }
-  if (e.capacity != null && e.capacity > 0) {
-    const pct = (e.rsvp_going_count + e.rsvp_maybe_count) / e.capacity
-    if (pct >= 1) return { label: 'Full', tone: 'danger' }
-    if (pct >= 0.75) return { label: 'Nearly full', tone: 'warn' }
-  }
-  const d = daysUntil(e.starts_at)
+  const d = daysUntil(e.start_datetime)
   if (d >= 0 && d <= 3) return { label: 'This week', tone: 'accent' }
   return null
 }
@@ -344,14 +335,14 @@ function openEdit(e: Event) {
   editing.value = e
   editorError.value = null
   invalidHostUserId.value = null
-  const start = splitIsoForInputs(e.starts_at)
-  const end = splitIsoForInputs(e.ends_at)
+  const start = splitIsoForInputs(e.start_datetime)
+  const end = splitIsoForInputs(e.end_datetime)
   resetForm({
     title: e.title,
     event_type: e.event_type,
     format: e.format ?? 'singles',
     excerpt: e.excerpt ?? '',
-    description: e.description ?? '',
+    description: e.description_html ?? '',
     startDate: start.date,
     startTime: start.time,
     endDate: end.date,
@@ -360,9 +351,9 @@ function openEdit(e: Event) {
     host_user_id: e.host_user_id == null ? null : Number(e.host_user_id),
     host_name: e.host_name ?? '',
     capacity: e.capacity == null ? '' : String(e.capacity),
-    is_ticketed: e.is_ticketed,
-    rsvp_open: e.rsvp_open,
-    is_published: e.is_published,
+    is_ticketed: Boolean(e.is_ticketed),
+    rsvp_open: Boolean(e.rsvp_open),
+    is_published: Boolean(e.is_published),
   })
   editorOpen.value = true
 }
@@ -403,11 +394,11 @@ async function submitEditor() {
   const payload: EventCreateInput = {
     title: form.title.trim(),
     event_type: form.event_type,
-    starts_at: startsAt,
-    ends_at: endsAt,
+    start_datetime: startsAt,
+    end_datetime: endsAt,
     format: form.event_type === 'tournament' ? form.format : null,
     excerpt: form.excerpt.trim() || null,
-    description: form.description.trim() || null,
+    description_html: form.description.trim() || null,
     location: form.location.trim() || null,
     host_user_id: form.host_user_id,
     host_name: form.host_name.trim() || null,
@@ -419,9 +410,9 @@ async function submitEditor() {
 
   try {
     if (editing.value) {
-      const eventId = Number(editing.value.id)
+      const eventId = editing.value.event_id
       const updated = await eventsApi.update(cid, eventId, payload)
-      const idx = events.value.findIndex((e) => e.id === updated.id)
+      const idx = events.value.findIndex((e) => e.event_id === updated.event_id)
       if (idx >= 0) events.value.splice(idx, 1, updated)
       else events.value = [...events.value, updated]
       toast.success('Event updated.')
@@ -456,8 +447,8 @@ async function deleteEditing() {
   const ok = confirm(`Delete "${target.title}"? This cannot be undone.`)
   if (!ok) return
   try {
-    await eventsApi.remove(cid, Number(target.id))
-    events.value = events.value.filter((e) => e.id !== target.id)
+    await eventsApi.remove(cid, target.event_id)
+    events.value = events.value.filter((e) => e.event_id !== target.event_id)
     toast.success('Event deleted.')
     closeEditor()
   } catch (err) {
@@ -689,7 +680,7 @@ onBeforeUnmount(() => {
     <ul v-if="filtered.length" class="list">
       <li
         v-for="e in filtered"
-        :key="e.id"
+        :key="e.event_id"
         class="event"
         tabindex="0"
         @click="openEdit(e)"
@@ -706,7 +697,7 @@ onBeforeUnmount(() => {
             >{{ eventBadge(e)!.label }}</span>
           </div>
           <div class="event__meta">
-            <span>{{ formatRange(e.starts_at, e.ends_at) }}</span>
+            <span>{{ formatRange(e.start_datetime, e.end_datetime) }}</span>
             <template v-if="e.location">
               <span class="event__sep">·</span>
               <span>{{ e.location }}</span>
@@ -714,18 +705,16 @@ onBeforeUnmount(() => {
             <span class="event__sep">·</span>
             <span class="event__format-label">{{ eventSecondaryLine(e) }}</span>
           </div>
-          <div class="event__when">{{ timeUntilLabel(e.starts_at) }}</div>
+          <div class="event__when">{{ timeUntilLabel(e.start_datetime) }}</div>
         </div>
         <div class="event__rsvp">
           <div class="event__rsvp-count">
-            {{ e.rsvp_going_count }}<span class="event__rsvp-cap">/{{ e.capacity ?? '∞' }}</span>
-          </div>
-          <div class="event__rsvp-bar">
-            <div class="event__rsvp-fill" :style="{ width: fillPct(e) + '%' }" />
+            <template v-if="e.capacity != null">{{ e.capacity }}</template>
+            <template v-else>—</template>
+            <span class="event__rsvp-cap">{{ e.capacity != null ? 'spots' : '' }}</span>
           </div>
           <div class="event__rsvp-label">
-            {{ e.rsvp_maybe_count }} maybe ·
-            {{ e.capacity != null ? Math.max(0, e.capacity - e.rsvp_going_count) + ' spots' : 'no cap' }}
+            {{ e.rsvp_open ? 'RSVP open' : 'RSVP closed' }}
           </div>
         </div>
         <div class="event__chev" aria-hidden="true">›</div>

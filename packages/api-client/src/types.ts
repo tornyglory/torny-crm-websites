@@ -159,34 +159,35 @@ export interface PublicEvent {
 }
 
 /**
- * Authed / CRM-facing event shape. Superset of PublicEvent — includes
- * fields owners edit (description, host_user_id, is_published).
+ * Authed / CRM-facing event shape. Matches the CRUD endpoint response
+ * (primary CDK stack, migration 058 + 099). Different field names +
+ * boolean-as-int from PublicEvent — the two live on different backends
+ * and have divergent conventions.
  */
 export interface Event {
-  id: ID
-  club_id: ID
-  slug: string
+  event_id: number
+  club_id: number
   title: string
+  slug: string | null
   excerpt: string | null
-  description: string | null
   event_type: EventType
   format: BowlsFormat | null
-  starts_at: string
-  ends_at: string | null
+  description_html: string | null
+  start_datetime: string
+  end_datetime: string | null
+  all_day: 0 | 1
   location: string | null
-  cover_url: string | null
-  host_user_id: ID | null
-  host_name: string | null
-  host_avatar_url: string | null
+  cover_image_url: string | null
+  link_url: string | null
   capacity: number | null
-  is_ticketed: boolean
-  is_published: boolean
-  rsvp_open: boolean
-  rsvp_going_count: number
-  rsvp_maybe_count: number
-  rsvp_going_preview: EventRsvpPreview[]
-  created_at?: string
-  updated_at?: string | null
+  host_user_id: number | null
+  host_name: string | null
+  is_ticketed: 0 | 1
+  rsvp_open: 0 | 1
+  is_published: 0 | 1
+  created_by: number
+  created_at: string
+  updated_at: string
 }
 
 export interface TeamSelection {

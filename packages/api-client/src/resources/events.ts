@@ -20,37 +20,35 @@ import type {
 export interface EventCreateInput {
   title: string
   event_type: EventType
-  format?: BowlsFormat | null
-  starts_at: string
-  ends_at?: string | null
-  /** Optional — backend auto-derives from title + start date when omitted. */
+  start_datetime: string
+  /** Optional — backend auto-derives `${slugify(title)}-${startDate.slice(0,10)}` when omitted. */
   slug?: string
   excerpt?: string | null
-  description?: string | null
+  format?: BowlsFormat | null
+  description_html?: string | null
+  end_datetime?: string | null
+  all_day?: boolean | 0 | 1
   location?: string | null
-  cover_url?: string | null
+  cover_image_url?: string | null
+  link_url?: string | null
+  capacity?: number | null
   /** Must be a current member of the club (400 host_not_in_club otherwise). */
   host_user_id?: number | null
   host_name?: string | null
-  capacity?: number | null
-  is_ticketed?: boolean
-  is_published?: boolean
-  rsvp_open?: boolean
+  is_ticketed?: boolean | 0 | 1
+  rsvp_open?: boolean | 0 | 1
+  is_published?: boolean | 0 | 1
 }
 
 export type EventUpdateInput = Partial<EventCreateInput>
 
 export interface ListEventsParams {
-  /** ISO date/datetime. Defaults server-side to 7 days ago. */
+  /** ISO date. Include events where `start_datetime >= from`. */
   from?: string
-  /** ISO date/datetime. Defaults server-side to +90 days. */
+  /** ISO date. Include events where `start_datetime <= to`. */
   to?: string
-  type?: EventType | EventType[]
-  format?: BowlsFormat | BowlsFormat[]
-  /** true → only unpublished drafts; false → only published; omit → all. */
-  is_published?: boolean
-  limit?: number
-  offset?: number
+  /** Single event_type value (backend list endpoint doesn't accept comma-separated). */
+  type?: EventType
 }
 
 export interface PublicListEventsParams {
@@ -93,13 +91,7 @@ export async function list(
   const qs = new URLSearchParams()
   if (params.from) qs.set('from', params.from)
   if (params.to) qs.set('to', params.to)
-  const type = csv(params.type)
-  if (type) qs.set('type', type)
-  const format = csv(params.format)
-  if (format) qs.set('format', format)
-  if (params.is_published != null) qs.set('is_published', String(params.is_published))
-  if (params.limit != null) qs.set('limit', String(params.limit))
-  if (params.offset != null) qs.set('offset', String(params.offset))
+  if (params.type) qs.set('type', params.type)
 
   const url = qs.toString().length
     ? `${MEDIA_BASE}/clubs/${clubId}/events?${qs.toString()}`

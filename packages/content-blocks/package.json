@@ -21,6 +21,7 @@
     "vue": "^3.5.0"
   },
   "dependencies": {
+    "@torny/api-client": "workspace:*",
     "@torny/design-tokens": "workspace:*"
   },
   "devDependencies": {

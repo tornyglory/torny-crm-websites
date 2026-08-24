@@ -33,6 +33,7 @@ const accent = computed(() => site.value?.club.brand_primary ?? club.value?.bran
 // wiring at the page level. Non-data blocks ignore this.
 provide(BLOCK_CONTEXT_KEY, computed<BlockContext>(() => ({
   brandPrimary: accent.value,
+  clubSlug: club.value?.slug ?? site.value?.club?.slug ?? null,
   events: site.value?.events_upcoming ?? [],
   honourEntries: site.value?.honour_board_recent ?? [],
 })))

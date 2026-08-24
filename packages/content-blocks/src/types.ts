@@ -3,6 +3,7 @@ export type BlockType =
   | 'richText'
   | 'eventList'
   | 'honourBoard'
+  | 'honourBoardSearch'
   | 'gallery'
   | 'contactForm'
   | 'membershipCta'
@@ -62,6 +63,16 @@ export interface HonourBoardProps {
   yearsToShow?: number
   ctaLabel?: string
   ctaHref?: string
+}
+
+/** Searchable full-page honour board block — reads from brief 31's public
+ *  endpoints. Owner-configurable copy at the top; everything below is data. */
+export interface HonourBoardSearchProps {
+  eyebrow?: string
+  heading?: string
+  description?: string
+  /** Rows per page fetch. Defaults to 50 on server-side. */
+  pageSize?: number
 }
 
 export interface GalleryProps {
@@ -205,6 +216,7 @@ export type Block =
   | BlockBase<'richText', RichTextProps>
   | BlockBase<'eventList', EventListProps>
   | BlockBase<'honourBoard', HonourBoardProps>
+  | BlockBase<'honourBoardSearch', HonourBoardSearchProps>
   | BlockBase<'gallery', GalleryProps>
   | BlockBase<'contactForm', ContactFormProps>
   | BlockBase<'membershipCta', MembershipCtaProps>
@@ -226,6 +238,9 @@ export type Block =
  */
 export interface BlockContext {
   brandPrimary?: string | null
+  /** Public club slug — used by data-hydrated blocks that hit the public
+   *  honour-board / events endpoints (need the slug to construct URLs). */
+  clubSlug?: string | null
   events?: Array<{
     id: number | string
     title: string

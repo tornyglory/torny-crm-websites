@@ -37,6 +37,7 @@ import type {
   RichTextProps,
   EventListProps,
   HonourBoardProps,
+  HonourBoardSearchProps,
   GalleryProps,
   ContactFormProps,
   MembershipCtaProps,
@@ -366,7 +367,12 @@ const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
       defaults: (): HeroProps => heroDefault('Honour board', 'A century of results.', ['Back to the club', '/']) },
     { type: 'richText', label: 'Rich text', hint: 'Preamble', icon: '¶',
       defaults: (): RichTextProps => ({ html: '<p>Winners of every competition, year by year.</p>' }) },
-    { type: 'honourBoard', label: 'Honour board', hint: 'Reigning champion + recent winners', icon: '♛',
+    { type: 'honourBoardSearch', label: 'Honour board · Search', hint: 'Full searchable wall of names — every category, every year', icon: '⌕',
+      defaults: (): HonourBoardSearchProps => ({
+        heading: 'The honour board.',
+        description: 'Every winner of every event since we opened. Names on the wall, names on this page.',
+      }) },
+    { type: 'honourBoard', label: 'Honour board · Feature', hint: 'Reigning champion + recent winners', icon: '♛',
       defaults: (): HonourBoardProps => ({
         eyebrow: 'Honour board · Since 1953',
         heading: 'Champions.',
@@ -396,6 +402,7 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   richText: 'Rich text',
   eventList: 'Events',
   honourBoard: 'Honour board',
+  honourBoardSearch: 'Honour board · Search',
   gallery: 'Gallery',
   contactForm: 'Contact form',
   membershipCta: 'Membership CTA',
@@ -980,6 +987,7 @@ function blockSummary(block: Block): string {
     case 'richText':      return stripHtml((block.props as RichTextProps).html).slice(0, 60)
     case 'eventList':     return (block.props as EventListProps).heading ?? `${(block.props as EventListProps).limit ?? 4} upcoming events`
     case 'honourBoard':   return (block.props as HonourBoardProps).heading || `Honour board — last ${(block.props as HonourBoardProps).yearsToShow ?? 10} years`
+    case 'honourBoardSearch': return (block.props as HonourBoardSearchProps).heading || 'Full searchable honour board'
     case 'gallery':       return `${(block.props as GalleryProps).images.length} photos`
     case 'contactForm':   return (block.props as ContactFormProps).heading || 'Contact form'
     case 'membershipCta': return (block.props as MembershipCtaProps).heading || '(no heading)'
@@ -1374,6 +1382,28 @@ const lastSavedLabel = computed(() => {
                 <input v-model="(selectedBlock.props as HonourBoardProps).ctaHref" type="text" placeholder="/honour-board" />
               </label>
             </div>
+          </template>
+
+          <!-- Honour board — full searchable page (brief 31) -->
+          <template v-else-if="selectedBlock.type === 'honourBoardSearch'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as HonourBoardSearchProps).eyebrow" type="text" placeholder="Leave blank for auto-count · year range" />
+              <span class="field__hint">Overrides the auto-generated "N categories · YYYY–YYYY" line.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as HonourBoardSearchProps).heading" type="text" placeholder="The honour board." />
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as HonourBoardSearchProps).description" rows="3" placeholder="One line of context above the search." />
+            </label>
+            <label class="field">
+              <span class="field__label">Page size</span>
+              <input v-model.number="(selectedBlock.props as HonourBoardSearchProps).pageSize" type="number" min="10" max="100" step="10" />
+              <span class="field__hint">Rows per "Load older" page. 50 is a sensible default.</span>
+            </label>
           </template>
 
           <!-- Contact form -->

@@ -49,6 +49,7 @@ const TAGS_BY_TYPE: Record<BlockType, Tag[]> = {
   richText:       ['text'],
   eventList:      ['data'],
   honourBoard:    ['data'],
+  honourBoardSearch: ['data'],
   gallery:        ['media'],
   contactForm:    ['forms'],
   membershipCta:  ['cta'],
@@ -180,6 +181,21 @@ const BlockPreview = defineComponent({
             rect(50, y, 60, 5, { fill: graphite, opacity: 0.7 }),
             rect(140, y, 40, 5, { fill: graphite, opacity: 0.5 }),
           ]),
+        ])
+
+      case 'honourBoardSearch':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          // Search bar
+          rect(16, 12, 168, 12, { fill: graphite, opacity: 0.12, rx: 3 }),
+          rect(24, 16, 60, 4, { fill: graphite, opacity: 0.5 }),
+          // Category rail
+          rect(16, 32, 44, 74, { fill: graphite, opacity: 0.08, rx: 3 }),
+          ...[38, 50, 62, 74, 86].map((y) => rect(22, y, 30, 3, { fill: graphite, opacity: 0.6 })),
+          // Table
+          rect(66, 32, 118, 74, { fill: graphite, opacity: 0.05, rx: 3 }),
+          rect(70, 38, 30, 3, { fill: ink }),
+          ...[52, 64, 76, 88, 100].map((y) => rect(70, y, 100, 3, { fill: graphite, opacity: 0.5 })),
         ])
 
       case 'gallery':

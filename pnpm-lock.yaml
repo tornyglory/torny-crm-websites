@@ -98,6 +98,9 @@ importers:
 
   packages/content-blocks:
     dependencies:
+      '@torny/api-client':
+        specifier: workspace:*
+        version: link:../api-client
       '@torny/design-tokens':
         specifier: workspace:*
         version: link:../design-tokens

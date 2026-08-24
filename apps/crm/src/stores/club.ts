@@ -6,6 +6,7 @@ import {
   type Club,
   type ClubFonts,
   type ClubStyle,
+  type ClubNavigation,
   type UserClub,
 } from '@torny/api-client'
 
@@ -92,6 +93,7 @@ export const useClubStore = defineStore('club', () => {
         faviconUrl: full.faviconUrl ?? c.faviconUrl ?? null,
         fonts: full.fonts ?? c.fonts,
         style: full.style ?? c.style,
+        navigation: full.navigation ?? c.navigation,
       })
     } catch {
       /* transport failure — leave slug null, caller falls back */
@@ -133,6 +135,17 @@ export const useClubStore = defineStore('club', () => {
     })
   }
 
+  /**
+   * Merge in updated navigation trees after a successful PATCH. Missing
+   * fields leave stored value alone; the store always keeps whatever the
+   * server confirmed.
+   */
+  function setNavigation(navigation: ClubNavigation | undefined) {
+    const c = current.value
+    if (!c) return
+    setCurrent({ ...c, navigation })
+  }
+
   return {
     current,
     memberships,
@@ -140,6 +153,7 @@ export const useClubStore = defineStore('club', () => {
     setFonts,
     setStyle,
     setBrandAssets,
+    setNavigation,
     clear,
     syncFromUserClubs,
     hydrateFull,

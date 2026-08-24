@@ -27,7 +27,8 @@ import { useOnboardingStore } from '@/stores/onboarding'
 import ImagePicker from '@/components/ImagePicker.vue'
 import BlockPaletteDialog from '@/components/BlockPaletteDialog.vue'
 import WebsiteSettingsPanel, { type WebsiteSettingsSection } from '@/components/WebsiteSettingsPanel.vue'
-import { ApiError, pages, type PageBlock } from '@torny/api-client'
+import { ApiError, pages, isValidPageSlug, RESERVED_PAGE_SLUGS, slugifyTitle, type PageBlock } from '@torny/api-client'
+import { usePagesStore } from '@/stores/pages'
 import type {
   Block,
   BlockType,
@@ -60,12 +61,18 @@ const clubStore = useClubStore()
 const onboarding = useOnboardingStore()
 
 // ── Sections (pages + settings) ──────────────────────────────
-type PageSlug = 'home' | 'about' | 'membership' | 'events' | 'honour-board' | 'contact'
-const PAGE_SLUGS: PageSlug[] = ['home', 'about', 'membership', 'events', 'honour-board', 'contact']
+/** Now widened to any kebab-case slug — clubs mint custom pages via the
+ *  sidebar. The six seed slugs still have their own curated palettes /
+ *  seed blocks / labels; custom pages use the generic fallbacks. */
+type PageSlug = string
+type SystemPageSlug = 'home' | 'about' | 'membership' | 'events' | 'honour-board' | 'contact'
+const SYSTEM_PAGE_SLUGS: SystemPageSlug[] = ['home', 'about', 'membership', 'events', 'honour-board', 'contact']
 const SETTINGS_SLUGS: WebsiteSettingsSection[] = ['navigation', 'brand', 'seo', 'domain', 'forms', 'analytics']
 type Section = PageSlug | WebsiteSettingsSection
 
-const PAGE_LABELS: Record<PageSlug, string> = {
+const pagesStore = usePagesStore()
+
+const SYSTEM_PAGE_LABELS: Record<SystemPageSlug, string> = {
   home: 'Home',
   about: 'About',
   membership: 'Membership',
@@ -73,13 +80,27 @@ const PAGE_LABELS: Record<PageSlug, string> = {
   'honour-board': 'Honour board',
   contact: 'Contact',
 }
-const PAGE_SUBTITLES: Record<PageSlug, string> = {
+const SYSTEM_PAGE_SUBTITLES: Record<SystemPageSlug, string> = {
   home: 'The front door — hero, upcoming events, a nudge to join.',
   about: 'Who you are and what makes the club feel like home.',
   membership: 'Show your tiers and why someone would join.',
   events: 'What\'s coming up. Auto-pulled from the events calendar.',
   'honour-board': 'A century of results, category by category.',
   contact: 'How people reach the club — address, hours, contact form.',
+}
+/** Human title for any slug. System pages use their curated label; custom
+ *  pages look up their `title` on the store row (falls back to slug). */
+function pageLabel(slug: PageSlug): string {
+  if ((SYSTEM_PAGE_SLUGS as readonly string[]).includes(slug)) {
+    return SYSTEM_PAGE_LABELS[slug as SystemPageSlug]
+  }
+  return pagesStore.findBySlug(slug)?.title ?? slug
+}
+function pageSubtitle(slug: PageSlug): string {
+  if ((SYSTEM_PAGE_SLUGS as readonly string[]).includes(slug)) {
+    return SYSTEM_PAGE_SUBTITLES[slug as SystemPageSlug]
+  }
+  return 'Custom page — drop in blocks to tell its story.'
 }
 const SETTINGS_LABELS: Record<WebsiteSettingsSection, string> = {
   navigation: 'Navigation',
@@ -98,11 +119,12 @@ const SETTINGS_SUBTITLES: Record<WebsiteSettingsSection, string> = {
   analytics: 'Google Analytics, Plausible, cookie banner.',
 }
 
-function isPageSlug(s: string): s is PageSlug {
-  return (PAGE_SLUGS as readonly string[]).includes(s)
-}
 function isSettingsSlug(s: string): s is WebsiteSettingsSection {
   return (SETTINGS_SLUGS as readonly string[]).includes(s)
+}
+/** Anything not a settings section (and slug-shaped) counts as a page. */
+function isPageSlug(s: string): s is PageSlug {
+  return !isSettingsSlug(s) && isValidPageSlug(s)
 }
 
 const currentSection = computed<Section>(() => {
@@ -290,7 +312,7 @@ const EDITORIAL_PALETTE = [
     defaults: () => dividerDefault('hairline') },
 ]
 
-const PALETTES: Record<PageSlug, PaletteItem[]> = {
+const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
   home: [
     { type: 'hero', label: 'Hero', hint: 'Big heading, tagline, two CTAs', icon: '☰',
       defaults: (): HeroProps => heroDefault("Roll up whenever the sun's out.", 'A friendly bowls club. New members always welcome.', ['Join the club', '/membership'], ['See what\'s on this month', '/events'], homeHeroExtras) },
@@ -343,8 +365,16 @@ const PALETTES: Record<PageSlug, PaletteItem[]> = {
       defaults: (): HeroProps => heroDefault('Honour board', 'A century of results.', ['Back to the club', '/']) },
     { type: 'richText', label: 'Rich text', hint: 'Preamble', icon: '¶',
       defaults: (): RichTextProps => ({ html: '<p>Winners of every competition, year by year.</p>' }) },
-    { type: 'honourBoard', label: 'Honour board', hint: 'Recent honour-board entries grouped by category', icon: '♛',
-      defaults: (): HonourBoardProps => ({ heading: undefined, yearsToShow: 10 }) },
+    { type: 'honourBoard', label: 'Honour board', hint: 'Reigning champion + recent winners', icon: '♛',
+      defaults: (): HonourBoardProps => ({
+        eyebrow: 'Honour board · Since 1953',
+        heading: 'Champions.',
+        description: 'Seventy-three seasons of Champion of Champions. Forty-one unique winners on the plaque above the bar.',
+        categorySlug: 'champion-of-champions',
+        yearsToShow: 5,
+        ctaLabel: 'See the whole honour board',
+        ctaHref: '/honour-board',
+      }) },
     { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
       defaults: (): CtaBannerProps => ({ heading: 'Notice something missing?', ctaLabel: 'Let us know', ctaHref: '/contact', tone: 'surface' }) },
   ],
@@ -389,7 +419,7 @@ function seed(...blocks: Array<{ type: BlockType; props: Block['props'] }>): Blo
   return blocks.map((b) => ({ id: newBlockId(), type: b.type, props: b.props }) as Block)
 }
 
-const SEEDS: Record<PageSlug, () => Block[]> = {
+const SEEDS: Record<SystemPageSlug, () => Block[]> = {
   home: () => seed(
     { type: 'hero', props: heroDefault("Roll up whenever the sun's out.", 'A friendly bowls club. New members always welcome.', ['Join the club', '/membership'], ['See what\'s on this month', '/events'], homeHeroExtras) },
     { type: 'eventList', props: { heading: "What's on", limit: 4, upcomingOnly: true } satisfies EventListProps },
@@ -411,7 +441,15 @@ const SEEDS: Record<PageSlug, () => Block[]> = {
   ),
   'honour-board': () => seed(
     { type: 'hero', props: heroDefault('Honour board', 'A century of results.', ['Back to the club', '/']) },
-    { type: 'honourBoard', props: { heading: undefined, yearsToShow: 10 } satisfies HonourBoardProps },
+    { type: 'honourBoard', props: {
+      eyebrow: 'Honour board · Since 1953',
+      heading: 'Champions.',
+      description: 'Seventy-three seasons of Champion of Champions. Forty-one unique winners on the plaque above the bar.',
+      categorySlug: 'champion-of-champions',
+      yearsToShow: 5,
+      ctaLabel: 'See the whole honour board',
+      ctaHref: '/honour-board',
+    } satisfies HonourBoardProps },
   ),
   contact: () => seed(
     { type: 'hero', props: heroDefault('Contact', 'Say hello. We\'ll get back to you.', ['Directions', '#directions']) },
@@ -420,8 +458,13 @@ const SEEDS: Record<PageSlug, () => Block[]> = {
 }
 
 // ── State ─────────────────────────────────────────────────
+interface PageMetaState {
+  title: string
+  description: string
+}
 interface EditorState {
   blocks: Block[]
+  meta: PageMetaState
   publishedBlocks: Block[] | null
   draftUpdatedAt: string | null
   publishedAt: string | null
@@ -430,11 +473,18 @@ interface EditorState {
 
 const state = reactive<EditorState>({
   blocks: [],
+  meta: { title: '', description: '' },
   publishedBlocks: null,
   draftUpdatedAt: null,
   publishedAt: null,
   hasUnpublishedChanges: false,
 })
+
+// Char limits per brief 26.
+const META_TITLE_MAX = 70
+const META_DESC_MAX = 180
+const metaTitleRemaining = computed(() => META_TITLE_MAX - state.meta.title.length)
+const metaDescRemaining = computed(() => META_DESC_MAX - state.meta.description.length)
 const selectedId = ref<string | null>(null)
 const paletteOpen = ref<null | { after: string | null }>(null)
 const loading = ref(true)
@@ -483,6 +533,10 @@ async function load(slug: PageSlug): Promise<void> {
     const server = await pages.get(clubId, slug)
     suppressAutosave = true
     state.blocks = (server.layout_draft?.blocks ?? []) as unknown as Block[]
+    state.meta = {
+      title: server.layout_draft?.meta?.title ?? '',
+      description: server.layout_draft?.meta?.description ?? '',
+    }
     state.publishedBlocks = (server.layout_published?.blocks ?? null) as unknown as Block[] | null
     state.draftUpdatedAt = server.draft_updated_at
     state.publishedAt = server.published_at
@@ -506,7 +560,7 @@ async function load(slug: PageSlug): Promise<void> {
     } else {
       // Nothing on server, nothing offline — start with the local seed.
       suppressAutosave = true
-      state.blocks = SEEDS[slug]()
+      state.blocks = seedFor(slug)()
       state.publishedBlocks = null
       state.draftUpdatedAt = null
       state.publishedAt = null
@@ -527,12 +581,202 @@ async function load(slug: PageSlug): Promise<void> {
 }
 
 onMounted(() => {
+  void pagesStore.load()
   if (!isSettingsView.value) void load(currentPage.value)
 })
 watch([() => clubStore.current?.id, currentPage, isSettingsView], ([, slug, settingsActive]) => {
   if (settingsActive) return
   void load(slug)
 })
+watch(() => clubStore.current?.id, () => { void pagesStore.load() })
+
+// ── Sidebar page list, custom-page modals ────────────────
+/**
+ * Ordered list for the sidebar. Uses the store when it's loaded for the
+ * active club, falling back to the six seed slugs before the first fetch
+ * so the sidebar is never empty on first paint.
+ */
+const sidebarPages = computed(() => {
+  if (pagesStore.byPosition.length > 0) return pagesStore.byPosition
+  return SYSTEM_PAGE_SLUGS.map((slug, i) => ({
+    id: -1 - i,
+    slug,
+    title: SYSTEM_PAGE_LABELS[slug],
+    is_system: true,
+    is_published: true,
+    position: i,
+    draft_updated_at: null,
+    published_at: null,
+    has_unpublished_changes: false,
+  }))
+})
+
+const openMenuSlug = ref<string | null>(null)
+function closeMenu(): void {
+  openMenuSlug.value = null
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('click', closeMenu)
+}
+
+// New-page modal
+const newPageOpen = ref(false)
+const newPageSubmitting = ref(false)
+const newPageError = ref<string | null>(null)
+const newPageForm = reactive({ title: '', slug: '', slugTouched: false })
+function openNewPage(): void {
+  newPageForm.title = ''
+  newPageForm.slug = ''
+  newPageForm.slugTouched = false
+  newPageError.value = null
+  newPageOpen.value = true
+  closeMenu()
+}
+function onNewPageTitleInput(e: Event): void {
+  const v = (e.target as HTMLInputElement).value
+  newPageForm.title = v
+  if (!newPageForm.slugTouched) newPageForm.slug = slugifyTitle(v)
+}
+function onNewPageSlugInput(e: Event): void {
+  const v = (e.target as HTMLInputElement).value
+  newPageForm.slug = v
+  newPageForm.slugTouched = true
+}
+const newPageSlugStatus = computed<'ok' | 'reserved' | 'invalid' | 'conflict' | 'empty'>(() => {
+  const s = newPageForm.slug.trim()
+  if (!s) return 'empty'
+  if (RESERVED_PAGE_SLUGS.includes(s)) return 'reserved'
+  if (!isValidPageSlug(s)) return 'invalid'
+  if (pagesStore.findBySlug(s)) return 'conflict'
+  return 'ok'
+})
+const newPageCanSubmit = computed(() =>
+  newPageForm.title.trim().length > 0 &&
+  newPageForm.title.length <= 80 &&
+  newPageSlugStatus.value === 'ok',
+)
+async function submitNewPage(): Promise<void> {
+  if (!newPageCanSubmit.value) return
+  newPageSubmitting.value = true
+  newPageError.value = null
+  try {
+    const created = await pagesStore.create({
+      slug: newPageForm.slug.trim(),
+      title: newPageForm.title.trim(),
+    })
+    newPageOpen.value = false
+    switchSection(created.slug)
+    toast.success(`"${created.title}" created.`)
+  } catch (err) {
+    newPageError.value = pagesStore.messageForError(err, 'create')
+  } finally {
+    newPageSubmitting.value = false
+  }
+}
+
+// Rename modal
+const renameOpen = ref(false)
+const renameSubmitting = ref(false)
+const renameError = ref<string | null>(null)
+const renameForm = reactive({
+  originalSlug: '',
+  isSystem: false,
+  title: '',
+  slug: '',
+})
+function openRename(p: { slug: string; title: string; is_system: boolean }): void {
+  renameForm.originalSlug = p.slug
+  renameForm.isSystem = p.is_system
+  renameForm.title = p.title
+  renameForm.slug = p.slug
+  renameError.value = null
+  renameOpen.value = true
+  closeMenu()
+}
+const renameSlugChanged = computed(() => renameForm.slug !== renameForm.originalSlug)
+const renameSlugStatus = computed<'ok' | 'reserved' | 'invalid' | 'conflict' | 'empty' | 'locked'>(() => {
+  if (renameForm.isSystem && renameSlugChanged.value) return 'locked'
+  const s = renameForm.slug.trim()
+  if (!s) return 'empty'
+  if (!renameSlugChanged.value) return 'ok'
+  if (RESERVED_PAGE_SLUGS.includes(s)) return 'reserved'
+  if (!isValidPageSlug(s)) return 'invalid'
+  if (pagesStore.findBySlug(s)) return 'conflict'
+  return 'ok'
+})
+const renameCanSubmit = computed(() =>
+  renameForm.title.trim().length > 0 &&
+  renameForm.title.length <= 80 &&
+  renameSlugStatus.value === 'ok' &&
+  (renameForm.title !== '' || renameSlugChanged.value),
+)
+async function submitRename(): Promise<void> {
+  if (!renameCanSubmit.value) return
+  // Warn once, upfront, if the slug is changing — inbound links will break.
+  if (renameSlugChanged.value) {
+    const ok = window.confirm(
+      `Renaming this page's URL from /${renameForm.originalSlug} to /${renameForm.slug} will break any existing links to the old URL. Continue?`,
+    )
+    if (!ok) return
+  }
+  renameSubmitting.value = true
+  renameError.value = null
+  try {
+    const patch: { title?: string; slug?: string } = {}
+    if (renameForm.title.trim() !== '') patch.title = renameForm.title.trim()
+    if (renameSlugChanged.value) patch.slug = renameForm.slug.trim()
+    const res = await pagesStore.rename(renameForm.originalSlug, patch)
+    renameOpen.value = false
+    // If the current view is the page we just reslugged, follow it.
+    if (currentSection.value === renameForm.originalSlug && res.slug !== renameForm.originalSlug) {
+      switchSection(res.slug)
+    }
+    toast.success('Page updated.')
+  } catch (err) {
+    renameError.value = pagesStore.messageForError(err, 'rename')
+  } finally {
+    renameSubmitting.value = false
+  }
+}
+
+// Delete modal — tiered confirmation.
+const deleteOpen = ref(false)
+const deleteSubmitting = ref(false)
+const deleteError = ref<string | null>(null)
+const deleteTarget = ref<{ slug: string; title: string; is_system: boolean; is_published: boolean } | null>(null)
+const deleteConfirmText = ref('')
+function openDelete(p: { slug: string; title: string; is_system: boolean; is_published: boolean }): void {
+  deleteTarget.value = { ...p }
+  deleteConfirmText.value = ''
+  deleteError.value = null
+  deleteOpen.value = true
+  closeMenu()
+}
+const deleteRequiresTypeToConfirm = computed(
+  () => !!deleteTarget.value && (deleteTarget.value.is_system || deleteTarget.value.is_published),
+)
+const deleteCanSubmit = computed(() => {
+  if (!deleteTarget.value) return false
+  if (!deleteRequiresTypeToConfirm.value) return true
+  return deleteConfirmText.value.trim().toLowerCase() === deleteTarget.value.title.trim().toLowerCase()
+})
+async function submitDelete(): Promise<void> {
+  if (!deleteTarget.value || !deleteCanSubmit.value) return
+  const target = deleteTarget.value
+  deleteSubmitting.value = true
+  deleteError.value = null
+  try {
+    await pagesStore.remove(target.slug)
+    deleteOpen.value = false
+    toast.success(`"${target.title}" deleted.`)
+    // If we were viewing that page, bounce to home.
+    if (currentSection.value === target.slug) switchSection('home')
+  } catch (err) {
+    deleteError.value = pagesStore.messageForError(err, 'rename')
+  } finally {
+    deleteSubmitting.value = false
+  }
+}
 
 const selectedBlock = computed<Block | null>(() => state.blocks.find((b) => b.id === selectedId.value) ?? null)
 
@@ -548,8 +792,17 @@ async function autosave(): Promise<void> {
   // Always mirror to localStorage so a mid-flight failure doesn't lose work.
   writeOffline(slug, state.blocks)
   try {
+    const title = state.meta.title.trim()
+    const description = state.meta.description.trim()
+    const meta = title || description
+      ? {
+          ...(title ? { title } : {}),
+          ...(description ? { description } : {}),
+        }
+      : null
     const res = await pages.patch(clubId, slug, {
       blocks: state.blocks as unknown as PageBlock[],
+      meta,
     })
     state.draftUpdatedAt = res.draft_updated_at
     state.hasUnpublishedChanges = true  // draft is now newer than published
@@ -595,10 +848,11 @@ function scheduleSave(): void {
 }
 
 watch(() => state.blocks, scheduleSave, { deep: true })
+watch(() => state.meta, scheduleSave, { deep: true })
 
 // ── Block ops ─────────────────────────────────────────────
 function addBlock(type: BlockType, afterId: string | null): void {
-  const palette = PALETTES[currentPage.value].find((p) => p.type === type)
+  const palette = paletteFor(currentPage.value).find((p) => p.type === type)
   if (!palette) return
   const block = { id: newBlockId(), type, props: palette.defaults() } as Block
   const idx = afterId ? state.blocks.findIndex((b) => b.id === afterId) : -1
@@ -628,7 +882,7 @@ function resetBlock(id: string): void {
   const idx = state.blocks.findIndex((b) => b.id === id)
   if (idx === -1) return
   const block = state.blocks[idx]!
-  const palette = PALETTES[currentPage.value].find((p) => p.type === block.type)
+  const palette = paletteFor(currentPage.value).find((p) => p.type === block.type)
   if (!palette) return
   const label = BLOCK_LABEL[block.type]
   if (!window.confirm(`Reset ${label} to defaults? This replaces your current content for this block.`)) return
@@ -651,7 +905,7 @@ async function publish(): Promise<void> {
     state.publishedAt = res.published_at
     state.hasUnpublishedChanges = false
     lastPublicUrl.value = res.public_url
-    toast.success(`${PAGE_LABELS[slug]} page published.`)
+    toast.success(`${pageLabel(slug)} page published.`)
   } catch (err) {
     if (err instanceof ApiError) {
       if (err.code === 'empty_draft') {
@@ -669,13 +923,28 @@ async function publish(): Promise<void> {
   }
 }
 
-const PREVIEW_PATHS: Record<PageSlug, string> = {
+const PREVIEW_PATHS: Record<SystemPageSlug, string> = {
   home: '/',
   about: '/about',
   membership: '/membership',
   events: '/events',
   'honour-board': '/honour-board',
   contact: '/contact',
+}
+function previewPathFor(slug: PageSlug): string {
+  return (PREVIEW_PATHS as Record<string, string>)[slug] ?? `/${slug}`
+}
+
+/** Palette for a page — system palettes are curated; custom pages get a
+ *  union of every block type so nothing is missing. */
+function paletteFor(slug: PageSlug): PaletteItem[] {
+  const p = (PALETTES as Record<string, PaletteItem[]>)[slug]
+  if (p) return p
+  return PALETTES.home
+}
+function seedFor(slug: PageSlug): () => Block[] {
+  const s = (SEEDS as Record<string, () => Block[]>)[slug]
+  return s ?? (() => [])
 }
 
 function slugify(s: string): string {
@@ -702,7 +971,7 @@ async function preview(): Promise<void> {
     toast.error("Couldn't get this club's slug — try refreshing.")
     return
   }
-  const path = PREVIEW_PATHS[currentPage.value]
+  const path = previewPathFor(currentPage.value)
   // Dev: hits the Nuxt club-sites app (port 3001, `PORT=3001 pnpm dev`).
   // The `?host=` override lets the tenant middleware pick the right club
   // without needing a real DNS entry. In prod this button should link to
@@ -756,9 +1025,9 @@ const lastSavedLabel = computed(() => {
       <div>
         <div class="web__eyebrow">Website</div>
         <h1 v-if="isSettingsView && currentSettings" class="web__heading">{{ SETTINGS_LABELS[currentSettings] }}</h1>
-        <h1 v-else class="web__heading">{{ PAGE_LABELS[currentPage] }} page</h1>
+        <h1 v-else class="web__heading">{{ pageLabel(currentPage) }} page</h1>
         <p v-if="isSettingsView && currentSettings" class="web__sub">{{ SETTINGS_SUBTITLES[currentSettings] }}</p>
-        <p v-else class="web__sub">{{ PAGE_SUBTITLES[currentPage] }}</p>
+        <p v-else class="web__sub">{{ pageSubtitle(currentPage) }}</p>
       </div>
       <div v-if="!isSettingsView" class="web__actions">
         <span class="web__save-hint">{{ lastSavedLabel }}</span>
@@ -793,35 +1062,111 @@ const lastSavedLabel = computed(() => {
           @click="switchSection('navigation')"
         >Settings</button>
       </div>
-      <div class="section-tabs__row" role="group" :aria-label="isSettingsView ? 'Settings' : 'Pages'">
-        <template v-if="isSettingsView">
-          <button
-            v-for="slug in SETTINGS_SLUGS"
-            :key="slug"
-            type="button"
-            class="page-tab"
-            :class="{ 'page-tab--active': currentSection === slug }"
-            @click="switchSection(slug)"
-          >{{ SETTINGS_LABELS[slug] }}</button>
-        </template>
-        <template v-else>
-          <button
-            v-for="slug in PAGE_SLUGS"
-            :key="slug"
-            type="button"
-            class="page-tab"
-            :class="{ 'page-tab--active': currentSection === slug }"
-            @click="switchSection(slug)"
-          >{{ PAGE_LABELS[slug] }}</button>
-        </template>
+      <div v-if="isSettingsView" class="section-tabs__row" role="group" aria-label="Settings">
+        <button
+          v-for="slug in SETTINGS_SLUGS"
+          :key="slug"
+          type="button"
+          class="page-tab"
+          :class="{ 'page-tab--active': currentSection === slug }"
+          @click="switchSection(slug)"
+        >{{ SETTINGS_LABELS[slug] }}</button>
       </div>
     </nav>
 
     <WebsiteSettingsPanel v-if="isSettingsView && currentSettings" :section="currentSettings" />
 
     <div v-else class="web__body">
+      <!-- Pages sidebar — reads from the store so custom pages appear
+           the moment they're created. System pages get a lock badge on
+           the slug; custom pages get a hover menu (Rename · Delete). -->
+      <aside class="pages-nav" aria-label="Pages">
+        <div class="pages-nav__head">
+          <span class="pages-nav__label">Pages</span>
+        </div>
+        <ul class="pages-nav__list">
+          <li
+            v-for="p in sidebarPages"
+            :key="p.slug"
+            class="pages-nav__row"
+            :class="{ 'pages-nav__row--active': currentSection === p.slug }"
+          >
+            <button
+              type="button"
+              class="pages-nav__item"
+              @click="switchSection(p.slug)"
+            >
+              <span class="pages-nav__item-name">{{ p.title }}</span>
+              <span v-if="p.is_system" class="pages-nav__lock" aria-hidden="true" title="System page — slug is locked">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 4.5V3.2a2 2 0 0 1 4 0v1.3" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="4.5" width="6" height="4" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>
+              </span>
+              <span v-if="!p.is_published" class="pages-nav__draft" aria-label="Draft only">Draft</span>
+              <span v-if="currentSection === p.slug" class="pages-nav__item-dot" aria-hidden="true" />
+            </button>
+            <button
+              v-if="!p.is_system"
+              type="button"
+              class="pages-nav__menu"
+              :aria-expanded="openMenuSlug === p.slug"
+              aria-label="Page actions"
+              @click.stop="openMenuSlug = openMenuSlug === p.slug ? null : p.slug"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <circle cx="3" cy="7" r="1" fill="currentColor"/>
+                <circle cx="7" cy="7" r="1" fill="currentColor"/>
+                <circle cx="11" cy="7" r="1" fill="currentColor"/>
+              </svg>
+            </button>
+            <div v-if="openMenuSlug === p.slug" class="pages-nav__menu-pop" @click.stop>
+              <button type="button" class="pages-nav__menu-item" @click="openRename(p)">Rename…</button>
+              <button type="button" class="pages-nav__menu-item pages-nav__menu-item--danger" @click="openDelete(p)">Delete…</button>
+            </div>
+          </li>
+        </ul>
+        <button
+          type="button"
+          class="pages-nav__add"
+          @click="openNewPage"
+        >+ New page</button>
+        <div v-if="pagesStore.loading" class="pages-nav__loading">Loading pages…</div>
+      </aside>
+
       <!-- Block list -->
       <section class="list">
+        <!-- Per-page SEO — always visible at the top of the block editor. -->
+        <details class="seo-card" open>
+          <summary class="seo-card__head">
+            <span class="seo-card__label">SEO</span>
+            <span class="seo-card__title">Meta title &amp; description</span>
+            <span class="seo-card__hint">Blank fields fall back to the site default and then to the club name.</span>
+            <svg class="seo-card__chev" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M3.5 5.5L7 9L10.5 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </summary>
+          <div class="seo-card__body">
+            <label class="seo-field">
+              <span class="seo-field__label">Meta title</span>
+              <input
+                v-model="state.meta.title"
+                type="text"
+                :maxlength="META_TITLE_MAX + 20"
+                :placeholder="`${pageLabel(currentPage)} — ${clubStore.current?.name ?? 'Your club'}`"
+              />
+              <span class="seo-field__counter" :class="{ 'seo-field__counter--over': metaTitleRemaining < 0 }">{{ metaTitleRemaining }}</span>
+            </label>
+            <label class="seo-field">
+              <span class="seo-field__label">Meta description</span>
+              <textarea
+                v-model="state.meta.description"
+                rows="2"
+                :maxlength="META_DESC_MAX + 40"
+                :placeholder="pageSubtitle(currentPage)"
+              />
+              <span class="seo-field__counter" :class="{ 'seo-field__counter--over': metaDescRemaining < 0 }">{{ metaDescRemaining }}</span>
+            </label>
+          </div>
+        </details>
+
         <div v-if="state.blocks.length === 0" class="empty">
           <div class="empty__title">Empty page.</div>
           <div class="empty__hint">Pick your first block to get started.</div>
@@ -860,7 +1205,7 @@ const lastSavedLabel = computed(() => {
 
       <BlockPaletteDialog
         :open="paletteOpen !== null"
-        :items="PALETTES[currentPage]"
+        :items="paletteFor(currentPage)"
         @close="paletteOpen = null"
         @select="(t) => addBlock(t, paletteOpen?.after ?? null)"
       />
@@ -988,18 +1333,38 @@ const lastSavedLabel = computed(() => {
           <!-- Honour board -->
           <template v-else-if="selectedBlock.type === 'honourBoard'">
             <label class="field">
-              <span class="field__label">Heading (optional)</span>
-              <input v-model="(selectedBlock.props as HonourBoardProps).heading" type="text" placeholder="Leave blank for no heading" />
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as HonourBoardProps).eyebrow" type="text" placeholder="Honour board · Since 1953" />
             </label>
             <label class="field">
-              <span class="field__label">Category slug (optional)</span>
-              <input v-model="(selectedBlock.props as HonourBoardProps).categorySlug" type="text" placeholder="e.g. mens-singles — leave blank for all" />
-              <span class="field__hint">Show entries from one category only. Leave blank to group all categories.</span>
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as HonourBoardProps).heading" type="text" placeholder="Champions." />
             </label>
             <label class="field">
-              <span class="field__label">Years to show</span>
-              <input v-model.number="(selectedBlock.props as HonourBoardProps).yearsToShow" type="number" min="1" max="100" />
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as HonourBoardProps).description" rows="3" placeholder="One or two lines of context above the champion." />
             </label>
+            <label class="field">
+              <span class="field__label">Category slug</span>
+              <input v-model="(selectedBlock.props as HonourBoardProps).categorySlug" type="text" placeholder="champion-of-champions" />
+              <span class="field__hint">Which honour-board category to feature. Leave blank to pull from all.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Recent winners to show</span>
+              <input v-model.number="(selectedBlock.props as HonourBoardProps).yearsToShow" type="number" min="1" max="12" />
+              <span class="field__hint">Sits below the reigning champion feature card.</span>
+            </label>
+            <div class="field__group">
+              <div class="field__group-title">CTA</div>
+              <label class="field">
+                <span class="field__label">Label</span>
+                <input v-model="(selectedBlock.props as HonourBoardProps).ctaLabel" type="text" placeholder="See the whole honour board" />
+              </label>
+              <label class="field">
+                <span class="field__label">Link</span>
+                <input v-model="(selectedBlock.props as HonourBoardProps).ctaHref" type="text" placeholder="/honour-board" />
+              </label>
+            </div>
           </template>
 
           <!-- Contact form -->
@@ -1446,6 +1811,147 @@ const lastSavedLabel = computed(() => {
         </template>
       </aside>
     </div>
+
+    <!-- ── New page modal ─────────────────────────────────────── -->
+    <div v-if="newPageOpen" class="page-modal" role="dialog" aria-modal="true" aria-labelledby="new-page-title" @click.self="newPageOpen = false">
+      <div class="page-modal__card">
+        <header class="page-modal__head">
+          <div>
+            <div class="page-modal__eyebrow">Website</div>
+            <h2 id="new-page-title" class="page-modal__title">New page</h2>
+          </div>
+          <button type="button" class="page-modal__close" aria-label="Close" @click="newPageOpen = false">×</button>
+        </header>
+        <form class="page-modal__body" @submit.prevent="submitNewPage">
+          <label class="page-modal__field">
+            <span class="page-modal__label">Title</span>
+            <input
+              :value="newPageForm.title"
+              type="text"
+              autofocus
+              maxlength="80"
+              placeholder="Coaching sessions"
+              @input="onNewPageTitleInput"
+            />
+            <span class="page-modal__hint" :class="{ 'page-modal__hint--over': newPageForm.title.length > 80 }">{{ newPageForm.title.length }} / 80</span>
+          </label>
+          <label class="page-modal__field">
+            <span class="page-modal__label">URL slug</span>
+            <div class="page-modal__slug">
+              <span class="page-modal__slug-prefix">/</span>
+              <input
+                :value="newPageForm.slug"
+                type="text"
+                maxlength="48"
+                placeholder="coaching-sessions"
+                spellcheck="false"
+                @input="onNewPageSlugInput"
+              />
+            </div>
+            <span class="page-modal__hint">
+              <template v-if="newPageSlugStatus === 'reserved'"><span class="page-modal__hint--danger">Reserved — pick another.</span></template>
+              <template v-else-if="newPageSlugStatus === 'invalid'"><span class="page-modal__hint--danger">Lowercase letters, digits, hyphens only.</span></template>
+              <template v-else-if="newPageSlugStatus === 'conflict'"><span class="page-modal__hint--danger">Already in use on this club.</span></template>
+              <template v-else>Public URL will be <code>/{{ newPageForm.slug || 'your-slug' }}</code></template>
+            </span>
+          </label>
+          <div v-if="newPageError" class="page-modal__error">{{ newPageError }}</div>
+        </form>
+        <footer class="page-modal__foot">
+          <button type="button" class="btn btn--outline" :disabled="newPageSubmitting" @click="newPageOpen = false">Cancel</button>
+          <button type="button" class="btn btn--primary" :disabled="!newPageCanSubmit || newPageSubmitting" @click="submitNewPage">
+            {{ newPageSubmitting ? 'Creating…' : 'Create page' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ── Rename modal ───────────────────────────────────────── -->
+    <div v-if="renameOpen" class="page-modal" role="dialog" aria-modal="true" aria-labelledby="rename-page-title" @click.self="renameOpen = false">
+      <div class="page-modal__card">
+        <header class="page-modal__head">
+          <div>
+            <div class="page-modal__eyebrow">Website</div>
+            <h2 id="rename-page-title" class="page-modal__title">Rename page</h2>
+          </div>
+          <button type="button" class="page-modal__close" aria-label="Close" @click="renameOpen = false">×</button>
+        </header>
+        <form class="page-modal__body" @submit.prevent="submitRename">
+          <label class="page-modal__field">
+            <span class="page-modal__label">Title</span>
+            <input v-model="renameForm.title" type="text" autofocus maxlength="80" />
+          </label>
+          <label class="page-modal__field">
+            <span class="page-modal__label">
+              URL slug
+              <span v-if="renameForm.isSystem" class="page-modal__label-lock">System page — slug locked</span>
+            </span>
+            <div class="page-modal__slug" :class="{ 'page-modal__slug--locked': renameForm.isSystem }">
+              <span class="page-modal__slug-prefix">/</span>
+              <input
+                v-model="renameForm.slug"
+                type="text"
+                maxlength="48"
+                spellcheck="false"
+                :disabled="renameForm.isSystem"
+              />
+            </div>
+            <span class="page-modal__hint">
+              <template v-if="renameSlugStatus === 'locked'"><span class="page-modal__hint--danger">System-page URLs can't change.</span></template>
+              <template v-else-if="renameSlugStatus === 'reserved'"><span class="page-modal__hint--danger">Reserved — pick another.</span></template>
+              <template v-else-if="renameSlugStatus === 'invalid'"><span class="page-modal__hint--danger">Lowercase letters, digits, hyphens only.</span></template>
+              <template v-else-if="renameSlugStatus === 'conflict'"><span class="page-modal__hint--danger">Already in use on this club.</span></template>
+              <template v-else-if="renameSlugChanged">Renaming the URL will break inbound links to <code>/{{ renameForm.originalSlug }}</code>.</template>
+              <template v-else>Public URL: <code>/{{ renameForm.slug }}</code></template>
+            </span>
+          </label>
+          <div v-if="renameError" class="page-modal__error">{{ renameError }}</div>
+        </form>
+        <footer class="page-modal__foot">
+          <button type="button" class="btn btn--outline" :disabled="renameSubmitting" @click="renameOpen = false">Cancel</button>
+          <button type="button" class="btn btn--primary" :disabled="!renameCanSubmit || renameSubmitting" @click="submitRename">
+            {{ renameSubmitting ? 'Saving…' : 'Save changes' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ── Delete modal ───────────────────────────────────────── -->
+    <div v-if="deleteOpen && deleteTarget" class="page-modal" role="dialog" aria-modal="true" aria-labelledby="delete-page-title" @click.self="deleteOpen = false">
+      <div class="page-modal__card page-modal__card--danger">
+        <header class="page-modal__head">
+          <div>
+            <div class="page-modal__eyebrow page-modal__eyebrow--danger">Danger zone</div>
+            <h2 id="delete-page-title" class="page-modal__title">Delete "{{ deleteTarget.title }}"?</h2>
+          </div>
+          <button type="button" class="page-modal__close" aria-label="Close" @click="deleteOpen = false">×</button>
+        </header>
+        <div class="page-modal__body">
+          <p v-if="deleteTarget.is_system" class="page-modal__copy">
+            <strong>This is a system page.</strong> The site's <code>/{{ deleteTarget.slug === 'home' ? '' : deleteTarget.slug }}</code>
+            route will 404 until you recreate a page with this slug.
+          </p>
+          <p v-else-if="deleteTarget.is_published" class="page-modal__copy">
+            This page is published. Inbound links to <code>/{{ deleteTarget.slug }}</code> will break immediately.
+          </p>
+          <p v-else class="page-modal__copy">
+            This page is a draft — nothing on the public site will change.
+          </p>
+          <p class="page-modal__copy page-modal__copy--muted">You have 30 days to restore a deleted page (support-facing today).</p>
+          <label v-if="deleteRequiresTypeToConfirm" class="page-modal__field">
+            <span class="page-modal__label">Type the page name to confirm</span>
+            <input v-model="deleteConfirmText" type="text" :placeholder="deleteTarget.title" spellcheck="false" />
+          </label>
+          <div v-if="deleteError" class="page-modal__error">{{ deleteError }}</div>
+        </div>
+        <footer class="page-modal__foot">
+          <button type="button" class="btn btn--outline" :disabled="deleteSubmitting" @click="deleteOpen = false">Cancel</button>
+          <button type="button" class="btn btn--danger" :disabled="!deleteCanSubmit || deleteSubmitting" @click="submitDelete">
+            {{ deleteSubmitting ? 'Deleting…' : 'Delete page' }}
+          </button>
+        </footer>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1479,11 +1985,262 @@ const lastSavedLabel = computed(() => {
 .page-tab:hover { color: var(--color-ink); }
 .page-tab--active { background: #fff; color: var(--color-ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
 
-/* Two-column layout */
-.web__body { display: grid; grid-template-columns: 1fr 340px; gap: 24px; align-items: start; }
+/* Three-column layout — pages sidebar | block list | inspector */
+.web__body { display: grid; grid-template-columns: 220px 1fr 340px; gap: 20px; align-items: start; }
+
+/* Pages sidebar */
+.pages-nav {
+  position: sticky;
+  top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 14px;
+}
+.pages-nav__head { padding: 4px 8px 8px; }
+.pages-nav__label {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-fog);
+}
+.pages-nav__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pages-nav__row { position: relative; display: flex; align-items: stretch; gap: 4px; border-radius: 8px; }
+.pages-nav__row:hover .pages-nav__menu { opacity: 1; }
+.pages-nav__row--active { background: var(--color-ink); }
+.pages-nav__row--active .pages-nav__item { color: #fff; font-weight: 600; }
+.pages-nav__row--active .pages-nav__item:hover { background: transparent; color: #fff; }
+.pages-nav__row--active .pages-nav__menu { color: rgba(255, 255, 255, 0.7); }
+.pages-nav__row--active .pages-nav__menu:hover { color: #fff; }
+.pages-nav__row--active .pages-nav__draft { background: rgba(255, 255, 255, 0.14); color: #fff; }
+.pages-nav__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-graphite);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.pages-nav__item:hover { background: var(--color-surface); color: var(--color-ink); }
+.pages-nav__lock {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-mute);
+  flex-shrink: 0;
+}
+.pages-nav__draft {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--color-fog);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.pages-nav__menu {
+  opacity: 0;
+  width: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  color: var(--color-fog);
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background-color 0.12s ease;
+  flex-shrink: 0;
+}
+.pages-nav__menu:hover { color: var(--color-ink); background: var(--color-surface); }
+.pages-nav__menu-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(10, 10, 11, 0.14);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.pages-nav__menu-item {
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-ink);
+  text-align: left;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.pages-nav__menu-item:hover { background: var(--color-surface); }
+.pages-nav__menu-item--danger { color: var(--color-danger); }
+.pages-nav__menu-item--danger:hover { background: #FEE2E2; }
+.pages-nav__loading { padding: 8px 10px; font-family: var(--font-body); font-size: 11px; color: var(--color-mute); text-align: center; }
+.pages-nav__item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pages-nav__item-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.pages-nav__add {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px dashed var(--color-hairline);
+  border-radius: 8px;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-fog);
+  cursor: pointer;
+  text-align: center;
+  transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+.pages-nav__add:hover { color: var(--color-ink); border-color: var(--color-ink); background: var(--color-surface); }
 
 /* Block list */
 .list { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+
+/* Per-page SEO card at the top of the block editor */
+.seo-card {
+  background: #fff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 14px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.seo-card__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+.seo-card__head::-webkit-details-marker { display: none; }
+.seo-card__label {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-fog);
+  padding: 3px 8px;
+  background: var(--color-surface);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.seo-card__title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+  flex-shrink: 0;
+}
+.seo-card__hint {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--color-fog);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seo-card__chev {
+  color: var(--color-fog);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.seo-card[open] .seo-card__chev { transform: rotate(180deg); color: var(--color-ink); }
+
+.seo-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--color-hairline);
+  padding-top: 14px;
+}
+.seo-field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.seo-field__label {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-fog);
+}
+.seo-field input,
+.seo-field textarea {
+  width: 100%;
+  padding: 9px 44px 9px 12px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-ink);
+  background: #fff;
+  resize: vertical;
+}
+.seo-field input:focus,
+.seo-field textarea:focus {
+  outline: none;
+  border-color: var(--color-ink);
+}
+.seo-field__counter {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-fog);
+  pointer-events: none;
+}
+.seo-field__counter--over { color: var(--color-danger); }
+
 .empty { padding: 48px 32px; text-align: center; background: #fff; border: 1px dashed var(--color-hairline); border-radius: 14px; }
 .empty__title { font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--color-ink); }
 .empty__hint { font-family: var(--font-body); font-size: 13px; color: var(--color-fog); margin-top: 4px; }
@@ -1558,8 +2315,71 @@ const lastSavedLabel = computed(() => {
 .gallery-add { margin-top: 10px; padding: 8px 12px; background: transparent; border: 1px dashed var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 12px; color: var(--color-accent); cursor: pointer; }
 .gallery-add:hover { background: var(--color-accent-soft); }
 
-@media (max-width: 1100px) {
-  .web__body { grid-template-columns: 1fr; }
-  .inspector { position: static; max-height: none; }
+/* Tablet-ish: drop the inspector to the bottom, keep the pages sidebar. */
+@media (max-width: 1279px) {
+  .web__body { grid-template-columns: 200px 1fr; }
+  .inspector { grid-column: 1 / -1; position: static; max-height: none; }
 }
+
+/* Phone: pages sidebar becomes a top scrollable row of chips. */
+@media (max-width: 767px) {
+  .web__body { grid-template-columns: 1fr; }
+  .pages-nav {
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+    overflow-x: auto;
+  }
+  .pages-nav__head { display: none; }
+  .pages-nav__list {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    flex: 1;
+  }
+  .pages-nav__item { white-space: nowrap; }
+  .pages-nav__add { flex-shrink: 0; margin-top: 0; padding: 8px 12px; }
+}
+
+/* ── Custom-page modals ────────────────────────────────────── */
+.page-modal { position: fixed; inset: 0; z-index: 200; background: rgba(10, 10, 11, 0.48); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.page-modal__card { width: 100%; max-width: 480px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 16px; overflow: hidden; box-shadow: 0 24px 64px rgba(10, 10, 11, 0.22); display: flex; flex-direction: column; }
+.page-modal__card--danger { border-color: #FCA5A5; }
+.page-modal__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px 8px; }
+.page-modal__eyebrow { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.16em; color: var(--color-fog); text-transform: uppercase; }
+.page-modal__eyebrow--danger { color: var(--color-danger); }
+.page-modal__title { font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--color-ink); margin: 4px 0 0; }
+.page-modal__close { width: 30px; height: 30px; border-radius: 999px; background: var(--color-surface); border: 0; color: var(--color-ink); font-size: 18px; line-height: 1; cursor: pointer; padding: 0; flex-shrink: 0; }
+.page-modal__close:hover { background: var(--color-hairline); }
+.page-modal__body { display: flex; flex-direction: column; gap: 14px; padding: 12px 22px 6px; }
+.page-modal__field { display: flex; flex-direction: column; gap: 6px; }
+.page-modal__label { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.page-modal__label-lock { text-transform: none; letter-spacing: 0.02em; font-size: 11px; font-weight: 500; color: var(--color-mute); }
+.page-modal__field input, .page-modal__field textarea { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 14px; color: var(--color-ink); background: #fff; }
+.page-modal__field input:focus, .page-modal__field textarea:focus { outline: none; border-color: var(--color-ink); box-shadow: 0 0 0 3px var(--color-surface); }
+.page-modal__slug { display: flex; align-items: center; padding-left: 12px; border: 1px solid var(--color-hairline); border-radius: 10px; background: #fff; font-family: var(--font-mono); font-size: 14px; }
+.page-modal__slug:focus-within { border-color: var(--color-ink); box-shadow: 0 0 0 3px var(--color-surface); }
+.page-modal__slug--locked { background: var(--color-surface); color: var(--color-mute); }
+.page-modal__slug-prefix { color: var(--color-fog); padding-right: 2px; }
+.page-modal__slug input { flex: 1; border: 0 !important; box-shadow: none !important; padding: 10px 12px 10px 4px !important; font-family: var(--font-mono); }
+.page-modal__slug input:disabled { color: var(--color-mute); background: transparent; }
+.page-modal__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); }
+.page-modal__hint code { font-family: var(--font-mono); font-size: 11px; color: var(--color-ink); background: var(--color-surface); padding: 1px 6px; border-radius: 4px; }
+.page-modal__hint--danger { color: var(--color-danger); font-weight: 600; }
+.page-modal__hint--over { color: var(--color-danger); }
+.page-modal__error { padding: 10px 12px; background: #FEE2E2; color: #991B1B; border-radius: 10px; font-family: var(--font-body); font-size: 13px; margin: 0; }
+.page-modal__copy { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); line-height: 1.5; margin: 0; }
+.page-modal__copy code { font-family: var(--font-mono); font-size: 12px; background: var(--color-surface); padding: 1px 6px; border-radius: 4px; }
+.page-modal__copy--muted { color: var(--color-fog); font-size: 12px; }
+.page-modal__foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 22px 20px; border-top: 1px solid var(--color-hairline); margin-top: 10px; }
+.page-modal .btn--primary { background: var(--color-ink); color: #fff; border: 0; padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
+.page-modal .btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
+.page-modal .btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.page-modal .btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
+.page-modal .btn--outline:hover:not(:disabled) { background: var(--color-surface); }
+.page-modal .btn--outline:disabled { opacity: 0.5; cursor: not-allowed; }
+.page-modal .btn--danger { background: var(--color-danger); color: #fff; border: 0; padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
+.page-modal .btn--danger:hover:not(:disabled) { background: #B91C1C; }
+.page-modal .btn--danger:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

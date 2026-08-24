@@ -2,14 +2,10 @@
 const club = useClub()
 const { data: site } = await useSite()
 
-if (import.meta.server && site.value && !site.value.pages_enabled.events) {
-  throw createError({ statusCode: 404, statusMessage: 'Events not published' })
-}
-
 const events = computed(() => site.value?.events_upcoming ?? [])
 const accent = computed(() => site.value?.club.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
 
-useSeoMeta({ title: () => `Events — ${club.value?.name ?? 'Torny'}` })
+usePageMeta('events')
 
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

@@ -2,14 +2,10 @@
 const club = useClub()
 const { data: site } = await useSite()
 
-if (import.meta.server && site.value && !site.value.pages_enabled.honour_board) {
-  throw createError({ statusCode: 404, statusMessage: 'Honour board not published' })
-}
-
 const entries = computed(() => site.value?.honour_board_recent ?? [])
 const accent = computed(() => site.value?.club.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
 
-useSeoMeta({ title: () => `Honour board — ${club.value?.name ?? 'Torny'}` })
+usePageMeta('honour-board')
 
 // Group by category so the page reads by trophy, not chronologically.
 const byCategory = computed(() => {

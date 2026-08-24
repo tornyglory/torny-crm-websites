@@ -91,12 +91,19 @@ export type {
 export * as pages from './resources/pages'
 export type {
   PageSlug,
+  SystemPageSlug,
+  Page,
+  PageErrorCode,
+  UpdatePageInput,
+  UpdatePageResponse,
   Block as PageBlock,
   PageLayout,
+  PageMeta,
   PageState,
   PatchResponse as PagePatchResponse,
   PublishResponse as PagePublishResponse,
 } from './resources/pages'
+export { RESERVED_PAGE_SLUGS, isValidPageSlug, slugifyTitle } from './resources/pages'
 export * as media from './resources/media'
 export type {
   MediaEntityType,
@@ -125,5 +132,10 @@ export type {
   StylePresetsResponse,
   UpdateStylePresetResponse,
 } from './resources/stylePresets'
+export * as navigation from './resources/navigation'
+export type {
+  UpdateNavigationInput,
+  UpdateNavigationResponse,
+} from './resources/navigation'
 export { SAM_BASE, CRM_BASE, MEDIA_BASE } from './config'
 export { ApiError, authedFetch, publicFetch, TOKEN_STORAGE_KEY } from './http'

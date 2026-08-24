@@ -10,12 +10,12 @@
  * All state is currently local — the real API wiring lives in a follow-up
  * ticket (site-settings persistence + read-through to the Nuxt layout).
  */
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import FontPicker from '@/components/FontPicker.vue'
 import StylePicker from '@/components/StylePicker.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
-import { ApiError, clubs } from '@torny/api-client'
+import { ApiError, clubs, navigation as navigationApi, type NavItem } from '@torny/api-client'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
 
@@ -105,19 +105,113 @@ const seo = ref({
   robotsAllowed: true,
 })
 
-const navHeader = ref([
-  { id: 'n1', label: 'Home', target: '/', external: false, enabled: true },
-  { id: 'n2', label: 'About', target: '/about', external: false, enabled: true },
-  { id: 'n3', label: 'Events', target: '/events', external: false, enabled: true },
-  { id: 'n4', label: 'Honour board', target: '/honour-board', external: false, enabled: true },
-  { id: 'n5', label: 'Membership', target: '/membership', external: false, enabled: true },
-  { id: 'n6', label: 'Contact', target: '/contact', external: false, enabled: true },
-])
+// Platform defaults used when the club hasn't stored anything yet. Mirrors
+// the shape brief 25 will return once the backend endpoint ships.
+const DEFAULT_HEADER: NavItem[] = [
+  { label: 'Home', href: '/' },
+  { label: 'About', href: '/about' },
+  { label: 'Events', href: '/events' },
+  { label: 'Honour board', href: '/honour-board' },
+  { label: 'Membership', href: '/membership' },
+  { label: 'Contact', href: '/contact' },
+]
+const DEFAULT_FOOTER: NavItem[] = [
+  { label: 'Privacy', href: '/privacy' },
+  { label: 'Terms', href: '/terms' },
+  { label: 'Cookies', href: '/cookies' },
+]
 
-const navFooter = ref([
-  { id: 'f1', label: 'Bowls NZ', target: 'https://bowlsnewzealand.co.nz', external: true, enabled: true },
-  { id: 'f2', label: 'Privacy', target: '/privacy', external: false, enabled: true },
-])
+// Working copies. Populated from the store on mount + whenever it changes.
+const navHeader = ref<NavItem[]>(cloneNav(clubStore.current?.navigation?.header ?? DEFAULT_HEADER))
+const navFooter = ref<NavItem[]>(cloneNav(clubStore.current?.navigation?.footer ?? DEFAULT_FOOTER))
+const navDirty = ref(false)
+const navSaving = ref(false)
+
+function cloneNav(items: NavItem[]): NavItem[] {
+  return items.map((it) => ({
+    label: it.label,
+    ...(it.href !== undefined ? { href: it.href } : {}),
+    ...(it.external !== undefined ? { external: it.external } : {}),
+    ...(it.children ? { children: it.children.map((c) => ({ ...c })) } : {}),
+  }))
+}
+
+watch(
+  () => clubStore.current?.navigation,
+  (nav) => {
+    if (navDirty.value) return  // don't clobber a mid-edit user
+    navHeader.value = cloneNav(nav?.header ?? DEFAULT_HEADER)
+    navFooter.value = cloneNav(nav?.footer ?? DEFAULT_FOOTER)
+  },
+  { deep: true },
+)
+
+function markDirty() {
+  navDirty.value = true
+}
+
+function moveItem(list: NavItem[], idx: number, dir: -1 | 1) {
+  const target = idx + dir
+  if (target < 0 || target >= list.length) return
+  const [item] = list.splice(idx, 1) as [NavItem]
+  list.splice(target, 0, item)
+  markDirty()
+}
+function removeItem(list: NavItem[], idx: number) {
+  list.splice(idx, 1)
+  markDirty()
+}
+function addTopLevel(list: NavItem[]) {
+  list.push({ label: 'New link', href: '/' })
+  markDirty()
+}
+function addChild(item: NavItem) {
+  if (!item.children) item.children = []
+  item.children.push({ label: 'New sub-link', href: '/' })
+  markDirty()
+}
+function removeChild(item: NavItem, idx: number) {
+  if (!item.children) return
+  item.children.splice(idx, 1)
+  if (item.children.length === 0) delete item.children
+  markDirty()
+}
+function moveChild(item: NavItem, idx: number, dir: -1 | 1) {
+  if (!item.children) return
+  moveItem(item.children, idx, dir)
+}
+
+async function saveNavigation() {
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') {
+    toast.error('No active club — refresh and try again.')
+    return
+  }
+  navSaving.value = true
+  const payload = {
+    header: cloneNav(navHeader.value),
+    footer: cloneNav(navFooter.value),
+  }
+  try {
+    const res = await navigationApi.updateForClub(clubId, payload)
+    clubStore.setNavigation({
+      header: res.header ?? DEFAULT_HEADER,
+      footer: res.footer ?? DEFAULT_FOOTER,
+    })
+    navDirty.value = false
+    toast.success('Navigation saved.')
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Could not save navigation'
+    toast.error(msg || 'Could not save navigation')
+  } finally {
+    navSaving.value = false
+  }
+}
+function resetNavigation() {
+  navHeader.value = cloneNav(clubStore.current?.navigation?.header ?? DEFAULT_HEADER)
+  navFooter.value = cloneNav(clubStore.current?.navigation?.footer ?? DEFAULT_FOOTER)
+  navDirty.value = false
+}
 
 const forms = ref([
   { id: 'form-contact', label: 'Contact form', recipients: 'admin@kelburnbowls.co.nz', autoReply: true, spamFilter: 'strict' },
@@ -153,33 +247,6 @@ function saveDomain() {
   domain.value.custom = domainForm.custom.trim() || domain.value.custom
   editDomainOpen.value = false
   toast.success('Domain updated — DNS check re-runs in the background.')
-}
-
-// ── Add nav link modal (reused for header + footer) ────────────
-const addLinkOpen = ref(false)
-const addLinkTarget = ref<'header' | 'footer'>('header')
-const linkForm = reactive({ label: '', target: '', external: false })
-function openAddLink(target: 'header' | 'footer') {
-  linkForm.label = ''
-  linkForm.target = ''
-  linkForm.external = false
-  addLinkTarget.value = target
-  addLinkOpen.value = true
-}
-const canAddLink = computed(() => linkForm.label.trim().length > 0 && linkForm.target.trim().length > 0)
-function saveLink() {
-  if (!canAddLink.value) return
-  const row = {
-    id: `link-${Date.now()}`,
-    label: linkForm.label.trim(),
-    target: linkForm.target.trim(),
-    external: linkForm.external,
-    enabled: true,
-  }
-  if (addLinkTarget.value === 'header') navHeader.value.push(row)
-  else navFooter.value.push(row)
-  addLinkOpen.value = false
-  toast.success(`Added "${row.label}" to the ${addLinkTarget.value}.`)
 }
 
 const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' ? 'ok' : s === 'unset' || s === 'missing' ? 'warn' : s === 'error' || s === 'wrong' ? 'danger' : 'info')
@@ -337,42 +404,84 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 
     <!-- Navigation -->
     <template v-else-if="props.section === 'navigation'">
+      <div class="ws-nav-toolbar">
+        <div class="ws-nav-toolbar__hint">
+          Header links show in the top nav on every page. Give a parent link one or more sub-links to turn it into a dropdown. Footer links show at the bottom of every page.
+        </div>
+        <div class="ws-nav-toolbar__actions">
+          <button
+            type="button"
+            class="ws-btn ws-btn--outline"
+            :disabled="!navDirty || navSaving"
+            @click="resetNavigation"
+          >Discard</button>
+          <button
+            type="button"
+            class="ws-btn"
+            :disabled="!navDirty || navSaving"
+            @click="saveNavigation"
+          >{{ navSaving ? 'Saving…' : 'Save navigation' }}</button>
+        </div>
+      </div>
+
       <div class="ws-card">
         <div class="ws-card__eyebrow">Header navigation</div>
-        <p class="ws-card__body">These links appear in the top nav on every page and in the mobile drawer. Order matches the display order.</p>
         <ul class="ws-nav-list">
-          <li v-for="n in navHeader" :key="n.id" class="ws-nav-row">
-            <span class="ws-handle" aria-hidden="true">≡</span>
-            <div>
-              <div class="ws-nav-label">{{ n.label }}</div>
-              <div class="ws-mono ws-muted">{{ n.target }}</div>
+          <li v-for="(item, i) in navHeader" :key="i" class="ws-nav-item">
+            <div class="ws-nav-row">
+              <div class="ws-nav-order">
+                <button type="button" class="ws-nav-arrow" :disabled="i === 0" @click="moveItem(navHeader, i, -1)" aria-label="Move up">▲</button>
+                <button type="button" class="ws-nav-arrow" :disabled="i === navHeader.length - 1" @click="moveItem(navHeader, i, 1)" aria-label="Move down">▼</button>
+              </div>
+              <div class="ws-nav-fields">
+                <input v-model="item.label" placeholder="Label" class="ws-nav-input" @input="markDirty" />
+                <input v-model="item.href" placeholder="/path or https://…" class="ws-nav-input ws-mono" @input="markDirty" />
+              </div>
+              <button type="button" class="ws-nav-remove" @click="removeItem(navHeader, i)" aria-label="Remove">×</button>
             </div>
-            <button class="ws-switch ws-switch--sm" :class="{ 'is-on': n.enabled }" @click="n.enabled = !n.enabled">
-              <span class="ws-switch__knob" />
-            </button>
+
+            <div v-if="item.children && item.children.length" class="ws-nav-children">
+              <div
+                v-for="(child, ci) in item.children"
+                :key="ci"
+                class="ws-nav-row ws-nav-row--child"
+              >
+                <div class="ws-nav-order">
+                  <button type="button" class="ws-nav-arrow" :disabled="ci === 0" @click="moveChild(item, ci, -1)" aria-label="Move up">▲</button>
+                  <button type="button" class="ws-nav-arrow" :disabled="ci === item.children.length - 1" @click="moveChild(item, ci, 1)" aria-label="Move down">▼</button>
+                </div>
+                <div class="ws-nav-fields">
+                  <input v-model="child.label" placeholder="Label" class="ws-nav-input" @input="markDirty" />
+                  <input v-model="child.href" placeholder="/path or https://…" class="ws-nav-input ws-mono" @input="markDirty" />
+                </div>
+                <button type="button" class="ws-nav-remove" @click="removeChild(item, ci)" aria-label="Remove">×</button>
+              </div>
+            </div>
+
+            <button type="button" class="ws-nav-add-child" @click="addChild(item)">+ Add sub-link</button>
           </li>
         </ul>
-        <button class="ws-btn ws-btn--ghost" @click="openAddLink('header')">+ Add link</button>
+        <button type="button" class="ws-btn ws-btn--ghost" @click="addTopLevel(navHeader)">+ Add link</button>
       </div>
+
       <div class="ws-card">
         <div class="ws-card__eyebrow">Footer navigation</div>
-        <p class="ws-card__body">Extra links in the footer — usually external partners or legal pages.</p>
         <ul class="ws-nav-list">
-          <li v-for="n in navFooter" :key="n.id" class="ws-nav-row">
-            <span class="ws-handle" aria-hidden="true">≡</span>
-            <div>
-              <div class="ws-nav-label">
-                {{ n.label }}
-                <span v-if="n.external" class="ws-mono ws-muted">(external)</span>
+          <li v-for="(item, i) in navFooter" :key="i" class="ws-nav-item">
+            <div class="ws-nav-row">
+              <div class="ws-nav-order">
+                <button type="button" class="ws-nav-arrow" :disabled="i === 0" @click="moveItem(navFooter, i, -1)" aria-label="Move up">▲</button>
+                <button type="button" class="ws-nav-arrow" :disabled="i === navFooter.length - 1" @click="moveItem(navFooter, i, 1)" aria-label="Move down">▼</button>
               </div>
-              <div class="ws-mono ws-muted">{{ n.target }}</div>
+              <div class="ws-nav-fields">
+                <input v-model="item.label" placeholder="Label" class="ws-nav-input" @input="markDirty" />
+                <input v-model="item.href" placeholder="/path or https://…" class="ws-nav-input ws-mono" @input="markDirty" />
+              </div>
+              <button type="button" class="ws-nav-remove" @click="removeItem(navFooter, i)" aria-label="Remove">×</button>
             </div>
-            <button class="ws-switch ws-switch--sm" :class="{ 'is-on': n.enabled }" @click="n.enabled = !n.enabled">
-              <span class="ws-switch__knob" />
-            </button>
           </li>
         </ul>
-        <button class="ws-btn ws-btn--ghost" @click="openAddLink('footer')">+ Add link</button>
+        <button type="button" class="ws-btn ws-btn--ghost" @click="addTopLevel(navFooter)">+ Add link</button>
       </div>
     </template>
 
@@ -466,32 +575,6 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
       </template>
     </CrmModal>
 
-    <CrmModal
-      :open="addLinkOpen"
-      eyebrow="Navigation"
-      :title="`Add a ${addLinkTarget} link`"
-      width="sm"
-      @close="addLinkOpen = false"
-    >
-      <div class="ws-form">
-        <label class="ws-form-field">
-          <span class="ws-form-field__label">Label</span>
-          <input v-model="linkForm.label" type="text" placeholder="Membership" autofocus />
-        </label>
-        <label class="ws-form-field">
-          <span class="ws-form-field__label">Target (path or URL)</span>
-          <input v-model="linkForm.target" type="text" placeholder="/membership" />
-        </label>
-        <label class="ws-check">
-          <input v-model="linkForm.external" type="checkbox" />
-          <span>Opens in a new tab (external link)</span>
-        </label>
-      </div>
-      <template #footer>
-        <button type="button" class="ws-modal-btn ws-modal-btn--outline" @click="addLinkOpen = false">Cancel</button>
-        <button type="button" class="ws-modal-btn ws-modal-btn--primary" :disabled="!canAddLink" @click="saveLink">Add link</button>
-      </template>
-    </CrmModal>
   </div>
 </template>
 
@@ -516,9 +599,13 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 .ws-badge--danger { background: #FEE2E2; color: #991B1B; }
 .ws-badge--info { background: var(--color-accent-soft); color: var(--color-accent-strong); }
 
-.ws-btn { padding: 9px 14px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: none; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+.ws-btn { padding: 9px 14px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: none; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; background: var(--color-ink); color: #fff; }
+.ws-btn:hover:not(:disabled) { background: var(--color-graphite); }
+.ws-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .ws-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
+.ws-btn--outline:hover:not(:disabled) { background: var(--color-surface); border-color: var(--color-ink); }
 .ws-btn--ghost { background: transparent; color: var(--color-accent); border: 1px dashed var(--color-accent-soft); margin-top: 12px; }
+.ws-btn--ghost:hover:not(:disabled) { background: var(--color-accent-soft); }
 .ws-link { background: transparent; border: 0; color: var(--color-accent); font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
 .ws-link:hover { text-decoration: underline; }
 
@@ -556,10 +643,110 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 .ws-field input, .ws-field select, .ws-field textarea { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; resize: vertical; }
 .ws-field input:focus, .ws-field select:focus, .ws-field textarea:focus { outline: none; border-color: var(--color-ink); }
 
-.ws-nav-list { list-style: none; padding: 0; margin: 0; }
-.ws-nav-row { display: grid; grid-template-columns: 20px 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 10px; margin-bottom: 6px; }
-.ws-handle { color: var(--color-mute); cursor: grab; }
-.ws-nav-label { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); display: flex; gap: 8px; align-items: baseline; }
+/* Navigation editor */
+.ws-nav-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px -6px rgba(15, 23, 42, 0.08);
+}
+.ws-nav-toolbar__hint {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-graphite);
+  max-width: 520px;
+}
+.ws-nav-toolbar__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ws-nav-list { list-style: none; padding: 0; margin: 0 0 12px; display: flex; flex-direction: column; gap: 10px; }
+.ws-nav-item { display: flex; flex-direction: column; gap: 6px; }
+.ws-nav-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 28px;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 10px;
+}
+.ws-nav-row--child {
+  background: var(--color-surface);
+  margin-left: 24px;
+}
+.ws-nav-order { display: flex; flex-direction: column; gap: 2px; }
+.ws-nav-arrow {
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-mute);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ws-nav-arrow:hover:not(:disabled) { background: var(--color-hairline); color: var(--color-ink); }
+.ws-nav-arrow:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.ws-nav-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  gap: 8px;
+  min-width: 0;
+}
+.ws-nav-input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  background: transparent;
+  color: var(--color-ink);
+}
+.ws-nav-input:focus { outline: none; border-color: var(--color-ink); background: #fff; }
+
+.ws-nav-remove {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--color-mute);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ws-nav-remove:hover { background: var(--color-hairline); color: var(--color-danger); }
+
+.ws-nav-children { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.ws-nav-add-child {
+  align-self: flex-start;
+  margin-left: 28px;
+  padding: 4px 10px;
+  border: 1px dashed var(--color-hairline);
+  border-radius: 8px;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--color-fog);
+  cursor: pointer;
+}
+.ws-nav-add-child:hover { color: var(--color-ink); border-color: var(--color-ink); background: var(--color-surface); }
 
 .ws-provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-bottom: 16px; }
 .ws-provider { padding: 14px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; cursor: pointer; text-align: left; }

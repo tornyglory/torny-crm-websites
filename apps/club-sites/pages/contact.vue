@@ -8,7 +8,7 @@ const contact = computed(() => site.value?.contact)
 const hours = computed(() => site.value?.hours ?? [])
 const accent = computed(() => site.value?.club.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
 
-useSeoMeta({ title: () => `Contact — ${club.value?.name ?? 'Torny'}` })
+usePageMeta('contact')
 
 const DAY_LABELS: Record<string, string> = {
   mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday',

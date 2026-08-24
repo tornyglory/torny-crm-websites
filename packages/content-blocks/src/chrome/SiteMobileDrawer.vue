@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import type { NavLink, SiteChromeClub } from '../types'
 
 interface Props {
@@ -30,11 +30,45 @@ const initials = computed(() => {
     .join('')
 })
 
-function isActive(href: string) {
+function isActive(href: string | undefined): boolean {
+  if (!href) return false
   const path = props.currentPath
   if (!path) return false
   if (href === '/') return path === '/'
   return path === href || path.startsWith(href + '/')
+}
+function hasChildren(link: NavLink): boolean {
+  return Array.isArray(link.children) && link.children.length > 0
+}
+function isBranchActive(link: NavLink): boolean {
+  if (isActive(link.href)) return true
+  return (link.children ?? []).some((c) => isActive(c.href))
+}
+function isExternal(link: NavLink): boolean {
+  if (link.external !== undefined) return link.external
+  return Boolean(link.href && /^https?:\/\//i.test(link.href))
+}
+
+// Track which parent(s) are expanded. Auto-expand any group containing the
+// current route so users see where they are when the drawer opens.
+const expanded = ref<Set<number>>(new Set())
+watch(
+  () => [props.open, props.navLinks, props.currentPath],
+  () => {
+    if (!props.open) return
+    const next = new Set<number>()
+    props.navLinks.forEach((link, i) => {
+      if (hasChildren(link) && isBranchActive(link)) next.add(i)
+    })
+    expanded.value = next
+  },
+  { immediate: true },
+)
+function toggleExpand(i: number) {
+  const next = new Set(expanded.value)
+  if (next.has(i)) next.delete(i)
+  else next.add(i)
+  expanded.value = next
 }
 
 // Lock body scroll while open; close on Escape.
@@ -97,18 +131,50 @@ onBeforeUnmount(() => {
 
       <nav class="drawer__body" aria-label="Primary">
         <div class="drawer__section-label">{{ sectionLabel }}</div>
-        <a
-          v-for="link in navLinks"
-          :key="link.href"
-          :href="link.href"
-          class="drawer__link"
-          :class="{ 'drawer__link--active': isActive(link.href) }"
-          @click="emit('close')"
-        >
-          <span class="drawer__link-label">{{ link.label }}</span>
-          <span v-if="link.badge" class="drawer__badge">{{ link.badge }}</span>
-          <span v-else class="drawer__arrow" aria-hidden="true">↗</span>
-        </a>
+        <template v-for="(link, i) in navLinks" :key="link.label + (link.href ?? '') + i">
+          <!-- Parent with children — expandable inline group -->
+          <div v-if="hasChildren(link)" class="drawer__group" :class="{ 'is-expanded': expanded.has(i) }">
+            <button
+              type="button"
+              class="drawer__link drawer__link--parent"
+              :class="{ 'drawer__link--active': isBranchActive(link) }"
+              :aria-expanded="expanded.has(i) ? 'true' : 'false'"
+              @click="toggleExpand(i)"
+            >
+              <span class="drawer__link-label">{{ link.label }}</span>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" class="drawer__chev">
+                <path d="M3.5 5.5L7 9L10.5 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+            <div v-if="expanded.has(i)" class="drawer__sub">
+              <a
+                v-for="child in link.children"
+                :key="child.label + (child.href ?? '')"
+                :href="child.href"
+                :target="isExternal(child) ? '_blank' : undefined"
+                :rel="isExternal(child) ? 'noopener' : undefined"
+                class="drawer__sub-link"
+                :class="{ 'is-active': isActive(child.href) }"
+                @click="emit('close')"
+              >{{ child.label }}</a>
+            </div>
+          </div>
+
+          <!-- Leaf link -->
+          <a
+            v-else
+            :href="link.href"
+            :target="isExternal(link) ? '_blank' : undefined"
+            :rel="isExternal(link) ? 'noopener' : undefined"
+            class="drawer__link"
+            :class="{ 'drawer__link--active': isActive(link.href) }"
+            @click="emit('close')"
+          >
+            <span class="drawer__link-label">{{ link.label }}</span>
+            <span v-if="link.badge" class="drawer__badge">{{ link.badge }}</span>
+            <span v-else class="drawer__arrow" aria-hidden="true">↗</span>
+          </a>
+        </template>
       </nav>
 
       <div v-if="primaryCta || signInHref" class="drawer__footer">
@@ -214,10 +280,57 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
   padding: 16px 12px;
+  border: 0;
   border-radius: var(--radius-md);
+  background: transparent;
   color: var(--color-graphite);
   text-decoration: none;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.drawer__link--parent { padding-right: 12px; }
+.drawer__chev {
+  color: var(--color-fog);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.drawer__group.is-expanded .drawer__chev {
+  transform: rotate(180deg);
+  color: var(--color-ink);
+}
+.drawer__group {
+  display: flex;
+  flex-direction: column;
+}
+.drawer__sub {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0 8px 20px;
+  border-left: 2px solid var(--color-hairline);
+  margin-left: 14px;
+  gap: 2px;
+}
+.drawer__sub-link {
+  display: block;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: var(--weight-regular);
+  color: var(--color-graphite);
+  text-decoration: none;
+}
+.drawer__sub-link:hover {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+.drawer__sub-link.is-active {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-weight: var(--weight-medium);
 }
 .drawer__link--active {
   background: var(--color-surface);

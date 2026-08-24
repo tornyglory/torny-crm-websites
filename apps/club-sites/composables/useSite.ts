@@ -11,6 +11,7 @@ import type { Site } from '~/server/utils/tornyApi'
  */
 export function useSite() {
   const club = useClub()
+  const nuxtApp = useNuxtApp()
 
   return useAsyncData<Site | null>(
     () => `site:${club.value?.slug ?? 'unknown'}`,
@@ -21,6 +22,14 @@ export function useSite() {
     {
       // Refetch when the tenant changes (e.g. on dev when swapping via ?host=).
       watch: [() => club.value?.slug],
+      // Reuse the payload cache across client-side navigations. Without this,
+      // Nuxt re-runs the handler on every route change even though the key
+      // is stable — which meant every /about → /events hop was a fresh
+      // fetch to /api/site/:slug, blocking render on the round-trip.
+      getCachedData: (key) => {
+        const cached = nuxtApp.payload?.data?.[key] ?? nuxtApp.static?.data?.[key]
+        return cached ?? undefined
+      },
     },
   )
 }

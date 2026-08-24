@@ -230,7 +230,15 @@ const bottomTabs = computed<TabItem[]>(() => [
           :aria-expanded="clubMenuOpen ? 'true' : 'false'"
           @click="toggleClubMenu"
         >
-          <div class="sidebar__club-badge">{{ clubInitials }}</div>
+          <div class="sidebar__club-badge" :class="{ 'sidebar__club-badge--logo': club.current?.logoUrl }">
+            <img
+              v-if="club.current?.logoUrl"
+              :src="club.current.logoUrl"
+              :alt="`${club.current.name} logo`"
+              class="sidebar__club-logo"
+            />
+            <span v-else>{{ clubInitials }}</span>
+          </div>
           <div class="sidebar__club-info">
             <div class="sidebar__club-label">Current club</div>
             <div class="sidebar__club-name">{{ club.current?.name ?? 'Select a club' }}</div>
@@ -553,7 +561,9 @@ const bottomTabs = computed<TabItem[]>(() => [
 .sidebar__club--open { border-color: var(--color-ink); }
 .sidebar__club--open .sidebar__club-chev { transform: rotate(90deg); }
 .sidebar__club-chev { transition: transform 0.15s ease; }
-.sidebar__club-badge { width: 36px; height: 36px; border-radius: 10px; background: var(--color-accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.sidebar__club-badge { width: 36px; height: 36px; border-radius: 10px; background: var(--color-accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 12px; font-weight: 700; flex-shrink: 0; overflow: hidden; }
+.sidebar__club-badge--logo { background: #fff; border: 1px solid var(--color-hairline); }
+.sidebar__club-logo { width: 100%; height: 100%; object-fit: contain; padding: 4px; box-sizing: border-box; }
 .sidebar__club-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .sidebar__club-label { font-family: var(--font-body); font-size: 9px; font-weight: 600; letter-spacing: 0.14em; color: var(--color-fog); text-transform: uppercase; }
 .sidebar__club-name { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }

@@ -68,6 +68,27 @@ export interface ClubStyle {
 }
 
 /**
+ * A single navigation entry. Leaves must have `href`; parents may omit
+ * `href` if they exist only to group `children`. One level of nesting.
+ */
+export interface NavItem {
+  label: string
+  href?: string
+  external?: boolean
+  children?: NavItem[]
+}
+
+/**
+ * Resolved header + footer navigation for a club — always populated on
+ * `/site` payloads. Falls back to the platform defaults when the club
+ * hasn't customised.
+ */
+export interface ClubNavigation {
+  header: NavItem[]
+  footer: NavItem[]
+}
+
+/**
  * Full club record. `id` is a number (matches backend integer PKs; see brief
  * 08 §Timezones + IDs). Other fields are optional so we can hydrate a stub
  * from a `UserClub` in the auth response before a full /clubs/:id load.
@@ -84,6 +105,8 @@ export interface Club {
   fonts?: ClubFonts
   /** Present on `/site` payloads and any full club load; absent on stubs. */
   style?: ClubStyle
+  /** Present on `/site` payloads; header + footer link trees. */
+  navigation?: ClubNavigation
 }
 
 export interface Member {

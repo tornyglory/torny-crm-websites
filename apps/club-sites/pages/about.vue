@@ -2,14 +2,10 @@
 const club = useClub()
 const { data: site } = await useSite()
 
-if (import.meta.server && site.value && !site.value.pages_enabled.about) {
-  throw createError({ statusCode: 404, statusMessage: 'About page not published' })
-}
-
 const club_ = computed(() => site.value?.club)
 const accent = computed(() => club_.value?.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
 
-useSeoMeta({ title: () => `About — ${club.value?.name ?? 'Torny'}` })
+usePageMeta('about')
 </script>
 
 <template>

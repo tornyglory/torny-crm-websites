@@ -11,10 +11,7 @@ const upcoming = computed(() => site.value?.events_upcoming ?? [])
 const tiers = computed(() => site.value?.membership_tiers ?? [])
 const accent = computed(() => club_.value?.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
 
-useSeoMeta({
-  title: () => heading.value,
-  description: () => (club_.value?.short_description ?? tagline.value ?? undefined) as string | undefined,
-})
+usePageMeta('home')
 
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

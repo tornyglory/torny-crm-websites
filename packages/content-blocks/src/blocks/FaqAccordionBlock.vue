@@ -138,15 +138,16 @@ function pad(n: number): string {
 }
 
 .faq__item {
-  border-bottom: 1px solid var(--color-hairline);
+  margin-bottom: 8px;
+  background: var(--color-ground);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
+.faq__item:last-child { margin-bottom: 0; }
 .faq__item--open {
   margin-bottom: 12px;
-  background: var(--card-bg);
-  border: var(--card-border);
   box-shadow: var(--card-shadow);
-  border-radius: var(--radius-md);
-  padding: 0;
 }
 
 .faq__row {

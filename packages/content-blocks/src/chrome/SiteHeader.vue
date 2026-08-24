@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { SiteHeaderProps } from '../types'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import type { NavLink, SiteHeaderProps } from '../types'
 
 const props = defineProps<SiteHeaderProps>()
 const emit = defineEmits<{
@@ -17,12 +17,63 @@ const initials = computed(() => {
     .join('')
 })
 
-function isActive(href: string) {
+function isActive(href: string | undefined): boolean {
+  if (!href) return false
   const path = props.currentPath
   if (!path) return false
   if (href === '/') return path === '/'
   return path === href || path.startsWith(href + '/')
 }
+function hasChildren(link: NavLink): boolean {
+  return Array.isArray(link.children) && link.children.length > 0
+}
+function isBranchActive(link: NavLink): boolean {
+  if (isActive(link.href)) return true
+  return (link.children ?? []).some((c) => isActive(c.href))
+}
+function isExternal(link: NavLink): boolean {
+  if (link.external !== undefined) return link.external
+  return Boolean(link.href && /^https?:\/\//i.test(link.href))
+}
+function linkTarget(link: NavLink): string | undefined {
+  return isExternal(link) ? '_blank' : undefined
+}
+function linkRel(link: NavLink): string | undefined {
+  return isExternal(link) ? 'noopener' : undefined
+}
+
+// One dropdown open at a time; key by index so we don't need item ids.
+const openIndex = ref<number | null>(null)
+const rootRef = ref<HTMLElement | null>(null)
+
+function toggleDropdown(i: number) {
+  openIndex.value = openIndex.value === i ? null : i
+}
+function closeDropdown() {
+  openIndex.value = null
+}
+function onDocClick(e: MouseEvent) {
+  if (openIndex.value === null) return
+  const target = e.target as HTMLElement | null
+  if (target?.closest('.site-header__item--has-children')) return
+  closeDropdown()
+}
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && openIndex.value !== null) {
+    e.preventDefault()
+    closeDropdown()
+  }
+}
+onMounted(() => {
+  if (typeof document === 'undefined') return
+  document.addEventListener('click', onDocClick)
+  document.addEventListener('keydown', onKey)
+})
+onBeforeUnmount(() => {
+  if (typeof document === 'undefined') return
+  document.removeEventListener('click', onDocClick)
+  document.removeEventListener('keydown', onKey)
+})
 </script>
 
 <template>
@@ -38,16 +89,55 @@ function isActive(href: string) {
       </span>
     </a>
 
-    <nav class="site-header__nav" aria-label="Primary">
-      <a
-        v-for="link in navLinks"
-        :key="link.href"
-        :href="link.href"
-        class="site-header__link"
-        :class="{ 'site-header__link--active': isActive(link.href) }"
-      >
-        {{ link.label }}
-      </a>
+    <nav ref="rootRef" class="site-header__nav" aria-label="Primary">
+      <template v-for="(link, i) in navLinks" :key="link.label + (link.href ?? '')">
+        <!-- Parent with dropdown -->
+        <div
+          v-if="hasChildren(link)"
+          class="site-header__item site-header__item--has-children"
+          :class="{ 'is-open': openIndex === i }"
+        >
+          <button
+            type="button"
+            class="site-header__link site-header__link--parent"
+            :class="{ 'site-header__link--active': isBranchActive(link) }"
+            :aria-expanded="openIndex === i ? 'true' : 'false'"
+            :aria-haspopup="'true'"
+            @click="toggleDropdown(i)"
+          >
+            <span>{{ link.label }}</span>
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true" class="site-header__chev">
+              <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+
+          <div v-if="openIndex === i" class="site-header__dropdown" role="menu">
+            <a
+              v-for="child in link.children"
+              :key="child.label + (child.href ?? '')"
+              :href="child.href"
+              :target="linkTarget(child)"
+              :rel="linkRel(child)"
+              class="site-header__dropdown-link"
+              :class="{ 'is-active': isActive(child.href) }"
+              role="menuitem"
+              @click="closeDropdown"
+            >{{ child.label }}</a>
+          </div>
+        </div>
+
+        <!-- Leaf link -->
+        <a
+          v-else
+          :href="link.href"
+          :target="linkTarget(link)"
+          :rel="linkRel(link)"
+          class="site-header__link"
+          :class="{ 'site-header__link--active': isActive(link.href) }"
+        >
+          {{ link.label }}
+        </a>
+      </template>
     </nav>
 
     <div class="site-header__actions">
@@ -146,14 +236,82 @@ function isActive(href: string) {
   align-items: center;
   gap: 32px;
 }
+.site-header__item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
 .site-header__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  font-family: inherit;
   font-size: 15px;
   font-weight: var(--weight-regular);
   letter-spacing: -0.005em;
   color: var(--color-graphite);
   text-decoration: none;
+  cursor: pointer;
 }
+.site-header__link:hover { color: var(--color-ink); }
 .site-header__link--active {
+  color: var(--color-ink);
+  font-weight: var(--weight-medium);
+}
+.site-header__link--parent { padding-right: 2px; }
+.site-header__chev {
+  transition: transform 0.15s ease;
+  color: var(--color-fog);
+}
+.site-header__item.is-open .site-header__chev {
+  transform: rotate(180deg);
+  color: var(--color-ink);
+}
+
+/* Dropdown panel */
+.site-header__dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: -12px;
+  min-width: 220px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px -12px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 30;
+}
+.site-header__dropdown::before {
+  /* Bridge the visual gap so hover-crossing to the dropdown doesn't lose click focus. */
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 0;
+  right: 0;
+  height: 12px;
+}
+.site-header__dropdown-link {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: var(--weight-regular);
+  color: var(--color-graphite);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.site-header__dropdown-link:hover {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+.site-header__dropdown-link.is-active {
+  background: var(--color-surface);
   color: var(--color-ink);
   font-weight: var(--weight-medium);
 }

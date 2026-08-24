@@ -11,14 +11,15 @@ import type {
 
 const club = useClub()
 await useTheme()
+const { data: site } = await useSite()
 const route = useRoute()
 
 const drawerOpen = ref(false)
 
-// Same nav on every club site — clubs vary block content, not chrome.
-// If a page doesn't exist yet for a given club, the link still renders;
-// the target page (or a 404) is handled by the router.
-const navLinks: NavLink[] = [
+// Fallback used while the backend endpoint (brief 25) is being built and
+// during the SSR-before-payload window. Once the /site payload includes
+// `navigation`, that always wins.
+const FALLBACK_HEADER: NavLink[] = [
   { label: 'Home', href: '/' },
   { label: 'About', href: '/about' },
   { label: 'Events', href: '/events' },
@@ -26,6 +27,11 @@ const navLinks: NavLink[] = [
   { label: 'Membership', href: '/membership' },
   { label: 'Contact', href: '/contact' },
 ]
+
+const navLinks = computed<NavLink[]>(() => {
+  const header = site.value?.club?.navigation?.header
+  return header && header.length > 0 ? (header as NavLink[]) : FALLBACK_HEADER
+})
 
 const chromeClub = computed<SiteChromeClub>(() => ({
   name: club.value?.name ?? 'Torny',

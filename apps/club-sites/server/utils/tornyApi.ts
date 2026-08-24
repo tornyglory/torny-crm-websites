@@ -51,6 +51,18 @@ export interface SiteStyle {
   buttons: SiteStyleButtons
 }
 
+export interface SiteNavItem {
+  label: string
+  href?: string
+  external?: boolean
+  children?: SiteNavItem[]
+}
+
+export interface SiteNavigation {
+  header: SiteNavItem[]
+  footer: SiteNavItem[]
+}
+
 export interface SiteClub {
   id: number
   slug: string
@@ -68,6 +80,7 @@ export interface SiteClub {
   onboarded_at: string | null
   fonts?: SiteFonts
   style?: SiteStyle
+  navigation?: SiteNavigation
 }
 
 export interface SiteContact {
@@ -141,9 +154,19 @@ export interface Site {
   /**
    * Published block layouts per page slug — set by the CRM page-builder
    * (brief 16). Absent slugs fall back to the hardcoded page templates
-   * in `apps/club-sites/pages/*`.
+   * in `apps/club-sites/pages/*`. `meta` (brief 26) is always populated
+   * server-side — falls back to site defaults then club-derived values.
    */
-  pages?: Partial<Record<PageSlug, { blocks: unknown[] }>>
+  pages?: Partial<Record<PageSlug, {
+    blocks: unknown[]
+    meta?: SitePageMeta
+  }>>
+}
+
+/** Fully-resolved per-page SEO metadata. Server picks page → site default → derived. */
+export interface SitePageMeta {
+  title: string
+  description: string | null
 }
 
 interface Envelope<T> {

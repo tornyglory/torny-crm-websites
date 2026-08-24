@@ -2,15 +2,11 @@
 const club = useClub()
 const { data: site } = await useSite()
 
-if (import.meta.server && site.value && !site.value.pages_enabled.membership) {
-  throw createError({ statusCode: 404, statusMessage: 'Membership not published' })
-}
-
 const tiers = computed(() => site.value?.membership_tiers ?? [])
 const firstYearDiscount = computed(() => site.value?.first_year_discount ?? false)
 const accent = computed(() => site.value?.club.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
 
-useSeoMeta({ title: () => `Membership — ${club.value?.name ?? 'Torny'}` })
+usePageMeta('membership')
 
 const cadenceLabel = (c: string | null): string =>
   c === 'annual' ? 'year' : c === 'monthly' ? 'month' : c === 'season' ? 'season' : ''

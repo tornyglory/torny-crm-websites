@@ -115,7 +115,8 @@ const year = new Date().getFullYear()
         <span class="site-footer__powered-label">Powered by</span>
         <span class="site-footer__powered-mark">
           <span class="site-footer__powered-dot" />
-          <span>Torny</span>
+          <span class="site-footer__powered-wordmark">Torny</span>
+          <span class="site-footer__powered-tag">CRM</span>
         </span>
       </div>
     </div>
@@ -326,13 +327,8 @@ const year = new Date().getFullYear()
 }
 .site-footer__powered-mark {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--color-ground);
 }
 .site-footer__powered-dot {
@@ -340,6 +336,23 @@ const year = new Date().getFullYear()
   height: 7px;
   border-radius: var(--radius-pill);
   background: var(--color-accent);
+  align-self: center;
+}
+.site-footer__powered-wordmark {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--track-tight);
+  color: var(--color-ground);
+}
+.site-footer__powered-tag {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  margin-left: 2px;
 }
 
 /* Tablet: stack contact under nav columns. */

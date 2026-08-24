@@ -53,9 +53,15 @@ export interface EventListProps {
 }
 
 export interface HonourBoardProps {
+  eyebrow?: string
   heading?: string
+  description?: string
+  /** Which honour-board category to feature. Defaults to Champion of Champions. */
   categorySlug?: string
+  /** How many recent winners to show in the strip below the champion feature card. */
   yearsToShow?: number
+  ctaLabel?: string
+  ctaHref?: string
 }
 
 export interface GalleryProps {
@@ -234,6 +240,12 @@ export interface BlockContext {
     category_name: string
     year: number
     member_name: string
+    /** Optional short initials for the avatar chip (fallback derived from name). */
+    initials?: string
+    /** Optional final score, e.g. "21–14". */
+    score?: string | null
+    /** Optional ISO date the trophy was awarded. */
+    awarded_at?: string | null
     notes?: string | null
   }>
 }
@@ -258,9 +270,14 @@ export interface SiteChromeClub {
 
 export interface NavLink {
   label: string
-  href: string
+  /** Required for leaves. Optional on a parent that only exists to group its `children`. */
+  href?: string
   /** Optional right-side badge, e.g. "4 THIS WEEK". */
   badge?: string
+  /** When present, renders `target="_blank" rel="noopener"`. Auto-detected from `href` otherwise. */
+  external?: boolean
+  /** Sub-links shown in a dropdown (desktop) or inline expandable list (mobile). One level only. */
+  children?: NavLink[]
 }
 
 export interface SiteHeaderProps {

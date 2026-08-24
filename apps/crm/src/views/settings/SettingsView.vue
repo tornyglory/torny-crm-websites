@@ -90,11 +90,11 @@ const brandSwatches = ['#2563EB', '#DC2626', '#16A34A', '#EA580C', '#7C3AED', '#
 const logoFileInput = ref<HTMLInputElement | null>(null)
 
 const brandWordmark = computed(() => {
-  const name = onboarding.data.clubName || club.value.name || 'Your club'
+  const name = onboarding.data.clubName || 'Your club'
   const parts = name.split(/\s+/).filter(Boolean)
   if (parts.length === 0) return 'YC'
   if (parts.length === 1) return (parts[0] ?? '').slice(0, 12)
-  return parts.map((p) => p.charAt(0)).slice(0, 4).join('').toUpperCase()
+  return parts.map((p: string) => p.charAt(0)).slice(0, 4).join('').toUpperCase()
 })
 
 const logoUploading = ref(false)
@@ -179,14 +179,32 @@ function saveBrand() {
   toast.success('Brand saved.')
 }
 
-const club = ref({
-  name: 'Kelburn Bowling Club',
-  legalName: 'Kelburn Bowling Club Inc.',
-  incorporationNumber: 'INC-1908-KLBN',
-  email: 'admin@kelburnbowls.co.nz',
-  phone: '04 555 0101',
-  address: '25 Salamanca Road, Kelburn, Wellington 6012',
+/**
+ * Club profile — the shared fields (name, email, phone, address) live on
+ * `onboarding.data` so they hydrate from the backend per club and stay in
+ * sync with the wizard. The onboarding store gates its PATCH watch on
+ * `!completed`, so edits made here after onboarding don't overwrite the
+ * server; a proper PATCH /clubs/:id endpoint is a follow-up.
+ *
+ * The remaining fields (legalName, incorporationNumber, timeZone) aren't in
+ * the wizard schema — held locally with sensible defaults for now.
+ */
+const clubExtra = ref({
+  legalName: '',
+  incorporationNumber: '',
   timeZone: 'Pacific/Auckland',
+})
+
+/** Full postal address as one line — the wizard splits this into
+ *  street / suburb / region / country, this composes for display. */
+const fullAddress = computed({
+  get: () => [
+    onboarding.data.address,
+    onboarding.data.suburb,
+    onboarding.data.region,
+    onboarding.data.country,
+  ].filter((s) => s && s.trim().length > 0).join(', '),
+  set: (v: string) => { onboarding.data.address = v },
 })
 
 const billing = ref({
@@ -403,31 +421,31 @@ function sendInvite() {
             <div class="grid">
               <div class="field">
                 <label>Club name</label>
-                <input v-model="club.name" />
+                <input v-model="onboarding.data.clubName" />
               </div>
               <div class="field">
                 <label>Legal name</label>
-                <input v-model="club.legalName" />
+                <input v-model="clubExtra.legalName" />
               </div>
               <div class="field">
                 <label>Incorporation number</label>
-                <input v-model="club.incorporationNumber" />
+                <input v-model="clubExtra.incorporationNumber" />
               </div>
               <div class="field">
                 <label>Time zone</label>
-                <input v-model="club.timeZone" />
+                <input v-model="clubExtra.timeZone" />
               </div>
               <div class="field">
                 <label>Public email</label>
-                <input v-model="club.email" />
+                <input v-model="onboarding.data.email" />
               </div>
               <div class="field">
                 <label>Public phone</label>
-                <input v-model="club.phone" />
+                <input v-model="onboarding.data.phone" />
               </div>
               <div class="field field--wide">
                 <label>Postal address</label>
-                <input v-model="club.address" />
+                <input v-model="fullAddress" />
               </div>
             </div>
           </div>

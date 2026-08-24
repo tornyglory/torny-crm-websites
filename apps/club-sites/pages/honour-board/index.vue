@@ -39,7 +39,10 @@ const byCategory = computed(() => {
         <ul class="entries">
           <li v-for="e in c.entries" :key="`${e.category_slug}-${e.year}`" class="entry">
             <span class="entry__year">{{ e.year }}</span>
-            <span class="entry__name">{{ e.member_name }}</span>
+            <span class="entry__name">
+              <template v-if="e.players && e.players.length > 1">{{ e.players.map(p => p.display_name).join(', ') }}</template>
+              <template v-else>{{ e.member_name }}</template>
+            </span>
             <span v-if="e.notes" class="entry__notes">{{ e.notes }}</span>
           </li>
         </ul>

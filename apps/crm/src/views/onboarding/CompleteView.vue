@@ -39,11 +39,25 @@ onMounted(async () => {
   if (onboarding.completed) return
   const result = await onboarding.markComplete()
   if (result === 'validation') {
-    const first = onboarding.validationErrors[0]
-    const jumpTo = first ? stepForField(first.field) : 'welcome'
-    toast.error(`Please fix ${onboarding.validationErrors.length} issue${onboarding.validationErrors.length === 1 ? '' : 's'} before finishing.`)
-    // Bounce back to the step that owns the failing field.
-    if (jumpTo === 'welcome') router.replace({ name: 'onboarding-welcome' })
+    const errs = onboarding.validationErrors
+    const first = errs[0]
+    // Show the actual error the server sent — otherwise a mystery bounce is
+    // impossible for the owner to diagnose. Prefer the message, fall back to
+    // "<field>: <code>" if the server only gave us structured data.
+    const summary = first
+      ? (first.message || `${first.field}: ${first.code}`)
+      : 'Something in the wizard was rejected but the server didn\'t say what.'
+    toast.error(summary)
+    // Preserve any additional errors in the console so the user can share
+    // them when reporting.
+    if (errs.length > 1) console.warn('Additional onboarding validation errors:', errs.slice(1))
+
+    // Bounce back to the step that owns the failing field. When the field
+    // is missing or unrecognised, fall back to step 1 (all typed state is
+    // preserved) instead of the welcome page — welcome makes the wizard
+    // feel like it's forgetting the user's work.
+    const jumpTo = first ? stepForField(first.field) : 1
+    if (jumpTo === 'welcome') router.replace({ name: 'onboarding-step-1' })
     else router.replace({ name: `onboarding-step-${jumpTo}` })
   } else if (result === 'error') {
     finalizeError.value = onboarding.saveError ?? 'Something went wrong finishing setup.'

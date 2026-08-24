@@ -239,7 +239,10 @@ export interface BlockContext {
     category_slug: string
     category_name: string
     year: number
+    /** First player's display name — kept for single-name block layouts. */
     member_name: string
+    /** First player's user_id, if they're a Torny user. Null for guests. */
+    member_user_id?: number | null
     /** Optional short initials for the avatar chip (fallback derived from name). */
     initials?: string
     /** Optional final score, e.g. "21–14". */
@@ -247,6 +250,16 @@ export interface BlockContext {
     /** Optional ISO date the trophy was awarded. */
     awarded_at?: string | null
     notes?: string | null
+    /**
+     * Full player list — populated for multi-player entries (pairs / triples /
+     * fours). `players[0]` mirrors `member_name` for single-player layouts.
+     * `user_id` null means a guest / historic non-member.
+     */
+    players?: Array<{
+      user_id: number | null
+      display_name: string
+      position: string | null
+    }>
   }>
 }
 

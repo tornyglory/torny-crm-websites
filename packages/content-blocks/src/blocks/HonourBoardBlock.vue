@@ -24,6 +24,33 @@ function initialsFromName(name: string): string {
     .join('')
 }
 
+/** Team names as a display string. Falls back to `member_name` when no players[]. */
+function teamNames(entry: {
+  member_name: string
+  players?: Array<{ display_name: string }>
+}): string {
+  if (entry.players && entry.players.length > 1) {
+    return entry.players.map((p) => p.display_name).join(', ')
+  }
+  return entry.member_name
+}
+
+/** Identity key used for "same team" comparisons — sorted user_ids joined,
+ *  falling back to sorted names when guests are involved. Two entries with
+ *  the same team (Skip A, Third B, Second C, Lead D) count as one titles-held. */
+function teamKey(entry: {
+  member_name: string
+  players?: Array<{ user_id: number | null; display_name: string }>
+}): string {
+  if (entry.players && entry.players.length) {
+    return [...entry.players]
+      .map((p) => (p.user_id !== null ? `u:${p.user_id}` : `n:${p.display_name.toLowerCase()}`))
+      .sort()
+      .join('|')
+  }
+  return `n:${entry.member_name.toLowerCase()}`
+}
+
 // Filter entries by the selected category (if any) then sort descending by year.
 const filtered = computed(() => {
   const all = ctx.value?.honourEntries ?? []
@@ -34,16 +61,23 @@ const filtered = computed(() => {
 const reigning = computed(() => filtered.value[0])
 const recentDecade = computed(() => filtered.value.slice(1, props.yearsToShow + 1))
 
-// Compute titles held for the reigning champion across all entries.
+// Compute titles held for the reigning champion — teams count once even
+// with different members over the years (matches the "same team, three peats"
+// display owners want).
 const reigningTitles = computed(() => {
   if (!reigning.value) return 0
-  const name = reigning.value.member_name
-  return filtered.value.filter((e) => e.member_name === name).length
+  const key = teamKey(reigning.value)
+  return filtered.value.filter((e) => teamKey(e) === key).length
 })
 
-const uniqueWinnersInStrip = computed(() =>
-  new Set(recentDecade.value.map((e) => e.member_name)).size,
+const uniqueWinnersInStrip = computed(
+  () => new Set(recentDecade.value.map(teamKey)).size,
 )
+
+/** Player profile href. Null when we don't have a user_id (guest / historic). */
+function playerHref(userId: number | null | undefined): string | null {
+  return userId ? `/players/${userId}` : null
+}
 
 const awardedLabel = computed(() => {
   if (!reigning.value?.awarded_at) return null
@@ -84,9 +118,21 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
       <div class="hb__feature-body">
         <div class="hb__feature-eyebrow">
           <span class="hb__feature-eyebrow-dot" />
-          <span>Reigning champion · {{ reigning.year }}</span>
+          <span>{{ reigning.players && reigning.players.length > 1 ? 'Reigning champions' : 'Reigning champion' }} · {{ reigning.year }}</span>
         </div>
-        <div class="hb__feature-name">{{ reigning.member_name }}</div>
+        <div class="hb__feature-name">
+          <template v-if="reigning.players && reigning.players.length > 1">
+            <template v-for="(p, i) in reigning.players" :key="p.user_id ?? p.display_name">
+              <a v-if="playerHref(p.user_id)" :href="playerHref(p.user_id)!" class="hb__feature-player-link">{{ p.display_name }}</a>
+              <span v-else>{{ p.display_name }}</span>
+              <span v-if="i < reigning.players.length - 1" class="hb__feature-name-sep">, </span>
+            </template>
+          </template>
+          <template v-else-if="playerHref(reigning.member_user_id)">
+            <a :href="playerHref(reigning.member_user_id)!" class="hb__feature-player-link">{{ reigning.member_name }}</a>
+          </template>
+          <template v-else>{{ reigning.member_name }}</template>
+        </div>
         <div v-if="reigning.notes || categoryLabel" class="hb__feature-sub">
           {{ reigning.notes ?? categoryLabel }}
         </div>
@@ -118,10 +164,10 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
         </div>
       </div>
       <ol class="hb__winners">
-        <li v-for="entry in recentDecade" :key="`${entry.year}-${entry.member_name}`" class="hb__winner">
+        <li v-for="entry in recentDecade" :key="`${entry.year}-${teamKey(entry)}`" class="hb__winner">
           <div class="hb__winner-year">{{ entry.year }}</div>
           <div class="hb__winner-avatar">{{ entry.initials || initialsFromName(entry.member_name) }}</div>
-          <div class="hb__winner-name">{{ entry.member_name }}</div>
+          <div class="hb__winner-name" :title="teamNames(entry)">{{ teamNames(entry) }}</div>
           <div v-if="entry.score" class="hb__winner-score">{{ entry.score }}</div>
         </li>
       </ol>
@@ -272,6 +318,14 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
   line-height: var(--leading-tight);
   color: #fff;
 }
+.hb__feature-player-link {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.15);
+  transition: border-color 120ms;
+}
+.hb__feature-player-link:hover { border-bottom-color: var(--color-accent); }
+.hb__feature-name-sep { color: rgba(255, 255, 255, 0.5); font-weight: var(--weight-regular); }
 .hb__feature-sub {
   font-family: var(--font-body);
   font-size: 15px;

@@ -33,6 +33,20 @@ export type {
 export * as events from './resources/events'
 export * as teams from './resources/teams'
 export * as honourBoard from './resources/honour-board'
+export type {
+  HonourCategory,
+  HonourCategoryCreateInput,
+  HonourCategoryUpdateInput,
+  HonourEntry,
+  HonourEntryCreateInput,
+  HonourEntryUpdateInput,
+  EntryPlayer,
+  EntryPlayerInput,
+  HonourFormat,
+  PlayerHonourEntry,
+  PlayerHonourClub,
+  PlayerHonourResponse,
+} from './resources/honour-board'
 export * as communications from './resources/communications'
 export * as devices from './resources/devices'
 export * as clubs from './resources/clubs'

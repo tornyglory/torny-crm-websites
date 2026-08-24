@@ -174,10 +174,14 @@ onMounted(async () => {
   loadingMine.value = true
   try {
     const rows = await claimsApi.mine()
-    // If they landed here but a claim was approved since they last visited,
-    // refresh the session (fresh clubs[]) and route to their CRM dashboard.
+    // Seamless-landing case: a first-time claimant returning after their
+    // claim was approved. We refresh the session and push them into the CRM.
+    // Skip when they already have club access — that means they clicked
+    // "Claim another club" from inside the CRM sidebar and want to file a
+    // fresh claim, not get bounced back to the dashboard they came from.
+    const hasExistingAccess = (auth.user?.clubs ?? []).length > 0
     const approved = rows.find((c) => c.status === 'approved')
-    if (approved) {
+    if (approved && !hasExistingAccess) {
       await auth.refresh()
       club.syncFromUserClubs(auth.user?.clubs)
       router.replace('/crm/dashboard')

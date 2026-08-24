@@ -125,8 +125,17 @@ export interface SiteHonourEntry {
   category_slug: string
   category_name: string
   year: number
+  /** First player's display name — kept for backwards-compat with single-name displays. */
   member_name: string
+  /** First player's user_id, if a Torny user. Null for guest / historic wins. */
+  member_user_id: number | null
   notes: string | null
+  /** Full player list, in team order. `players[0]` mirrors `member_name`. */
+  players?: Array<{
+    user_id: number | null
+    display_name: string
+    position: string | null
+  }>
 }
 
 export interface SitePagesEnabled {

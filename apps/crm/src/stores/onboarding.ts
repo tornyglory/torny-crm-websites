@@ -228,6 +228,15 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     pushPatch({ step: next, data: toServerDataStrip(data.value) })
   }
 
+  /**
+   * Force an immediate PATCH of the current wizard data — used right before
+   * `markComplete()` so any pending debounced writes don't race the finalize
+   * call and leave the server validating stale state.
+   */
+  async function flush(): Promise<void> {
+    await pushPatch({ data: toServerDataStrip(data.value) })
+  }
+
   async function markComplete(): Promise<'ok' | 'validation' | 'error'> {
     const clubId = club.current?.id
     if (!clubId || typeof clubId !== 'number') return 'error'
@@ -316,6 +325,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     markComplete,
     reset,
     hydrate,
+    flush,
   }
 })
 

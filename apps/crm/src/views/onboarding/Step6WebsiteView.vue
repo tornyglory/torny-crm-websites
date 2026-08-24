@@ -97,10 +97,11 @@ function togglePage(item: PageItem) {
   if (item.required) return
   onboarding.data.pages[item.key] = !onboarding.data.pages[item.key]
 }
-function publish() {
-  // The actual complete() call happens on CompleteView mount so we have a
-  // single source of truth. Navigate there; if it errors, the wizard bounces
-  // back to the failing step automatically.
+async function publish() {
+  // Flush any pending debounced writes so complete() sees the same data the
+  // user typed, not the last snapshot from >500ms ago. The actual complete()
+  // call happens on CompleteView mount so we have a single source of truth.
+  await onboarding.flush()
   router.push({ name: 'onboarding-complete' })
 }
 </script>

@@ -13,6 +13,12 @@ const router = useRouter()
 const firstName = computed(() => auth.user?.firstName || 'there')
 const clubName = computed(() => club.current?.name || 'your club')
 
+/** Clubs on the user's account other than the one currently onboarding. */
+const otherClubs = computed(() => {
+  const currentId = club.current?.id
+  return (auth.user?.clubs ?? []).filter((c) => c.id !== currentId)
+})
+
 onMounted(() => {
   onboarding.setStep('welcome')
 })
@@ -20,6 +26,36 @@ onMounted(() => {
 function begin() {
   onboarding.setStep(1)
   router.push({ name: 'onboarding-step-1' })
+}
+
+/**
+ * "I'll do this later" — the natural route (`/crm/dashboard`) is guarded by
+ * `requireOwnerAndOnboarded`, which bounces users straight back here while
+ * this club is still unfinished. Instead:
+ *   - if they have another club, switch to it and go to its dashboard,
+ *   - otherwise sign out — they can come back and pick up where they left off.
+ * Local wizard progress is safe on the server; refreshing after sign-in
+ * lands them back on the correct step for this club.
+ */
+function skipForNow() {
+  const alt = otherClubs.value[0]
+  if (alt) {
+    club.setCurrent({
+      id: alt.id,
+      name: alt.name ?? `Club #${alt.id}`,
+      slug: null,
+      domain: null,
+      brandPrimary: null,
+      logoUrl: null,
+    })
+    // hydrateFull picks up slug/brand/logo async — safe to fire and forget.
+    void club.hydrateFull()
+    router.push({ name: 'dashboard' })
+  } else {
+    auth.clearSession()
+    club.clear()
+    router.push('/')
+  }
 }
 </script>
 
@@ -76,7 +112,9 @@ function begin() {
         Start setup
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M5 12h14M13 5l7 7-7 7" /></svg>
       </button>
-      <RouterLink :to="{ name: 'dashboard' }" class="welcome__skip">I'll do this later</RouterLink>
+      <button type="button" class="welcome__skip" @click="skipForNow">
+        {{ otherClubs.length ? `I'll do this later — go to ${otherClubs[0]!.name ?? 'my other club'}` : "I'll do this later" }}
+      </button>
     </div>
   </section>
 </template>
@@ -102,8 +140,8 @@ function begin() {
 .welcome__actions { display: inline-flex; align-items: center; gap: 20px; flex-wrap: wrap; }
 .welcome__cta { display: inline-flex; align-items: center; gap: 10px; padding: 16px 28px; background: var(--color-ink); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 15px; font-weight: 600; cursor: pointer; transition: background-color 0.15s ease; }
 .welcome__cta:hover { background: var(--color-graphite); }
-.welcome__skip { font-family: var(--font-body); font-size: 13px; color: var(--color-fog); text-decoration: none; }
-.welcome__skip:hover { color: var(--color-ink); }
+.welcome__skip { font-family: var(--font-body); font-size: 13px; color: var(--color-fog); text-decoration: none; background: transparent; border: 0; padding: 0; cursor: pointer; }
+.welcome__skip:hover { color: var(--color-ink); text-decoration: underline; }
 
 @media (max-width: 900px) {
   .welcome { margin-top: 20px; }

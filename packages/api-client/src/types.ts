@@ -172,26 +172,6 @@ export interface TeamPosition {
   status: 'confirmed' | 'guest' | 'pending'
 }
 
-export interface HonourBoardCategory {
-  id: ID
-  clubId: ID
-  name: string
-  slug: string
-  order: number
-  isDraft: boolean
-}
-
-export interface HonourBoardEntry {
-  id: ID
-  categoryId: ID
-  year: number
-  memberId: ID | null
-  memberName: string
-  photoUrl: string | null
-  score: string | null
-  notes: string | null
-}
-
 export interface Device {
   id: ID
   userId: ID

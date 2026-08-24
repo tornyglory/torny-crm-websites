@@ -13,7 +13,7 @@
  * In the CRM preview, `clubSlug` from BlockContext is null → renders a
  * friendly placeholder instead of firing off requests that 404.
  */
-import { computed, inject, isRef, onMounted, ref, watch, type Ref } from 'vue'
+import { computed, inject, isRef, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { events as eventsApi, type PublicEvent } from '@torny/api-client'
 import { BLOCK_CONTEXT_KEY, type BlockContext, type EventsCalendarProps } from '../types'
 
@@ -129,6 +129,19 @@ const TYPE_META: Record<LiveEventType, { label: string; color: string }> = {
 
 const activeType = ref<FilterEventType>('all')
 
+// ── View mode ──────────────────────────────────────────────────
+type ViewMode = 'calendar' | 'list'
+const viewMode = ref<ViewMode>('calendar')
+
+// ── List-view search + format filter (calendar mode ignores these) ─
+const listSearch = ref('')
+type FilterFormat = 'all' | 'singles' | 'pairs' | 'triples' | 'fours' | 'other'
+const activeFormat = ref<FilterFormat>('all')
+
+const FORMAT_LABEL: Record<Exclude<FilterFormat, 'all'>, string> = {
+  singles: 'Singles', pairs: 'Pairs', triples: 'Triples', fours: 'Fours', other: 'Other',
+}
+
 const eventTypeCounts = computed<Record<LiveEventType, number>>(() => {
   const counts: Record<LiveEventType, number> = { tournament: 0, pennant: 0, social: 0, training: 0, other: 0 }
   for (const e of monthEventsFetched.value) {
@@ -142,10 +155,39 @@ const availableTypes = computed<LiveEventType[]>(() =>
   (Object.keys(TYPE_META) as LiveEventType[]).filter((t) => eventTypeCounts.value[t] > 0),
 )
 
+const formatCounts = computed<Record<Exclude<FilterFormat, 'all'>, number>>(() => {
+  const counts = { singles: 0, pairs: 0, triples: 0, fours: 0, other: 0 } as Record<Exclude<FilterFormat, 'all'>, number>
+  for (const e of monthEventsFetched.value) {
+    if (activeType.value !== 'all' && e.event_type !== activeType.value) continue
+    if (e.format && e.format in counts) counts[e.format as Exclude<FilterFormat, 'all'>] += 1
+  }
+  return counts
+})
+const availableFormats = computed<Array<Exclude<FilterFormat, 'all'>>>(() =>
+  (Object.keys(FORMAT_LABEL) as Array<Exclude<FilterFormat, 'all'>>).filter((f) => formatCounts.value[f] > 0),
+)
+
 // ── Events in the visible month (server already scoped by range) ─
 const monthEvents = computed<EventEntry[]>(() => {
   if (activeType.value === 'all') return monthEventsFetched.value
   return monthEventsFetched.value.filter((e) => e.event_type === activeType.value)
+})
+
+/** List view sees the same type-scoped set, then applies search + format. */
+const listEvents = computed<EventEntry[]>(() => {
+  const q = listSearch.value.trim().toLowerCase()
+  return monthEvents.value
+    .filter((e) => {
+      if (activeFormat.value !== 'all' && e.format !== activeFormat.value) return false
+      if (!q) return true
+      return (
+        e.title.toLowerCase().includes(q) ||
+        (e.excerpt ?? '').toLowerCase().includes(q) ||
+        (e.location ?? '').toLowerCase().includes(q) ||
+        (e.host_name ?? '').toLowerCase().includes(q)
+      )
+    })
+    .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
 })
 
 const eventsByDay = computed<Map<number, EventEntry[]>>(() => {
@@ -236,6 +278,39 @@ function formatShortDate(iso: string): { day: string; month: string } {
 }
 
 const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlug.value) : null))
+
+// ── Detail modal ───────────────────────────────────────────────
+// Click an event chip or a highlights row to open. Deep-linked URLs
+// aren't available yet (no per-event public endpoint — brief 33 §5).
+const activeEvent = ref<EventEntry | null>(null)
+function openEvent(e: EventEntry) { activeEvent.value = e }
+function closeEvent() { activeEvent.value = null }
+
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && activeEvent.value) {
+    e.preventDefault()
+    closeEvent()
+  }
+}
+onMounted(() => window.addEventListener('keydown', onKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+
+/** Full formatted date + time range for the modal header. */
+function formatFullDateTime(iso: string, endIso?: string | null): string {
+  const start = new Date(iso)
+  const dateStr = start.toLocaleString('en-NZ', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+  return `${dateStr} · ${formatTimeRange(iso, endIso)}`
+}
+
+/** Total spots taken (going + maybe) for the capacity read-out. */
+function spotsTaken(e: EventEntry): number {
+  return (e.rsvp_going_count ?? 0) + (e.rsvp_maybe_count ?? 0)
+}
 </script>
 
 <template>
@@ -250,7 +325,34 @@ const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlu
         <h2 class="evc__title">{{ props.heading }}</h2>
         <p v-if="props.description" class="evc__sub">{{ props.description }}</p>
       </div>
-      <!-- Month/List/Team toggle would live here — MVP renders only Month. -->
+      <div class="evc__view-toggle" role="tablist" aria-label="View">
+        <button
+          type="button"
+          role="tab"
+          class="evc__view-btn"
+          :class="{ 'evc__view-btn--active': viewMode === 'calendar' }"
+          :aria-selected="viewMode === 'calendar'"
+          @click="viewMode = 'calendar'"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M3 10h18M8 2v4M16 2v4"/>
+          </svg>
+          <span>Month</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="evc__view-btn"
+          :class="{ 'evc__view-btn--active': viewMode === 'list' }"
+          :aria-selected="viewMode === 'list'"
+          @click="viewMode = 'list'"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/>
+          </svg>
+          <span>List</span>
+        </button>
+      </div>
     </header>
 
     <!-- CRM-preview placeholder — no clubSlug means no data. -->
@@ -307,8 +409,8 @@ const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlu
         </a>
       </div>
 
-      <!-- Grid + side panel -->
-      <div class="evc__body">
+      <!-- Grid + side panel (calendar view) -->
+      <div v-if="viewMode === 'calendar'" class="evc__body">
         <div class="cal">
           <!-- Weekday header -->
           <div class="cal__week">
@@ -327,15 +429,17 @@ const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlu
             >
               <div v-if="cell.day != null" class="cal__day">{{ cell.day }}</div>
               <div v-if="cell.day != null && eventsByDay.get(cell.day)" class="cal__events">
-                <div
+                <button
                   v-for="e in eventsByDay.get(cell.day)"
                   :key="e.id"
+                  type="button"
                   class="cal__event"
                   :style="{ background: typeColor(e.event_type) + '18', color: typeColor(e.event_type), borderLeftColor: typeColor(e.event_type) } as any"
                   :title="`${e.title} · ${formatTimeRange(e.starts_at, e.ends_at)}${e.location ? ' · ' + e.location : ''}`"
+                  @click.stop="openEvent(e)"
                 >
                   {{ e.title }}
-                </div>
+                </button>
               </div>
             </div>
           </div>
@@ -347,24 +451,26 @@ const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlu
             Nothing scheduled this month.
           </div>
           <ul v-else class="side__list">
-            <li v-for="e in highlights" :key="e.id" class="hl">
-              <div class="hl__date">
-                <div class="hl__date-month">{{ formatShortDate(e.starts_at).month }}</div>
-                <div class="hl__date-day">{{ formatShortDate(e.starts_at).day }}</div>
-              </div>
-              <div class="hl__body">
-                <div class="hl__title">{{ e.title }}</div>
-                <div class="hl__meta">
-                  <span>{{ formatTimeRange(e.starts_at, e.ends_at) }}</span>
-                  <template v-if="e.location">
-                    <span class="hl__sep">·</span><span>{{ e.location }}</span>
-                  </template>
+            <li v-for="e in highlights" :key="e.id">
+              <button type="button" class="hl" @click="openEvent(e)">
+                <div class="hl__date">
+                  <div class="hl__date-month">{{ formatShortDate(e.starts_at).month }}</div>
+                  <div class="hl__date-day">{{ formatShortDate(e.starts_at).day }}</div>
                 </div>
-                <div class="hl__tags">
-                  <span class="hl__type" :style="{ color: typeColor(e.event_type) } as any">{{ typeLabel(e.event_type) }}</span>
-                  <span v-if="e.rsvp_going_count" class="hl__going">{{ e.rsvp_going_count }} going</span>
+                <div class="hl__body">
+                  <div class="hl__title">{{ e.title }}</div>
+                  <div class="hl__meta">
+                    <span>{{ formatTimeRange(e.starts_at, e.ends_at) }}</span>
+                    <template v-if="e.location">
+                      <span class="hl__sep">·</span><span>{{ e.location }}</span>
+                    </template>
+                  </div>
+                  <div class="hl__tags">
+                    <span class="hl__type" :style="{ color: typeColor(e.event_type) } as any">{{ typeLabel(e.event_type) }}</span>
+                    <span v-if="e.rsvp_going_count" class="hl__going">{{ e.rsvp_going_count }} going</span>
+                  </div>
                 </div>
-              </div>
+              </button>
             </li>
           </ul>
 
@@ -381,7 +487,172 @@ const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlu
           </div>
         </aside>
       </div>
+
+      <!-- List view -->
+      <div v-else class="evc__list-wrap">
+        <div class="evc__list-toolbar">
+          <div class="evc__search">
+            <svg class="evc__search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              v-model="listSearch"
+              type="text"
+              class="evc__search-input"
+              :placeholder="`Search ${monthEvents.length} event${monthEvents.length === 1 ? '' : 's'} — name, place, host…`"
+              autocomplete="off"
+            />
+            <button v-if="listSearch" type="button" class="evc__search-clear" aria-label="Clear search" @click="listSearch = ''">×</button>
+          </div>
+          <div v-if="availableFormats.length" class="evc__format-chips" aria-label="Filter by format">
+            <button
+              type="button"
+              class="evc__chip evc__chip--sm"
+              :class="{ 'evc__chip--active': activeFormat === 'all' }"
+              @click="activeFormat = 'all'"
+            >
+              <span>All formats</span>
+              <span class="evc__chip-count">{{ monthEvents.length }}</span>
+            </button>
+            <button
+              v-for="f in availableFormats"
+              :key="f"
+              type="button"
+              class="evc__chip evc__chip--sm"
+              :class="{ 'evc__chip--active': activeFormat === f }"
+              @click="activeFormat = f"
+            >
+              <span>{{ FORMAT_LABEL[f] }}</span>
+              <span class="evc__chip-count">{{ formatCounts[f] }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="listEvents.length === 0" class="evc__list-empty">
+          <div class="evc__list-empty-title">No events match.</div>
+          <p>Try clearing the search or changing filters.</p>
+        </div>
+
+        <ul v-else class="evc__list">
+          <li v-for="e in listEvents" :key="e.id">
+            <button type="button" class="lst" @click="openEvent(e)">
+              <div class="lst__date">
+                <div class="lst__date-month">{{ formatShortDate(e.starts_at).month }}</div>
+                <div class="lst__date-day">{{ formatShortDate(e.starts_at).day }}</div>
+              </div>
+              <div class="lst__body">
+                <div class="lst__title-row">
+                  <h3 class="lst__title">{{ e.title }}</h3>
+                  <div class="lst__tags">
+                    <span class="lst__type" :style="{ background: typeColor(e.event_type) + '18', color: typeColor(e.event_type) } as any">
+                      {{ typeLabel(e.event_type) }}
+                    </span>
+                    <span v-if="e.format" class="lst__format">{{ FORMAT_LABEL[e.format as Exclude<FilterFormat, 'all'>] ?? e.format }}</span>
+                  </div>
+                </div>
+                <p v-if="e.excerpt" class="lst__excerpt">{{ e.excerpt }}</p>
+                <div class="lst__meta">
+                  <span>{{ formatTimeRange(e.starts_at, e.ends_at) }}</span>
+                  <template v-if="e.location">
+                    <span class="lst__sep">·</span><span>{{ e.location }}</span>
+                  </template>
+                  <template v-if="e.host_name">
+                    <span class="lst__sep">·</span><span>Hosted by {{ e.host_name }}</span>
+                  </template>
+                </div>
+                <div v-if="e.rsvp_going_count > 0 || e.capacity" class="lst__rsvp">
+                  <template v-if="e.rsvp_going_count > 0">
+                    <span class="lst__rsvp-num">{{ e.rsvp_going_count }}</span> going
+                  </template>
+                  <template v-if="e.capacity != null">
+                    <span v-if="e.rsvp_going_count > 0" class="lst__sep">·</span>
+                    {{ e.capacity }} spots
+                  </template>
+                </div>
+              </div>
+              <div class="lst__chev" aria-hidden="true">›</div>
+            </button>
+          </li>
+        </ul>
+      </div>
     </template>
+
+    <!-- Event detail modal — click an event chip or highlight row to open. -->
+    <Teleport to="body">
+      <div v-if="activeEvent" class="evd" role="dialog" aria-modal="true" @click.self="closeEvent">
+        <div class="evd__card" :style="{ '--brand': brand } as any">
+          <button
+            type="button"
+            class="evd__close"
+            aria-label="Close"
+            @click="closeEvent"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+
+          <header class="evd__head">
+            <div class="evd__eyebrow">
+              <span class="evd__type-dot" :style="{ background: typeColor(activeEvent.event_type) } as any" />
+              <span>{{ typeLabel(activeEvent.event_type) }}<template v-if="activeEvent.format"> · {{ activeEvent.format }}</template></span>
+            </div>
+            <h3 class="evd__title">{{ activeEvent.title }}</h3>
+            <div class="evd__when">{{ formatFullDateTime(activeEvent.starts_at, activeEvent.ends_at) }}</div>
+          </header>
+
+          <div class="evd__meta">
+            <div v-if="activeEvent.location" class="evd__meta-row">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span>{{ activeEvent.location }}</span>
+            </div>
+            <div v-if="activeEvent.host_name" class="evd__meta-row">
+              <span v-if="activeEvent.host_avatar_url" class="evd__host-avatar"><img :src="activeEvent.host_avatar_url" :alt="activeEvent.host_name" /></span>
+              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+              <span>Hosted by {{ activeEvent.host_name }}</span>
+            </div>
+            <div v-if="activeEvent.capacity != null" class="evd__meta-row">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <span>{{ spotsTaken(activeEvent) }} / {{ activeEvent.capacity }} spots</span>
+            </div>
+          </div>
+
+          <p v-if="activeEvent.excerpt" class="evd__excerpt">{{ activeEvent.excerpt }}</p>
+
+          <div v-if="activeEvent.rsvp_going_count > 0 || activeEvent.rsvp_maybe_count > 0" class="evd__rsvp">
+            <div class="evd__rsvp-count">
+              <span class="evd__rsvp-num">{{ activeEvent.rsvp_going_count }}</span>
+              <span class="evd__rsvp-key">going</span>
+              <template v-if="activeEvent.rsvp_maybe_count > 0">
+                <span class="evd__rsvp-sep">·</span>
+                <span class="evd__rsvp-num">{{ activeEvent.rsvp_maybe_count }}</span>
+                <span class="evd__rsvp-key">maybe</span>
+              </template>
+            </div>
+            <div v-if="activeEvent.rsvp_going_preview?.length" class="evd__avatars">
+              <template v-for="(p, i) in activeEvent.rsvp_going_preview" :key="i">
+                <img v-if="p.avatar_url" :src="p.avatar_url" :alt="p.initials" class="evd__avatar" />
+                <span v-else class="evd__avatar evd__avatar--initials">{{ p.initials }}</span>
+              </template>
+            </div>
+          </div>
+
+          <footer class="evd__foot">
+            <button type="button" class="evd__btn evd__btn--ghost" @click="closeEvent">Close</button>
+            <template v-if="activeEvent.rsvp_open">
+              <button
+                type="button"
+                class="evd__btn evd__btn--primary"
+                @click="closeEvent"
+                title="RSVP submission ships in a later brief — this closes the modal for now."
+              >
+                RSVP coming soon
+              </button>
+            </template>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -417,6 +688,48 @@ const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlu
 .evc__ical { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--color-ink); color: #fff; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; text-decoration: none; }
 .evc__ical:hover { background: var(--color-graphite); }
 
+/* View toggle (Month / List) */
+.evc__view-toggle { display: inline-flex; padding: 4px; gap: 2px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 999px; flex-shrink: 0; }
+.evc__view-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 0; border-radius: 999px; background: transparent; font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--color-graphite); cursor: pointer; }
+.evc__view-btn:hover { color: var(--color-ink); }
+.evc__view-btn--active { background: #fff; color: var(--color-ink); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+
+/* List-mode toolbar (search + format chips) */
+.evc__list-wrap { display: flex; flex-direction: column; gap: 20px; }
+.evc__list-toolbar { display: flex; flex-direction: column; gap: 12px; }
+.evc__search { position: relative; }
+.evc__search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--color-fog); pointer-events: none; }
+.evc__search-input { width: 100%; padding: 12px 44px 12px 42px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 14px; background: #fff; color: var(--color-ink); box-sizing: border-box; }
+.evc__search-input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 15%, transparent); }
+.evc__search-clear { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: transparent; border: 0; font-size: 20px; color: var(--color-fog); cursor: pointer; padding: 0 6px; line-height: 1; }
+.evc__format-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.evc__chip--sm { padding: 5px 10px; font-size: 11px; }
+
+/* List rows */
+.evc__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.evc__list-empty { padding: 40px 24px; text-align: center; background: var(--color-surface); border: 1px dashed var(--color-hairline); border-radius: 14px; color: var(--color-fog); font-family: var(--font-body); }
+.evc__list-empty-title { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--color-ink); margin-bottom: 4px; }
+.evc__list-empty p { margin: 0; font-size: 13px; }
+
+.lst { display: grid; grid-template-columns: 56px 1fr auto; gap: 16px; align-items: start; width: 100%; padding: 16px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; cursor: pointer; text-align: left; transition: border-color 120ms, transform 120ms; }
+.lst:hover { border-color: var(--brand); transform: translateY(-1px); }
+.lst:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.lst__date { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 4px; background: var(--color-ink); color: #fff; border-radius: 10px; }
+.lst__date-month { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; opacity: 0.8; }
+.lst__date-day { font-family: var(--font-display); font-size: 22px; font-weight: 700; line-height: 1; margin-top: 2px; }
+.lst__body { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.lst__title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.lst__title { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--color-ink); margin: 0; letter-spacing: -0.01em; }
+.lst__tags { display: inline-flex; gap: 6px; flex-shrink: 0; }
+.lst__type { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.lst__format { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; background: var(--color-surface); color: var(--color-graphite); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.lst__excerpt { font-family: var(--font-body); font-size: 13px; line-height: 1.5; color: var(--color-graphite); margin: 0; }
+.lst__meta { display: flex; flex-wrap: wrap; gap: 4px; font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
+.lst__sep { opacity: 0.5; margin: 0 2px; }
+.lst__rsvp { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-body); font-size: 12px; color: var(--color-graphite); margin-top: 2px; }
+.lst__rsvp-num { font-family: var(--font-display); font-weight: 700; color: var(--color-ink); }
+.lst__chev { font-family: var(--font-display); font-size: 20px; color: var(--color-fog); line-height: 1; }
+
 /* Body: grid + side */
 .evc__body { display: grid; grid-template-columns: 1fr 300px; gap: 24px; align-items: start; }
 
@@ -431,7 +744,8 @@ const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlu
 .cal__cell--today .cal__day { background: var(--color-ink); color: #fff; }
 .cal__day { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--color-graphite); width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; }
 .cal__events { display: flex; flex-direction: column; gap: 3px; }
-.cal__event { font-family: var(--font-body); font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border-left: 3px solid; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal__event { font-family: var(--font-body); font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border-left: 3px solid; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; text-align: left; width: 100%; box-sizing: border-box; }
+.cal__event:hover { filter: brightness(0.95); }
 
 /* Side */
 .side { display: flex; flex-direction: column; gap: 20px; }
@@ -439,7 +753,9 @@ const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlu
 .side__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .side__empty { padding: 20px; background: #fff; border: 1px dashed var(--color-hairline); border-radius: 12px; font-family: var(--font-body); font-size: 13px; color: var(--color-fog); text-align: center; }
 
-.hl { display: flex; gap: 12px; padding: 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; }
+.hl { display: flex; gap: 12px; padding: 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; cursor: pointer; text-align: left; width: 100%; transition: border-color 120ms, transform 120ms; }
+.hl:hover { border-color: var(--brand); transform: translateY(-1px); }
+.hl:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .hl__date { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 44px; padding: 6px 4px; background: var(--color-ink); color: #fff; border-radius: 8px; flex-shrink: 0; }
 .hl__date-month { font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; opacity: 0.8; }
 .hl__date-day { font-family: var(--font-display); font-size: 18px; font-weight: 700; line-height: 1; margin-top: 2px; }
@@ -470,5 +786,50 @@ const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlu
   .cal__day { width: 18px; height: 18px; font-size: 10px; }
   .cal__event { display: none; }
   .cal__cell:has(.cal__events) .cal__day { background: var(--brand); color: #fff; }
+}
+
+/* ── Event detail modal ─────────────────────────────────────── */
+.evd { position: fixed; inset: 0; background: rgba(10, 10, 11, 0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 24px; animation: evd-fade 160ms ease-out; }
+@keyframes evd-fade { from { opacity: 0; } to { opacity: 1; } }
+.evd__card { position: relative; width: 100%; max-width: 520px; max-height: calc(100vh - 48px); overflow-y: auto; background: #fff; border-radius: 20px; padding: 32px; box-shadow: 0 24px 64px rgba(0,0,0,0.24); animation: evd-slide 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes evd-slide { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.evd__close { position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; border-radius: 999px; background: var(--color-surface); border: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--color-fog); cursor: pointer; transition: background 120ms, color 120ms; }
+.evd__close:hover { background: var(--color-hairline); color: var(--color-ink); }
+
+.evd__head { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; padding-right: 40px; }
+.evd__eyebrow { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.evd__type-dot { width: 8px; height: 8px; border-radius: 999px; }
+.evd__title { font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; line-height: 1.15; }
+.evd__when { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); }
+
+.evd__meta { display: flex; flex-direction: column; gap: 10px; padding: 16px 0; border-top: 1px solid var(--color-hairline); border-bottom: 1px solid var(--color-hairline); }
+.evd__meta-row { display: flex; align-items: center; gap: 10px; font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); }
+.evd__meta-row svg { flex-shrink: 0; color: var(--color-fog); }
+.evd__host-avatar { width: 20px; height: 20px; border-radius: 999px; overflow: hidden; flex-shrink: 0; }
+.evd__host-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.evd__excerpt { font-family: var(--font-body); font-size: 14px; line-height: 1.55; color: var(--color-ink); margin: 20px 0; }
+
+.evd__rsvp { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; background: var(--color-surface); border-radius: 12px; margin-bottom: 20px; }
+.evd__rsvp-count { display: flex; align-items: baseline; gap: 6px; }
+.evd__rsvp-num { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--color-ink); }
+.evd__rsvp-key { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-fog); }
+.evd__rsvp-sep { color: var(--color-fog); }
+.evd__avatars { display: inline-flex; align-items: center; }
+.evd__avatar { width: 28px; height: 28px; border-radius: 999px; border: 2px solid #fff; background: var(--color-hairline); color: var(--color-graphite); display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 10px; font-weight: 700; margin-left: -8px; overflow: hidden; box-sizing: border-box; }
+.evd__avatar:first-child { margin-left: 0; }
+.evd__avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.evd__foot { display: flex; gap: 10px; justify-content: flex-end; }
+.evd__btn { padding: 10px 18px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; }
+.evd__btn--primary { background: var(--color-ink); color: #fff; }
+.evd__btn--primary:hover { background: var(--color-graphite); }
+.evd__btn--ghost { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
+.evd__btn--ghost:hover { background: var(--color-surface); }
+
+@media (max-width: 640px) {
+  .evd { padding: 16px; }
+  .evd__card { padding: 24px 20px; border-radius: 16px; }
+  .evd__title { font-size: 22px; }
 }
 </style>

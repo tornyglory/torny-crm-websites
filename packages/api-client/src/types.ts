@@ -122,33 +122,71 @@ export interface Member {
   joinedAt: string
 }
 
-export type EventType =
-  | 'tournament'
-  | 'social'
-  | 'meeting'
-  | 'coaching'
-  | 'working-bee'
-  | 'presentation'
-  | 'fundraiser'
-  | 'function'
-  | 'other'
+/** Backend event-type whitelist per brief 33. */
+export type EventType = 'tournament' | 'pennant' | 'social' | 'training' | 'other'
 
 export type BowlsFormat = 'singles' | 'pairs' | 'triples' | 'fours' | 'other'
 
-export interface Event {
-  id: ID
-  clubId: ID
+/** Short RSVP preview entry attached to public event responses. */
+export interface EventRsvpPreview {
+  initials: string
+  avatar_url: string | null
+}
+
+/**
+ * Public event shape — returned by GET /public/clubs/:slug/events and
+ * present on /site.events_upcoming[]. Matches brief 33 §1 exactly.
+ */
+export interface PublicEvent {
+  id: number
   slug: string
   title: string
-  description: string | null
-  startsAt: string
-  endsAt: string
-  /** The kind of event — tournament, social, meeting, etc. */
-  eventType: EventType
-  /** Only present for tournaments; null for other event types. */
+  excerpt: string | null
+  event_type: EventType
   format: BowlsFormat | null
+  starts_at: string
+  ends_at: string | null
   location: string | null
-  rsvpOpen: boolean
+  cover_url: string | null
+  host_name: string | null
+  host_avatar_url: string | null
+  capacity: number | null
+  is_ticketed: boolean
+  rsvp_open: boolean
+  rsvp_going_count: number
+  rsvp_maybe_count: number
+  rsvp_going_preview: EventRsvpPreview[]
+}
+
+/**
+ * Authed / CRM-facing event shape. Superset of PublicEvent — includes
+ * fields owners edit (description, host_user_id, is_published).
+ */
+export interface Event {
+  id: ID
+  club_id: ID
+  slug: string
+  title: string
+  excerpt: string | null
+  description: string | null
+  event_type: EventType
+  format: BowlsFormat | null
+  starts_at: string
+  ends_at: string | null
+  location: string | null
+  cover_url: string | null
+  host_user_id: ID | null
+  host_name: string | null
+  host_avatar_url: string | null
+  capacity: number | null
+  is_ticketed: boolean
+  is_published: boolean
+  rsvp_open: boolean
+  rsvp_going_count: number
+  rsvp_maybe_count: number
+  rsvp_going_preview: EventRsvpPreview[]
+  created_at?: string
+  updated_at?: string | null
 }
 
 export interface TeamSelection {

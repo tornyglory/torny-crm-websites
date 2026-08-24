@@ -5,18 +5,16 @@
  * event types, plus a right column with highlights + "This month at a glance"
  * stats.
  *
- * Data sources:
- *   - BlockContext.events — hydrated by PageRenderer from /site.events_upcoming
- *     (current 20 upcoming, brief 29 shape). MVP uses this for the current
- *     month.
- *   - TODO once brief 33 ships: swap to publicList(slug, since, until) so
- *     prev / next month navigation returns real events instead of an empty
- *     grid.
+ * Wired to brief 33's public endpoints via api-client:
+ *   - events.publicList(slug, { since, until, type }) — one fetch per
+ *     visible month; refetches on prev / next.
+ *   - events.publicIcalUrl(slug) — powers the "Add to my calendar" button.
  *
- * "Add to my calendar" links to `/events.ics` on the club's public site
- * (brief 33 §2). Until backend ships that, the link 404s gracefully.
+ * In the CRM preview, `clubSlug` from BlockContext is null → renders a
+ * friendly placeholder instead of firing off requests that 404.
  */
-import { computed, inject, isRef, ref, type Ref } from 'vue'
+import { computed, inject, isRef, onMounted, ref, watch, type Ref } from 'vue'
+import { events as eventsApi, type PublicEvent } from '@torny/api-client'
 import { BLOCK_CONTEXT_KEY, type BlockContext, type EventsCalendarProps } from '../types'
 
 const props = withDefaults(defineProps<EventsCalendarProps>(), {
@@ -35,8 +33,8 @@ const ctx = computed<BlockContext | null>(() => {
 const clubSlug = computed<string | null>(() => ctx.value?.clubSlug ?? null)
 const brand = computed(() => ctx.value?.brandPrimary ?? '#2563EB')
 
-type EventEntry = NonNullable<BlockContext['events']>[number]
-const allEvents = computed<EventEntry[]>(() => ctx.value?.events ?? [])
+/** Local alias — the block only cares about `PublicEvent` fields. */
+type EventEntry = PublicEvent
 
 // ── Visible month state ────────────────────────────────────────
 const today = new Date()
@@ -81,68 +79,73 @@ const weekNumber = computed(() => {
   return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
 })
 
-// ── Filter chips ───────────────────────────────────────────────
-type EventType =
-  | 'all'
-  | 'tournament'
-  | 'social'
-  | 'meeting'
-  | 'coaching'
-  | 'working-bee'
-  | 'presentation'
-  | 'fundraiser'
-  | 'function'
-  | 'other'
+// ── Fetch (brief 33) ───────────────────────────────────────────
+const monthEventsFetched = ref<EventEntry[]>([])
+const fetching = ref(false)
+let fetchAbort: AbortController | null = null
 
-const TYPE_META: Record<Exclude<EventType, 'all'>, { label: string; color: string }> = {
-  tournament:    { label: 'Tournament',   color: '#1F2937' },
-  social:        { label: 'Social',       color: '#DC2626' },
-  meeting:       { label: 'Meeting',      color: '#0F766E' },
-  coaching:      { label: 'Coaching',     color: '#7C3AED' },
-  'working-bee': { label: 'Working bee',  color: '#B45309' },
-  presentation: { label: 'Presentation', color: '#0369A1' },
-  fundraiser:   { label: 'Fundraiser',   color: '#BE185D' },
-  function:     { label: 'Function',     color: '#166534' },
-  other:        { label: 'Other',        color: '#6B7280' },
+async function loadMonth() {
+  if (!clubSlug.value) return
+  if (fetchAbort) fetchAbort.abort()
+  fetchAbort = new AbortController()
+  fetching.value = true
+  try {
+    const first = firstOfMonth(visibleYear.value, visibleMonth.value)
+    // `until` exclusive — one day past end of month covers the last day fully.
+    const until = new Date(visibleYear.value, visibleMonth.value + 1, 1)
+    const res = await eventsApi.publicList(
+      clubSlug.value,
+      {
+        since: first.toISOString(),
+        until: until.toISOString(),
+        limit: 500,
+      },
+      { signal: fetchAbort.signal },
+    )
+    monthEventsFetched.value = res.events
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return
+    monthEventsFetched.value = []
+  } finally {
+    fetching.value = false
+  }
 }
 
-const activeType = ref<EventType>('all')
+onMounted(() => { if (clubSlug.value) void loadMonth() })
+watch([clubSlug, visibleYear, visibleMonth], () => { void loadMonth() })
 
-const eventTypeCounts = computed<Record<Exclude<EventType, 'all'>, number>>(() => {
-  const start = firstOfMonth(visibleYear.value, visibleMonth.value).getTime()
-  const end = lastOfMonth(visibleYear.value, visibleMonth.value).getTime() + 86_400_000
-  const counts = Object.fromEntries(
-    (Object.keys(TYPE_META) as Array<Exclude<EventType, 'all'>>).map((k) => [k, 0]),
-  ) as Record<Exclude<EventType, 'all'>, number>
-  for (const e of allEvents.value) {
-    const t = new Date(e.starts_at).getTime()
-    if (t < start || t >= end) continue
-    const key = (e.event_type ?? 'other') as Exclude<EventType, 'all'>
-    if (key in counts) counts[key] += 1
-    else counts.other += 1
+// ── Filter chips ───────────────────────────────────────────────
+// Aligned to the backend whitelist (brief 33 §5).
+type FilterEventType = 'all' | 'tournament' | 'pennant' | 'social' | 'training' | 'other'
+type LiveEventType = Exclude<FilterEventType, 'all'>
+
+const TYPE_META: Record<LiveEventType, { label: string; color: string }> = {
+  tournament: { label: 'Tournament', color: '#1F2937' },
+  pennant:    { label: 'Pennant',    color: '#0369A1' },
+  social:     { label: 'Social',     color: '#DC2626' },
+  training:   { label: 'Training',   color: '#7C3AED' },
+  other:      { label: 'Other',      color: '#6B7280' },
+}
+
+const activeType = ref<FilterEventType>('all')
+
+const eventTypeCounts = computed<Record<LiveEventType, number>>(() => {
+  const counts: Record<LiveEventType, number> = { tournament: 0, pennant: 0, social: 0, training: 0, other: 0 }
+  for (const e of monthEventsFetched.value) {
+    const key = ((e.event_type as LiveEventType) in counts ? e.event_type : 'other') as LiveEventType
+    counts[key] += 1
   }
   return counts
 })
 
-const availableTypes = computed(() =>
-  (Object.keys(TYPE_META) as Array<Exclude<EventType, 'all'>>).filter(
-    (t) => eventTypeCounts.value[t] > 0,
-  ),
+const availableTypes = computed<LiveEventType[]>(() =>
+  (Object.keys(TYPE_META) as LiveEventType[]).filter((t) => eventTypeCounts.value[t] > 0),
 )
 
-// ── Events in the visible month ────────────────────────────────
+// ── Events in the visible month (server already scoped by range) ─
 const monthEvents = computed<EventEntry[]>(() => {
-  const start = firstOfMonth(visibleYear.value, visibleMonth.value).getTime()
-  const end = lastOfMonth(visibleYear.value, visibleMonth.value).getTime() + 86_400_000
-  return allEvents.value.filter((e) => {
-    const t = new Date(e.starts_at).getTime()
-    if (t < start || t >= end) return false
-    if (activeType.value !== 'all') {
-      const type = (e.event_type ?? 'other') as EventType
-      if (type !== activeType.value) return false
-    }
-    return true
-  })
+  if (activeType.value === 'all') return monthEventsFetched.value
+  return monthEventsFetched.value.filter((e) => e.event_type === activeType.value)
 })
 
 const eventsByDay = computed<Map<number, EventEntry[]>>(() => {
@@ -205,11 +208,11 @@ const monthStats = computed(() => {
 
 // ── Display helpers ────────────────────────────────────────────
 function typeColor(t: string | null | undefined): string {
-  const key = (t ?? 'other') as Exclude<EventType, 'all'>
+  const key = (t ?? 'other') as LiveEventType
   return TYPE_META[key]?.color ?? TYPE_META.other.color
 }
 function typeLabel(t: string | null | undefined): string {
-  const key = (t ?? 'other') as Exclude<EventType, 'all'>
+  const key = (t ?? 'other') as LiveEventType
   return TYPE_META[key]?.label ?? 'Other'
 }
 function formatTimeRange(iso: string, endIso?: string | null): string {
@@ -232,9 +235,7 @@ function formatShortDate(iso: string): { day: string; month: string } {
   }
 }
 
-const icalUrl = computed(() =>
-  clubSlug.value ? `/events.ics` : null,
-)
+const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlug.value) : null))
 </script>
 
 <template>

@@ -31,6 +31,20 @@ export type {
   MembershipTierListItem,
 } from './resources/members'
 export * as events from './resources/events'
+export type {
+  EventCreateInput,
+  EventUpdateInput,
+  ListEventsParams,
+  PublicListEventsParams,
+  PublicEventsResponse,
+} from './resources/events'
+export type {
+  EventType,
+  BowlsFormat,
+  Event,
+  PublicEvent,
+  EventRsvpPreview,
+} from './types'
 export * as teams from './resources/teams'
 export * as honourBoard from './resources/honour-board'
 export type {

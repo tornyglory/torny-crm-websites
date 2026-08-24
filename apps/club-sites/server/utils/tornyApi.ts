@@ -130,6 +130,12 @@ export interface SiteHonourEntry {
   /** First player's user_id, if a Torny user. Null for guest / historic wins. */
   member_user_id: number | null
   notes: string | null
+  /** Optional pre-computed initials for the avatar chip. */
+  initials?: string
+  /** Optional final score string, e.g. "21–14". */
+  score?: string | null
+  /** Optional ISO date the trophy was awarded. */
+  awarded_at?: string | null
   /** Full player list, in team order. `players[0]` mirrors `member_name`. */
   players?: Array<{
     user_id: number | null

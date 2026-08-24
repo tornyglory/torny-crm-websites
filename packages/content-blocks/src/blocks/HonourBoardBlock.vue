@@ -186,7 +186,14 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
   display: flex;
   flex-direction: column;
   gap: 40px;
-  padding: 96px 0;
+  /* Match HeroBlock: break out of the parent .page-blocks max-width so the
+     block spans the full viewport. Horizontal padding keeps the inner
+     content aligned with the site's reading rhythm. */
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding: 96px clamp(24px, 6vw, 120px);
+  box-sizing: border-box;
 }
 
 /* Header */

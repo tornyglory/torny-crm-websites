@@ -22,7 +22,9 @@ import {
   ApiError,
 } from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import Skeleton from '@/components/Skeleton.vue'
 import { useClubStore } from '@/stores/club'
+import { useHonourCategoriesStore } from '@/stores/honourCategories'
 import { useToast } from '@/composables/useToast'
 
 // ── Stores + helpers ──────────────────────────────────────────
@@ -33,7 +35,10 @@ const clubId = computed(() => club.current?.id ?? null)
 
 // ── Categories ────────────────────────────────────────────────
 
-const categories = ref<HonourCategory[]>([])
+const categoriesStore = useHonourCategoriesStore()
+// Reactive view of the shared store — reads only. All mutations go through
+// the store's methods so the sidebar badge stays in sync.
+const categories = computed(() => categoriesStore.items)
 const activeCategoryId = ref<number | null>(null)
 const catsLoading = ref(false)
 
@@ -46,8 +51,7 @@ async function loadCategories() {
   if (cid == null) return
   catsLoading.value = true
   try {
-    const list = await honourBoard.listCategories(cid)
-    categories.value = list
+    const list = await categoriesStore.fetch(cid, { force: true })
     if (list.length && activeCategoryId.value == null) {
       activeCategoryId.value = list[0]!.category_id
     }
@@ -184,7 +188,7 @@ async function submitCategory() {
   }
   try {
     const created = await honourBoard.createCategory(cid, payload)
-    categories.value = [...categories.value, created]
+    categoriesStore.upsert(created)
     activeCategoryId.value = created.category_id
     toast.success(`Added the ${created.name} category.`)
     closeCatCreate()
@@ -214,7 +218,7 @@ async function deleteCategory(cat: HonourCategory) {
   if (!ok) return
   try {
     await honourBoard.deleteCategory(cid, cat.category_id)
-    categories.value = categories.value.filter((c) => c.category_id !== cat.category_id)
+    categoriesStore.remove(cat.category_id)
     if (activeCategoryId.value === cat.category_id) {
       activeCategoryId.value = categories.value[0]?.category_id ?? null
     }
@@ -322,6 +326,12 @@ const teamSizeHint = computed(() => {
   if (!fmt || fmt.player_count == null) return null
   if (entryForm.players.length === fmt.player_count) return null
   return `Team size for ${fmt.label} is usually ${fmt.player_count}. Currently ${entryForm.players.length}.`
+})
+
+/** Singles categories don't need per-player positions — hide the dropdown. */
+const showPositions = computed(() => {
+  const fmt = formatFor(activeCategory.value?.format_id ?? null)
+  return (fmt?.player_count ?? 0) !== 1
 })
 
 async function submitEntry() {
@@ -497,7 +507,7 @@ onMounted(() => {
 })
 
 watch(clubId, (cid) => {
-  categories.value = []
+  categoriesStore.clear()
   entries.value = []
   activeCategoryId.value = null
   if (cid != null) {
@@ -532,8 +542,40 @@ watch(activeCategoryId, () => {
       </div>
     </header>
 
+    <!-- Initial load — skeleton grid so the layout doesn't pop -->
+    <div v-if="catsLoading && categories.length === 0" class="grid" aria-busy="true" aria-label="Loading honour board">
+      <aside class="cats">
+        <div class="cats__header">
+          <div class="cats__label">Categories</div>
+        </div>
+        <div class="cats__list">
+          <div v-for="n in 6" :key="n" class="cat cat--skel">
+            <Skeleton :width="`${70 - n * 4}%`" />
+          </div>
+        </div>
+      </aside>
+      <section class="feature">
+        <div class="cat-toolbar">
+          <div class="cat-toolbar__title">
+            <Skeleton width="240px" height-variant="lg" />
+            <Skeleton width="160px" style="margin-top: 10px;" />
+          </div>
+        </div>
+        <div class="hero hero--skel">
+          <div class="hero__medallion">
+            <Skeleton width="120px" height="120px" radius="pill" />
+          </div>
+          <div class="hero__body">
+            <Skeleton width="140px" />
+            <Skeleton width="280px" height-variant="lg" style="margin-top: 10px;" />
+            <Skeleton width="200px" style="margin-top: 12px;" />
+          </div>
+        </div>
+      </section>
+    </div>
+
     <!-- Empty state — no categories yet -->
-    <div v-if="!catsLoading && categories.length === 0" class="empty-state">
+    <div v-else-if="!catsLoading && categories.length === 0" class="empty-state">
       <div class="empty-state__title">No categories yet.</div>
       <p class="empty-state__body">
         Bowls clubs usually keep an honour board of every championship — Men's Singles, Ladies Pairs, Champion of Champions, and so on. We can seed the standard set in one click, or start with just the ones your club runs.
@@ -587,8 +629,32 @@ watch(activeCategoryId, () => {
           </div>
         </div>
 
-        <!-- Loading -->
-        <div v-if="entriesLoading" class="loading">Loading entries…</div>
+        <!-- Loading — hero + entries skeleton while entries fetch. -->
+        <template v-if="entriesLoading">
+          <div class="hero hero--skel">
+            <div class="hero__medallion">
+              <Skeleton width="120px" height="120px" radius="pill" />
+            </div>
+            <div class="hero__body">
+              <Skeleton width="140px" />
+              <Skeleton width="280px" height-variant="lg" style="margin-top: 10px;" />
+              <Skeleton width="200px" style="margin-top: 12px;" />
+            </div>
+          </div>
+          <div class="decades">
+            <div class="decade">
+              <div class="decade__header">
+                <Skeleton width="90px" />
+              </div>
+              <ul class="entry-rows">
+                <li v-for="n in 4" :key="n" class="entry-row entry-row--skel">
+                  <Skeleton width="40px" />
+                  <Skeleton :width="`${60 - n * 5}%`" />
+                </li>
+              </ul>
+            </div>
+          </div>
+        </template>
 
         <!-- No entries -->
         <div v-else-if="entries.length === 0" class="empty-cat">
@@ -731,7 +797,7 @@ watch(activeCategoryId, () => {
         <div class="players">
           <div class="players__head">
             <div class="players__label">
-              Players
+              {{ showPositions ? 'Players' : 'Player' }}
               <span v-if="teamSizeHint" class="players__hint">{{ teamSizeHint }}</span>
             </div>
           </div>
@@ -740,13 +806,13 @@ watch(activeCategoryId, () => {
               v-for="(p, idx) in entryForm.players"
               :key="p.rowKey"
               class="player-row"
-              :class="{ 'is-invalid': p.user_id != null && invalidUserId === p.user_id }"
+              :class="{ 'is-invalid': p.user_id != null && invalidUserId === p.user_id, 'player-row--no-position': !showPositions }"
             >
               <div class="player-row__name">
                 <input
                   v-model="p.display_name"
                   type="text"
-                  :placeholder="idx === 0 ? 'Skip name — start typing to search members' : 'Player name'"
+                  :placeholder="showPositions && idx === 0 ? 'Skip name — start typing to search members' : 'Player name — start typing to search members'"
                   @input="onRowInput(p, ($event.target as HTMLInputElement).value)"
                   @focus="onRowFocus(p)"
                   @blur="onRowBlur(p)"
@@ -776,7 +842,7 @@ watch(activeCategoryId, () => {
                   </button>
                 </div>
               </div>
-              <select v-model="p.position" class="player-row__position">
+              <select v-if="showPositions" v-model="p.position" class="player-row__position">
                 <option v-for="pos in POSITIONS" :key="pos || 'none'" :value="pos">{{ pos || '— position —' }}</option>
               </select>
               <button type="button" class="player-row__remove" @click="removePlayerRow(idx)" title="Remove player">
@@ -784,7 +850,7 @@ watch(activeCategoryId, () => {
               </button>
             </li>
           </ul>
-          <button type="button" class="players__add" @click="addPlayerRow">+ Add another player</button>
+          <button v-if="showPositions" type="button" class="players__add" @click="addPlayerRow">+ Add another player</button>
         </div>
 
         <div v-if="entryError" class="form__error">{{ entryError }}</div>
@@ -845,7 +911,12 @@ watch(activeCategoryId, () => {
 .cat-toolbar__desc { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); margin: 8px 0 0; line-height: 1.5; }
 .cat-toolbar__actions { display: flex; gap: 8px; flex-shrink: 0; }
 
-.loading { padding: 32px; text-align: center; font-family: var(--font-body); font-size: 14px; color: var(--color-fog); }
+/* Skeleton wrappers — the shimmer itself lives in `<Skeleton>`; these
+   rules just neutralise the real hero card's ink-blue gradient during
+   the loading state so it matches the rest of the CRM skeletons. */
+.cat--skel { padding: 12px 12px; pointer-events: none; }
+.hero--skel { pointer-events: none; background: #fff !important; border: 1px solid var(--color-hairline); color: var(--color-ink); }
+.entry-row--skel { pointer-events: none; }
 
 .empty-cat { padding: 32px; background: #fff; border: 1px dashed var(--color-hairline); border-radius: 16px; text-align: center; }
 .empty-cat__title { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--color-ink); margin-bottom: 6px; }
@@ -893,6 +964,7 @@ watch(activeCategoryId, () => {
 .players__hint { font-family: var(--font-body); font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--color-feature-tangerine); }
 .player-rows { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .player-row { display: grid; grid-template-columns: 1fr 160px 32px; gap: 10px; align-items: start; padding: 10px; background: var(--color-surface); border-radius: 10px; }
+.player-row--no-position { grid-template-columns: 1fr 32px; }
 .player-row.is-invalid { background: #FEE2E2; border: 1px solid #FCA5A5; }
 .player-row__name { position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .player-row__name input { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; }

@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
 import { useClubSettingsStore } from '@/stores/clubSettings'
 import { members as membersApi } from '@torny/api-client'
+import { useHonourCategoriesStore } from '@/stores/honourCategories'
 import NotificationsDropdown from '@/components/NotificationsDropdown.vue'
 import NewMenu from '@/components/NewMenu.vue'
 import UserMenu from '@/components/UserMenu.vue'
@@ -32,6 +33,17 @@ watch(() => club.current?.id, loadSettings)
 const clubLogoUrl = computed<string | null>(
   () => settingsStore.data?.brand?.logo_url ?? club.current?.logoUrl ?? null,
 )
+
+/** Honour-board category count for the sidebar badge — reads from the
+ *  shared store so mutations in the honour-board view keep it in sync. */
+const honourCategoriesStore = useHonourCategoriesStore()
+async function loadHonourCategoryCount() {
+  const cid = club.current?.id
+  if (typeof cid === 'number') await honourCategoriesStore.fetch(cid)
+  else honourCategoriesStore.clear()
+}
+onMounted(loadHonourCategoryCount)
+watch(() => club.current?.id, loadHonourCategoryCount)
 const moreOpen = ref(false)
 const notifsOpen = ref(false)
 const newMenuOpen = ref(false)
@@ -185,12 +197,19 @@ const manageNav = computed<NavItem[]>(() => [
   { to: '/crm/applications', label: 'Applications', icon: 'applications', count: 3, countTone: 'accent' },
   { to: '/crm/enquiries', label: 'Enquiries', icon: 'enquiries', count: 2, countTone: 'accent' },
 ])
-const contentNav: NavItem[] = [
+const contentNav = computed<NavItem[]>(() => [
   { to: '/crm/website', label: 'Website', icon: 'website' },
   { to: '/crm/events', label: 'Events', icon: 'events', count: 12, countTone: 'neutral' },
   { to: '/crm/teams', label: 'Team selections', icon: 'teams', count: 4, countTone: 'neutral' },
-  { to: '/crm/honour-board', label: 'Honour board', icon: 'honour', count: 11, countTone: 'neutral' },
-]
+  {
+    to: '/crm/honour-board',
+    label: 'Honour board',
+    icon: 'honour',
+    ...(honourCategoriesStore.loadedClubId != null
+      ? { count: honourCategoriesStore.count, countTone: 'neutral' as const }
+      : {}),
+  },
+])
 const accountNav: NavItem[] = [
   { to: '/crm/communications', label: 'Communications', icon: 'communications' },
   { to: '/crm/settings', label: 'Settings', icon: 'settings' },

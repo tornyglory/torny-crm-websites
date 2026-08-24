@@ -25,6 +25,7 @@ import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
 import { useOnboardingStore } from '@/stores/onboarding'
 import ImagePicker from '@/components/ImagePicker.vue'
+import Skeleton from '@/components/Skeleton.vue'
 import BlockPaletteDialog from '@/components/BlockPaletteDialog.vue'
 import WebsiteSettingsPanel, { type WebsiteSettingsSection } from '@/components/WebsiteSettingsPanel.vue'
 import { ApiError, pages, isValidPageSlug, RESERVED_PAGE_SLUGS, slugifyTitle, type PageBlock } from '@torny/api-client'
@@ -439,18 +440,11 @@ const SEEDS: Record<SystemPageSlug, () => Block[]> = {
     { type: 'hero', props: heroDefault("What's on", 'Tournaments, roll-ups, training nights.', ['Contact us', '/contact']) },
     { type: 'eventList', props: { heading: 'Upcoming', limit: 20, upcomingOnly: true } satisfies EventListProps },
   ),
-  'honour-board': () => seed(
-    { type: 'hero', props: heroDefault('Honour board', 'A century of results.', ['Back to the club', '/']) },
-    { type: 'honourBoard', props: {
-      eyebrow: 'Honour board · Since 1953',
-      heading: 'Champions.',
-      description: 'Seventy-three seasons of Champion of Champions. Forty-one unique winners on the plaque above the bar.',
-      categorySlug: 'champion-of-champions',
-      yearsToShow: 5,
-      ctaLabel: 'See the whole honour board',
-      ctaHref: '/honour-board',
-    } satisfies HonourBoardProps },
-  ),
+  // `/honour-board` renders a purpose-built searchable full-page experience
+  // via the Nuxt fallback slot (see apps/club-sites/pages/honour-board/index.vue).
+  // Ship an empty seed so new clubs get that search page by default; owners
+  // can still publish a custom layout of blocks in the CRM if they'd rather.
+  'honour-board': () => seed(),
   contact: () => seed(
     { type: 'hero', props: heroDefault('Contact', 'Say hello. We\'ll get back to you.', ['Directions', '#directions']) },
     { type: 'contactForm', props: { heading: 'Drop us a note', submitLabel: 'Send', successMessage: 'Thanks — we\'ll be in touch.' } satisfies ContactFormProps },
@@ -1084,7 +1078,12 @@ const lastSavedLabel = computed(() => {
         <div class="pages-nav__head">
           <span class="pages-nav__label">Pages</span>
         </div>
-        <ul class="pages-nav__list">
+        <ul v-if="pagesStore.loading && sidebarPages.length === 0" class="pages-nav__list" aria-busy="true" aria-label="Loading pages">
+          <li v-for="n in 6" :key="`skel-${n}`" class="pages-nav__row pages-nav__row--skel">
+            <Skeleton :width="`${70 - n * 6}%`" />
+          </li>
+        </ul>
+        <ul v-else class="pages-nav__list">
           <li
             v-for="p in sidebarPages"
             :key="p.slug"
@@ -1128,7 +1127,6 @@ const lastSavedLabel = computed(() => {
           class="pages-nav__add"
           @click="openNewPage"
         >+ New page</button>
-        <div v-if="pagesStore.loading" class="pages-nav__loading">Loading pages…</div>
       </aside>
 
       <!-- Block list -->
@@ -1167,7 +1165,18 @@ const lastSavedLabel = computed(() => {
           </div>
         </details>
 
-        <div v-if="state.blocks.length === 0" class="empty">
+        <!-- Loading — skeleton block cards until the fetch lands. -->
+        <div v-if="loading && state.blocks.length === 0" class="blocks-skel" aria-busy="true" aria-label="Loading page">
+          <article v-for="n in 3" :key="`skel-${n}`" class="block block--skel">
+            <div class="block__handle" />
+            <div class="block__body">
+              <Skeleton width="70px" />
+              <Skeleton :width="`${70 - n * 8}%`" height-variant="lg" style="margin-top: 8px;" />
+            </div>
+          </article>
+        </div>
+
+        <div v-else-if="state.blocks.length === 0" class="empty">
           <div class="empty__title">Empty page.</div>
           <div class="empty__hint">Pick your first block to get started.</div>
           <button type="button" class="btn btn--primary" @click="paletteOpen = { after: null }">+ Add block</button>
@@ -2104,7 +2113,12 @@ const lastSavedLabel = computed(() => {
 .pages-nav__menu-item:hover { background: var(--color-surface); }
 .pages-nav__menu-item--danger { color: var(--color-danger); }
 .pages-nav__menu-item--danger:hover { background: #FEE2E2; }
-.pages-nav__loading { padding: 8px 10px; font-family: var(--font-body); font-size: 11px; color: var(--color-mute); text-align: center; }
+/* Skeleton wrappers — shimmer lives in the shared `<Skeleton>` primitive.
+   These rules just hide interactive affordances while loading. */
+.pages-nav__row--skel { padding: 10px 12px; pointer-events: none; }
+.blocks-skel { display: flex; flex-direction: column; gap: 12px; }
+.block--skel { pointer-events: none; }
+.block--skel .block__handle { visibility: hidden; }
 .pages-nav__item-name {
   flex: 1;
   min-width: 0;

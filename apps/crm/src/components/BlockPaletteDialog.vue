@@ -48,6 +48,7 @@ const TAGS_BY_TYPE: Record<BlockType, Tag[]> = {
   hero:           ['layout', 'text'],
   richText:       ['text'],
   eventList:      ['data'],
+  eventsCalendar: ['data', 'layout'],
   honourBoard:    ['data'],
   honourBoardSearch: ['data'],
   gallery:        ['media'],
@@ -170,6 +171,28 @@ const BlockPreview = defineComponent({
             rect(48, y + 4, 90, 5, { fill: ink }),
             rect(48, y + 14, 60, 4, { fill: graphite, opacity: 0.7 }),
           ]),
+        ])
+
+      case 'eventsCalendar':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          rect(16, 10, 60, 5, { fill: ink }),
+          // Month grid: 5x4 cells
+          ...Array.from({ length: 20 }).map((_, i) => {
+            const col = i % 5
+            const row = Math.floor(i / 5)
+            return rect(16 + col * 22, 24 + row * 18, 20, 16, { fill: graphite, opacity: 0.08, rx: 2 })
+          }),
+          // Event dots
+          rect(20, 30, 10, 2, { fill: accent }),
+          rect(42, 48, 8, 2, { fill: '#DC2626' }),
+          rect(64, 66, 12, 2, { fill: '#7C3AED' }),
+          // Side highlights panel
+          rect(140, 24, 44, 88, { fill: ink, opacity: 0.9, rx: 3 }),
+          rect(146, 32, 30, 2, { fill: '#fff', opacity: 0.9 }),
+          rect(146, 38, 24, 2, { fill: '#fff', opacity: 0.5 }),
+          rect(146, 52, 30, 2, { fill: '#fff', opacity: 0.9 }),
+          rect(146, 58, 20, 2, { fill: '#fff', opacity: 0.5 }),
         ])
 
       case 'honourBoard':

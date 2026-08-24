@@ -36,6 +36,7 @@ import type {
   HeroProps,
   RichTextProps,
   EventListProps,
+  EventsCalendarProps,
   HonourBoardProps,
   HonourBoardSearchProps,
   GalleryProps,
@@ -359,6 +360,13 @@ const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
       defaults: (): RichTextProps => ({ html: '<p>Everything coming up at the club. Members can RSVP directly.</p>' }) },
     { type: 'eventList', label: 'Events list', hint: 'The full upcoming feed', icon: '◧',
       defaults: (): EventListProps => ({ heading: 'Upcoming', limit: 20, upcomingOnly: true }) },
+    { type: 'eventsCalendar', label: 'Events · Calendar', hint: 'Month grid, filter chips, highlights + stats', icon: '▤',
+      defaults: (): EventsCalendarProps => ({
+        heading: "What's on the greens.",
+        description: '',
+        highlightsCount: 4,
+        showIcalExport: true,
+      }) },
     { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
       defaults: (): CtaBannerProps => ({ heading: 'Want to run an event?', ctaLabel: 'Tell us more', ctaHref: '/contact', tone: 'accent' }) },
   ],
@@ -401,6 +409,7 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   hero: 'Hero',
   richText: 'Rich text',
   eventList: 'Events',
+  eventsCalendar: 'Events · Calendar',
   honourBoard: 'Honour board',
   honourBoardSearch: 'Honour board · Search',
   gallery: 'Gallery',
@@ -986,6 +995,7 @@ function blockSummary(block: Block): string {
     case 'hero':          return (block.props as HeroProps).heading || '(no heading)'
     case 'richText':      return stripHtml((block.props as RichTextProps).html).slice(0, 60)
     case 'eventList':     return (block.props as EventListProps).heading ?? `${(block.props as EventListProps).limit ?? 4} upcoming events`
+    case 'eventsCalendar': return (block.props as EventsCalendarProps).heading || 'Events calendar'
     case 'honourBoard':   return (block.props as HonourBoardProps).heading || `Honour board — last ${(block.props as HonourBoardProps).yearsToShow ?? 10} years`
     case 'honourBoardSearch': return (block.props as HonourBoardSearchProps).heading || 'Full searchable honour board'
     case 'gallery':       return `${(block.props as GalleryProps).images.length} photos`
@@ -1343,6 +1353,40 @@ const lastSavedLabel = computed(() => {
                 class="switch"
                 :class="{ 'is-on': (selectedBlock.props as EventListProps).upcomingOnly !== false }"
                 @click="(selectedBlock.props as EventListProps).upcomingOnly = !(selectedBlock.props as EventListProps).upcomingOnly"
+              ><span class="switch__knob" /></button>
+            </label>
+          </template>
+
+          <!-- Events calendar (Paper: "What's on the greens") -->
+          <template v-else-if="selectedBlock.type === 'eventsCalendar'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as EventsCalendarProps).eyebrow" type="text" placeholder="Leave blank for auto Month · Week N" />
+              <span class="field__hint">Overrides the auto-generated month + ISO week line.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as EventsCalendarProps).heading" type="text" placeholder="What's on the greens." />
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as EventsCalendarProps).description" rows="3" placeholder="One line of context above the calendar." />
+            </label>
+            <label class="field">
+              <span class="field__label">Highlights to show</span>
+              <input v-model.number="(selectedBlock.props as EventsCalendarProps).highlightsCount" type="number" min="0" max="8" />
+              <span class="field__hint">Right-column card count. 4 fits without scrolling.</span>
+            </label>
+            <label class="switch-row">
+              <div>
+                <div class="switch-row__label">"Add to my calendar" button</div>
+                <div class="switch-row__hint">Links to the club's .ics feed (brief 33) so members can subscribe.</div>
+              </div>
+              <button
+                type="button"
+                class="switch"
+                :class="{ 'is-on': (selectedBlock.props as EventsCalendarProps).showIcalExport !== false }"
+                @click="(selectedBlock.props as EventsCalendarProps).showIcalExport = !((selectedBlock.props as EventsCalendarProps).showIcalExport !== false)"
               ><span class="switch__knob" /></button>
             </label>
           </template>

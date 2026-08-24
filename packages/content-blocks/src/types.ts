@@ -2,6 +2,7 @@ export type BlockType =
   | 'hero'
   | 'richText'
   | 'eventList'
+  | 'eventsCalendar'
   | 'honourBoard'
   | 'honourBoardSearch'
   | 'gallery'
@@ -51,6 +52,18 @@ export interface EventListProps {
   heading?: string
   limit?: number
   upcomingOnly?: boolean
+}
+
+/** Full-page events calendar block — month grid + highlights + stats.
+ *  Reads from brief 33's public per-month endpoint (with a /site fallback). */
+export interface EventsCalendarProps {
+  eyebrow?: string
+  heading?: string
+  description?: string
+  /** Highlights to show in the right column. Defaults to the next 4 events. */
+  highlightsCount?: number
+  /** Whether to render the "Add to my calendar" iCal button. */
+  showIcalExport?: boolean
 }
 
 export interface HonourBoardProps {
@@ -215,6 +228,7 @@ export type Block =
   | BlockBase<'hero', HeroProps>
   | BlockBase<'richText', RichTextProps>
   | BlockBase<'eventList', EventListProps>
+  | BlockBase<'eventsCalendar', EventsCalendarProps>
   | BlockBase<'honourBoard', HonourBoardProps>
   | BlockBase<'honourBoardSearch', HonourBoardSearchProps>
   | BlockBase<'gallery', GalleryProps>
@@ -249,6 +263,14 @@ export interface BlockContext {
     location?: string | null
     excerpt?: string | null
     slug?: string
+    /** Event type from brief 20 (tournament / social / meeting / …). */
+    event_type?: string | null
+    format?: string | null
+    host_name?: string | null
+    capacity?: number | null
+    rsvp_going_count?: number
+    rsvp_maybe_count?: number
+    rsvp_going_preview?: Array<{ initials: string; avatar_url?: string | null }>
   }>
   honourEntries?: Array<{
     category_slug: string

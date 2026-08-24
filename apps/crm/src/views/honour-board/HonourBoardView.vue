@@ -243,6 +243,10 @@ const editingEntry = ref<HonourEntry | null>(null)
 const entryForm = reactive({
   year: '' as string,
   note: '',
+  /** ISO date string `YYYY-MM-DD` bound to <input type="date">. */
+  awardedAt: '',
+  runnerUp: '',
+  score: '',
   players: [] as EditorPlayer[],
 })
 const entrySubmitting = ref(false)
@@ -260,16 +264,30 @@ function openEntryCreate() {
   editingEntry.value = null
   entryForm.year = String(new Date().getFullYear())
   entryForm.note = ''
+  entryForm.awardedAt = ''
+  entryForm.runnerUp = ''
+  entryForm.score = ''
   entryForm.players = defaultPlayerRows()
   entryError.value = null
   invalidUserId.value = null
   entryEditorOpen.value = true
 }
 
+/** Backend returns `awarded_at` as an ISO datetime; the <input type="date">
+ *  needs `YYYY-MM-DD`. Trim safely. */
+function toDateInputValue(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const idx = iso.indexOf('T')
+  return idx > 0 ? iso.slice(0, idx) : iso.slice(0, 10)
+}
+
 function openEntryEdit(entry: HonourEntry) {
   editingEntry.value = entry
   entryForm.year = entry.year == null ? '' : String(entry.year)
   entryForm.note = entry.note ?? ''
+  entryForm.awardedAt = toDateInputValue(entry.awarded_at)
+  entryForm.runnerUp = entry.runner_up ?? ''
+  entryForm.score = entry.score ?? ''
   entryForm.players = entry.players
     .slice()
     .sort((a, b) => a.sort_order - b.sort_order)
@@ -354,6 +372,9 @@ async function submitEntry() {
     category_id: catId,
     year: yearNum,
     note: entryForm.note.trim() || null,
+    awarded_at: entryForm.awardedAt.trim() || null,
+    runner_up: entryForm.runnerUp.trim() || null,
+    score: entryForm.score.trim() || null,
     players: entryForm.players.map((p, i) => ({
       user_id: p.user_id,
       display_name: p.display_name.trim(),
@@ -789,10 +810,25 @@ watch(activeCategoryId, () => {
             <span class="field__hint">Leave blank for undated (e.g. Life Members).</span>
           </label>
           <label class="field">
-            <span class="field__label">Note (optional)</span>
-            <input v-model="entryForm.note" type="text" placeholder="Down 12–8 at end 15" />
+            <span class="field__label">Awarded (optional)</span>
+            <input v-model="entryForm.awardedAt" type="date" />
+            <span class="field__hint">When the trophy was presented — shows in the "Awarded" column.</span>
           </label>
         </div>
+        <div class="form__row">
+          <label class="field">
+            <span class="field__label">Runner-up (optional)</span>
+            <input v-model="entryForm.runnerUp" maxlength="255" type="text" placeholder="e.g. Naenae Blue" />
+          </label>
+          <label class="field">
+            <span class="field__label">Score (optional)</span>
+            <input v-model="entryForm.score" maxlength="80" type="text" placeholder="21–14" />
+          </label>
+        </div>
+        <label class="field">
+          <span class="field__label">Note (optional)</span>
+          <input v-model="entryForm.note" type="text" placeholder="Down 12–8 at end 15 — set up a big finish" />
+        </label>
 
         <div class="players">
           <div class="players__head">

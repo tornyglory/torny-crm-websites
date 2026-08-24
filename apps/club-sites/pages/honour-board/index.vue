@@ -2,86 +2,104 @@
 /**
  * Honour board — searchable full-page experience.
  *
- * MVP reads from `/site.honour_board_recent[]` (capped at 60 entries by
- * brief 28) and does search / filter / sort / paging client-side. When
- * backend ships brief 31 (`/public/clubs/:slug/honour-{categories,entries}`)
- * this page swaps to a server-side data source so century-old clubs load
- * their full history.
+ * Backed by brief 31's public endpoints:
+ *   GET /public/clubs/:slug/honour-categories
+ *   GET /public/clubs/:slug/honour-entries?category_slug=&search=&sort=&limit=&offset=
  *
- * Rendered inside `<PageRenderer>` so a club that publishes its own custom
- * honour-board layout in the CRM keeps overriding this fallback.
+ * Rendered inside <PageRenderer> so a club that publishes a custom
+ * honour-board layout in the CRM overrides this fallback. New clubs
+ * get an empty seed for /honour-board so they land on this page.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import {
+  honourBoard,
+  type PublicHonourCategory,
+  type PublicHonourEntry,
+  type PublicHonourEntriesResponse,
+} from '@torny/api-client'
 
 const club = useClub()
 const { data: site } = await useSite()
-
 const accent = computed(() => site.value?.club.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
 
 usePageMeta('honour-board')
 
-const rawEntries = computed(() => site.value?.honour_board_recent ?? [])
+const clubSlug = computed(() => club.value?.slug ?? site.value?.club?.slug ?? '')
 
-// ── Category rail ───────────────────────────────────────────────
-// Derived from the entries payload. Once backend ships the categories
-// endpoint we'll swap to that + `entry_count` / `latest_year`.
-interface RailCategory {
-  slug: string
-  name: string
-  count: number
-  latest_year: number | null
-}
-const categories = computed<RailCategory[]>(() => {
-  const map = new Map<string, RailCategory>()
-  for (const e of rawEntries.value) {
-    const existing = map.get(e.category_slug)
-    if (existing) {
-      existing.count += 1
-      if (e.year != null && (existing.latest_year == null || e.year > existing.latest_year)) {
-        existing.latest_year = e.year
-      }
-    } else {
-      map.set(e.category_slug, {
-        slug: e.category_slug,
-        name: e.category_name,
-        count: 1,
-        latest_year: e.year ?? null,
-      })
-    }
-  }
-  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
-})
-
+// ── Filter / search / sort / paging state ──────────────────────
+type SortDir = 'year_desc' | 'year_asc'
 const activeCategorySlug = ref<string | 'all'>('all')
-
-// ── Filter + search + sort ─────────────────────────────────────
 const searchQuery = ref('')
-const sortDir = ref<'year_desc' | 'year_asc'>('year_desc')
+const sortDir = ref<SortDir>('year_desc')
+const PAGE_SIZE = 50
+const offset = ref(0)
 
-const filtered = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  let list = rawEntries.value
+// Reset paging whenever a filter changes so the "Load older" button
+// isn't offset into a stale page.
+watch([activeCategorySlug, sortDir], () => { offset.value = 0 })
 
-  if (activeCategorySlug.value !== 'all') {
-    list = list.filter((e) => e.category_slug === activeCategorySlug.value)
-  }
-
-  if (q.length > 0) {
-    list = list.filter((e) => {
-      if (`${e.year ?? ''}`.includes(q)) return true
-      if ((e.member_name ?? '').toLowerCase().includes(q)) return true
-      if ((e.notes ?? '').toLowerCase().includes(q)) return true
-      if (e.players?.some((p) => p.display_name.toLowerCase().includes(q))) return true
-      return false
-    })
-  }
-
-  return [...list].sort((a, b) => {
-    const ay = a.year ?? -Infinity
-    const by = b.year ?? -Infinity
-    return sortDir.value === 'year_desc' ? by - ay : ay - by
-  })
+// Debounced search so keystrokes don't hammer the endpoint.
+const debouncedSearch = ref('')
+let searchDebounce: ReturnType<typeof setTimeout> | null = null
+watch(searchQuery, (q) => {
+  if (searchDebounce) clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(() => {
+    debouncedSearch.value = q.trim()
+    offset.value = 0
+  }, 250)
 })
+
+// ── Categories (rail) — one fetch on load, revalidates via /site ─
+const { data: rawCategories } = await useAsyncData<PublicHonourCategory[]>(
+  () => `hb-cats:${clubSlug.value || 'unknown'}`,
+  async () => {
+    if (!clubSlug.value) return []
+    try {
+      return await honourBoard.publicListCategories(clubSlug.value)
+    } catch {
+      return []
+    }
+  },
+  { watch: [clubSlug] },
+)
+const categories = computed(() => rawCategories.value ?? [])
+const totalAcrossCategories = computed(() =>
+  categories.value.reduce((sum, c) => sum + (c.entry_count ?? 0), 0),
+)
+
+// ── Entries — refetches on filter / search / sort / offset ─────
+const entryKey = computed(
+  () =>
+    `hb-entries:${clubSlug.value || 'unknown'}` +
+    `|c:${activeCategorySlug.value}` +
+    `|q:${debouncedSearch.value}` +
+    `|s:${sortDir.value}` +
+    `|o:${offset.value}`,
+)
+
+const { data: entryResp, pending: entriesPending } =
+  await useAsyncData<PublicHonourEntriesResponse | null>(
+    () => entryKey.value,
+    async () => {
+      if (!clubSlug.value) return null
+      try {
+        return await honourBoard.publicListEntries(clubSlug.value, {
+          categorySlug: activeCategorySlug.value === 'all' ? undefined : activeCategorySlug.value,
+          search: debouncedSearch.value || undefined,
+          sort: sortDir.value,
+          limit: PAGE_SIZE,
+          offset: offset.value,
+        })
+      } catch {
+        return null
+      }
+    },
+    { watch: [entryKey] },
+  )
+
+const entries = computed<PublicHonourEntry[]>(() => entryResp.value?.entries ?? [])
+const total = computed(() => entryResp.value?.total ?? 0)
+const hasMore = computed(() => entryResp.value?.has_more ?? false)
 
 const activeCategoryLabel = computed(() =>
   activeCategorySlug.value === 'all'
@@ -90,19 +108,28 @@ const activeCategoryLabel = computed(() =>
 )
 
 const yearRange = computed<string | null>(() => {
-  const years = filtered.value.map((e) => e.year).filter((y): y is number => y != null)
-  if (years.length === 0) return null
-  const min = Math.min(...years)
-  const max = Math.max(...years)
-  return min === max ? String(min) : `${min}–${max}`
+  if (activeCategorySlug.value !== 'all') {
+    const c = categories.value.find((c) => c.slug === activeCategorySlug.value)
+    if (c?.earliest_year && c.latest_year) {
+      return c.earliest_year === c.latest_year ? `${c.latest_year}` : `${c.earliest_year}–${c.latest_year}`
+    }
+  } else {
+    const earliest = categories.value.reduce<number | null>(
+      (acc, c) => (c.earliest_year != null && (acc == null || c.earliest_year < acc) ? c.earliest_year : acc),
+      null,
+    )
+    const latest = categories.value.reduce<number | null>(
+      (acc, c) => (c.latest_year != null && (acc == null || c.latest_year > acc) ? c.latest_year : acc),
+      null,
+    )
+    if (earliest && latest) return earliest === latest ? `${latest}` : `${earliest}–${latest}`
+  }
+  return null
 })
 
-// ── Team display helpers ───────────────────────────────────────
-function teamDisplay(e: (typeof rawEntries.value)[number]): string {
-  if (e.players && e.players.length > 0) {
-    return e.players.map((p) => p.display_name).join(', ')
-  }
-  return e.member_name
+// ── Display helpers ────────────────────────────────────────────
+function teamDisplay(e: PublicHonourEntry): string {
+  return e.players.map((p) => p.display_name).join(', ')
 }
 function initialsOf(name: string): string {
   return name
@@ -119,6 +146,10 @@ function formatAwarded(iso: string | null | undefined): string {
   } catch {
     return '—'
   }
+}
+
+function loadMore() {
+  if (hasMore.value) offset.value += entries.value.length
 }
 </script>
 
@@ -138,7 +169,7 @@ function formatAwarded(iso: string | null | undefined): string {
       </header>
 
       <!-- Search + filters -->
-      <div class="hb__toolbar" v-if="rawEntries.length">
+      <div class="hb__toolbar" v-if="totalAcrossCategories > 0">
         <div class="hb__search">
           <svg class="hb__search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
@@ -146,7 +177,7 @@ function formatAwarded(iso: string | null | undefined): string {
           <input
             v-model="searchQuery"
             class="hb__search-input"
-            :placeholder="`Search ${rawEntries.length} champion${rawEntries.length === 1 ? '' : 's'} — name, year, category…`"
+            :placeholder="`Search ${totalAcrossCategories} champion${totalAcrossCategories === 1 ? '' : 's'} — name, year, category…`"
             autocomplete="off"
           />
           <button v-if="searchQuery" type="button" class="hb__search-clear" @click="searchQuery = ''" aria-label="Clear search">×</button>
@@ -170,7 +201,7 @@ function formatAwarded(iso: string | null | undefined): string {
       </div>
 
       <!-- Body: rail + table -->
-      <div v-if="rawEntries.length" class="hb__grid">
+      <div v-if="totalAcrossCategories > 0" class="hb__grid">
         <!-- Category rail -->
         <aside class="rail" aria-label="Category filter">
           <div class="rail__label">Categories</div>
@@ -184,7 +215,7 @@ function formatAwarded(iso: string | null | undefined): string {
               >
                 <span class="rail__item-dot" />
                 <span class="rail__item-name">All categories</span>
-                <span class="rail__item-count">{{ rawEntries.length }}</span>
+                <span class="rail__item-count">{{ totalAcrossCategories }}</span>
               </button>
             </li>
             <li v-for="c in categories" :key="c.slug">
@@ -196,7 +227,7 @@ function formatAwarded(iso: string | null | undefined): string {
               >
                 <span class="rail__item-dot" />
                 <span class="rail__item-name">{{ c.name }}</span>
-                <span class="rail__item-count">{{ c.count }}</span>
+                <span class="rail__item-count">{{ c.entry_count }}</span>
               </button>
             </li>
           </ul>
@@ -210,16 +241,16 @@ function formatAwarded(iso: string | null | undefined): string {
             </div>
             <div class="results__title-row">
               <h2 class="results__title">
-                <span class="results__count">{{ filtered.length }}</span>
-                champion{{ filtered.length === 1 ? '' : 's' }}
+                <span class="results__count">{{ total }}</span>
+                champion{{ total === 1 ? '' : 's' }}
               </h2>
-              <div v-if="searchQuery" class="results__hint">
-                Filtered by "{{ searchQuery }}"
-              </div>
+              <div v-if="debouncedSearch" class="results__hint">Filtered by "{{ debouncedSearch }}"</div>
             </div>
           </header>
 
-          <div v-if="filtered.length === 0" class="results__empty">
+          <div v-if="entriesPending && entries.length === 0" class="results__loading">Loading…</div>
+
+          <div v-else-if="entries.length === 0" class="results__empty">
             <div class="results__empty-title">No results.</div>
             <p>Try a different category or clear the search.</p>
           </div>
@@ -229,45 +260,49 @@ function formatAwarded(iso: string | null | undefined): string {
               <tr>
                 <th class="col-year">Year</th>
                 <th class="col-champ">Champion</th>
-                <th class="col-notes">Notes</th>
+                <th class="col-runner">Runner-up</th>
                 <th class="col-score">Score</th>
                 <th class="col-awarded">Awarded</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="e in filtered" :key="`${e.category_slug}-${e.year}-${e.member_name}`" class="row">
+              <tr v-for="e in entries" :key="e.entry_id" class="row">
                 <td class="col-year">
                   <div class="row__year">{{ e.year ?? '—' }}</div>
                   <div v-if="activeCategorySlug === 'all'" class="row__cat">{{ e.category_name }}</div>
                 </td>
                 <td class="col-champ">
                   <div class="row__champ">
-                    <span class="row__avatar" :style="{ background: accent } as any">{{ e.initials || initialsOf(e.member_name) }}</span>
+                    <span class="row__avatar" :style="{ background: accent } as any">{{ initialsOf(e.players[0]?.display_name ?? '') }}</span>
                     <div class="row__names">
-                      <div class="row__name">{{ teamDisplay(e) }}</div>
-                      <div v-if="e.players && e.players.length > 1" class="row__positions">
+                      <div class="row__name">
                         <template v-for="(p, i) in e.players" :key="p.user_id ?? p.display_name">
-                          <span v-if="p.position">{{ p.position }}</span>
-                          <span v-if="i < (e.players?.length ?? 0) - 1 && p.position" class="row__positions-sep">·</span>
+                          <NuxtLink v-if="p.user_id" :to="`/players/${p.user_id}`" class="row__player-link">{{ p.display_name }}</NuxtLink>
+                          <span v-else>{{ p.display_name }}</span>
+                          <span v-if="i < e.players.length - 1">, </span>
                         </template>
                       </div>
+                      <div v-if="e.players.length > 1" class="row__positions">
+                        <template v-for="(p, i) in e.players" :key="`${p.user_id ?? p.display_name}-pos`">
+                          <span v-if="p.position">{{ p.position }}</span>
+                          <span v-if="i < e.players.length - 1 && p.position" class="row__positions-sep">·</span>
+                        </template>
+                      </div>
+                      <div v-if="e.note" class="row__note">{{ e.note }}</div>
                     </div>
                   </div>
                 </td>
-                <td class="col-notes">{{ e.notes || '—' }}</td>
+                <td class="col-runner">{{ e.runner_up || '—' }}</td>
                 <td class="col-score">{{ e.score || '—' }}</td>
                 <td class="col-awarded">{{ formatAwarded(e.awarded_at) }}</td>
               </tr>
             </tbody>
           </table>
 
-          <!-- MVP note: /site.honour_board_recent[] is capped at 60. When
-               brief 31 ships, this becomes a real "Load older" pagination. -->
-          <footer v-if="filtered.length && rawEntries.length >= 60" class="results__foot">
-            <div class="results__foot-body">
-              <div class="results__foot-title">Full history coming soon</div>
-              <p>Showing the most recent 60 entries across all categories. The complete searchable archive lands when the public endpoint ships.</p>
-            </div>
+          <footer v-if="hasMore" class="results__foot">
+            <button type="button" class="results__load" :disabled="entriesPending" @click="loadMore">
+              {{ entriesPending ? 'Loading…' : 'Load older' }}
+            </button>
           </footer>
         </section>
       </div>
@@ -338,18 +373,22 @@ function formatAwarded(iso: string | null | undefined): string {
 .row__avatar { width: 32px; height: 32px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-family: var(--font-display); font-size: 11px; font-weight: 700; flex-shrink: 0; }
 .row__names { min-width: 0; }
 .row__name { font-family: var(--font-display); font-weight: 600; color: var(--color-ink); }
+.row__player-link { color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 120ms; }
+.row__player-link:hover { border-bottom-color: var(--brand); }
 .row__positions { font-family: var(--font-mono); font-size: 10px; color: var(--color-fog); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 3px; display: flex; gap: 6px; flex-wrap: wrap; }
 .row__positions-sep { opacity: 0.5; }
-.col-notes { color: var(--color-graphite); }
+.row__note { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 4px; font-style: italic; }
+.col-runner { color: var(--color-graphite); min-width: 140px; }
 .col-score { font-family: var(--font-mono); font-weight: 600; color: var(--color-graphite); width: 100px; }
 .col-awarded { font-family: var(--font-mono); font-size: 12px; color: var(--color-fog); width: 130px; white-space: nowrap; }
 
-.results__empty { padding: 48px 24px; text-align: center; color: var(--color-fog); font-family: var(--font-body); }
+.results__loading, .results__empty { padding: 48px 24px; text-align: center; color: var(--color-fog); font-family: var(--font-body); }
 .results__empty-title { font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--color-ink); margin-bottom: 6px; }
 
-.results__foot { padding: 18px 24px; background: var(--color-surface); border-top: 1px solid var(--color-hairline); }
-.results__foot-title { font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--color-ink); margin-bottom: 4px; }
-.results__foot-body p { font-family: var(--font-body); font-size: 12px; color: var(--color-graphite); margin: 0; line-height: 1.5; }
+.results__foot { padding: 16px 24px; border-top: 1px solid var(--color-hairline); display: flex; justify-content: center; }
+.results__load { padding: 10px 20px; background: var(--color-ink); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
+.results__load:hover:not(:disabled) { background: var(--color-graphite); }
+.results__load:disabled { opacity: 0.5; cursor: default; }
 
 .hb__empty { padding: 48px; text-align: center; background: var(--color-surface); border: 1px dashed var(--color-hairline); border-radius: 16px; font-family: var(--font-body); color: var(--color-fog); }
 .hb__empty-title { font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--color-ink); margin-bottom: 6px; }
@@ -362,7 +401,7 @@ function formatAwarded(iso: string | null | undefined): string {
   .rail__item--active { background: var(--color-ink); color: #fff; }
   .rail__item--active .rail__item-count { color: rgba(255,255,255,0.7); }
   .rail__item-dot { display: none; }
-  .col-notes { display: none; }
+  .col-runner { display: none; }
   .col-awarded { display: none; }
 }
 @media (max-width: 600px) {

@@ -56,6 +56,12 @@ export interface HonourEntry {
   /** null for undated entries (e.g. Life Members). */
   year: number | null
   note: string | null
+  /** ISO date the trophy was awarded / competition ran. */
+  awarded_at?: string | null
+  /** Runner-up team / player. Free text ≤ 255 chars server-side. */
+  runner_up?: string | null
+  /** Final score. Free text ≤ 80 chars server-side. */
+  score?: string | null
   sort_order: number
   players: EntryPlayer[]
   created_at?: string
@@ -74,6 +80,9 @@ export interface HonourEntryCreateInput {
   category_id: number
   year?: number | null
   note?: string | null
+  awarded_at?: string | null
+  runner_up?: string | null
+  score?: string | null
   sort_order?: number
   players: EntryPlayerInput[]
 }
@@ -90,6 +99,52 @@ export interface HonourFormat {
   player_count: number | null
   sort_order: number
   is_active: boolean | number
+}
+
+/** Public honour-board category shape (from GET /public/clubs/:slug/honour-categories). */
+export interface PublicHonourCategory {
+  category_id: number
+  slug: string
+  name: string
+  format_slug: 'singles' | 'pairs' | 'triples' | 'fours' | 'other' | string | null
+  gender: string | null
+  description: string | null
+  entry_count: number
+  latest_year: number | null
+  earliest_year: number | null
+}
+
+/** Public honour-board entry (from GET /public/clubs/:slug/honour-entries).
+ *  Slightly different shape from the authed HonourEntry — includes
+ *  category_slug + name pre-resolved, no sort_order, no entry_player_id. */
+export interface PublicHonourEntry {
+  entry_id: number
+  category_slug: string
+  category_name: string
+  year: number | null
+  awarded_at: string | null
+  runner_up: string | null
+  score: string | null
+  note: string | null
+  players: Array<{
+    user_id: number | null
+    display_name: string
+    position: string | null
+  }>
+}
+
+export interface PublicHonourEntriesResponse {
+  entries: PublicHonourEntry[]
+  total: number
+  has_more: boolean
+}
+
+export interface PublicHonourEntriesParams {
+  categorySlug?: string
+  search?: string
+  limit?: number
+  offset?: number
+  sort?: 'year_desc' | 'year_asc'
 }
 
 /** Shape of the /players/:userId/honour-board reverse index. */
@@ -282,6 +337,51 @@ export async function listFormats(
     `${MEDIA_BASE}/clubs/${clubId}/honour-board-formats`,
     { method: 'GET', signal: opts.signal },
   )
+  return res.data
+}
+
+// ── Public — full-page honour board (brief 31) ────────────────────
+
+/**
+ * GET /public/clubs/:slug/honour-categories — rail data for the public
+ * honour-board page. No auth. Cached 5min shared + 30min SWR.
+ */
+export async function publicListCategories(
+  slug: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<PublicHonourCategory[]> {
+  const res = await publicFetch<Envelope<{ categories: PublicHonourCategory[] }>>(
+    `${CRM_BASE}/public/clubs/${encodeURIComponent(slug)}/honour-categories`,
+    { method: 'GET', signal: opts.signal },
+  )
+  return res.data.categories
+}
+
+/**
+ * GET /public/clubs/:slug/honour-entries — paginated + searchable full
+ * honour-board history. No auth. Search matches player display_name,
+ * note, runner_up, year, and (when unfiltered) category name.
+ */
+export async function publicListEntries(
+  slug: string,
+  params: PublicHonourEntriesParams = {},
+  opts: { signal?: AbortSignal } = {},
+): Promise<PublicHonourEntriesResponse> {
+  const qs = new URLSearchParams()
+  if (params.categorySlug) qs.set('category_slug', params.categorySlug)
+  if (params.search != null && params.search.length > 0) qs.set('search', params.search)
+  if (params.limit != null) qs.set('limit', String(params.limit))
+  if (params.offset != null) qs.set('offset', String(params.offset))
+  if (params.sort && params.sort !== 'year_desc') qs.set('sort', params.sort)
+
+  const url = qs.toString().length
+    ? `${CRM_BASE}/public/clubs/${encodeURIComponent(slug)}/honour-entries?${qs.toString()}`
+    : `${CRM_BASE}/public/clubs/${encodeURIComponent(slug)}/honour-entries`
+
+  const res = await publicFetch<Envelope<PublicHonourEntriesResponse>>(url, {
+    method: 'GET',
+    signal: opts.signal,
+  })
   return res.data
 }
 

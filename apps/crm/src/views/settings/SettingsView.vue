@@ -650,8 +650,21 @@ function sendInvite() {
                 <div class="card__eyebrow">Membership types</div>
                 <h2 class="card__title">Tiers &amp; pricing</h2>
               </div>
-              <span v-if="membershipSaving" class="tier__saving">Saving…</span>
-              <span v-else-if="isMembershipDirty" class="tier__saving tier__saving--pending">Unsaved changes</span>
+              <div class="tier__head-actions">
+                <span v-if="isMembershipDirty && !membershipSaving" class="tier__saving tier__saving--pending">Unsaved changes</span>
+                <button
+                  type="button"
+                  class="ghost-btn"
+                  :disabled="!isMembershipDirty || membershipSaving"
+                  @click="clearMembershipDrafts"
+                >Discard</button>
+                <button
+                  type="button"
+                  class="primary-btn"
+                  :disabled="!isMembershipDirty || membershipSaving"
+                  @click="saveMembershipChanges"
+                >{{ membershipSaving ? 'Saving…' : 'Save changes' }}</button>
+              </div>
             </div>
             <p class="card__sub">Tiers your members pay to join. Prices show on the public /membership page and drive the application flow.</p>
 
@@ -714,21 +727,6 @@ function sendInvite() {
               </li>
               <button type="button" class="add-tier" @click="addTier">+ Add membership type</button>
             </ul>
-
-            <div class="tier__actions">
-              <button
-                type="button"
-                class="ghost-btn"
-                :disabled="!isMembershipDirty || membershipSaving"
-                @click="clearMembershipDrafts"
-              >Discard</button>
-              <button
-                type="button"
-                class="primary-btn"
-                :disabled="!isMembershipDirty || membershipSaving"
-                @click="saveMembershipChanges"
-              >{{ membershipSaving ? 'Saving…' : 'Save changes' }}</button>
-            </div>
           </div>
         </template>
 
@@ -1042,7 +1040,7 @@ function sendInvite() {
 .add-tier:hover { background: var(--color-accent-soft); }
 
 .tier__saving--pending { color: var(--color-accent-strong); }
-.tier__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.tier__head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .primary-btn { padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; background: var(--color-ink); color: #fff; }
 .primary-btn:hover:not(:disabled) { background: var(--color-graphite); }
 .primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }

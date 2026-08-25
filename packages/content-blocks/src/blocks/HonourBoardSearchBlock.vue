@@ -63,12 +63,18 @@ watch([activeCategorySlug, sortDir], () => { offset.value = 0 })
 
 // ── Fetches ────────────────────────────────────────────────────
 const categories = ref<PublicHonourCategory[]>([])
-const catsLoading = ref(false)
+// Start `true` so the skeleton fires on the very first render (before
+// onMounted → loadCategories kicks in) — otherwise a page nav that
+// lands on this block flashes the "coming together" empty state for
+// one tick before the fetch flips it to true.
+const catsLoading = ref(true)
 
 const entries = ref<PublicHonourEntry[]>([])
 const total = ref(0)
 const hasMore = ref(false)
-const entriesLoading = ref(false)
+// Same reasoning — the results-table skeleton needs to fire on first
+// render so the empty "No results." state doesn't flash.
+const entriesLoading = ref(true)
 
 let entriesAbort: AbortController | null = null
 

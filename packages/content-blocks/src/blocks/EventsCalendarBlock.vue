@@ -82,7 +82,11 @@ const weekNumber = computed(() => {
 
 // ── Fetch (brief 33) ───────────────────────────────────────────
 const monthEventsFetched = ref<EventEntry[]>([])
-const fetching = ref(false)
+// Start `fetching=true` so the skeleton fires on the very first render
+// (before onMounted → loadMonth kicks in). Otherwise a page nav that
+// lands on a page with this block would flash the "no events" empty
+// state for one tick before the fetch flips it to true.
+const fetching = ref(true)
 let fetchAbort: AbortController | null = null
 
 async function loadMonth() {

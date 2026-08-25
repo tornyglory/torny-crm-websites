@@ -736,7 +736,19 @@ function spotsTaken(e: EventEntry): number {
 </template>
 
 <style scoped>
-.evc { display: flex; flex-direction: column; gap: 32px; padding: 64px 0; }
+.evc {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  /* Match HeroBlock + HonourBoardBlock + EventListBlock: break out of the
+     parent .page-blocks max-width so the block spans the viewport.
+     Horizontal padding aligns the inner grid with the site's reading rhythm. */
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding: 64px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+  box-sizing: border-box;
+}
 
 /* Head */
 .evc__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; flex-wrap: wrap; }

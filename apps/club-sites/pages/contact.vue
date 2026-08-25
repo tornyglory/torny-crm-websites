@@ -67,7 +67,7 @@ const mapsUrl = computed(() => {
 </template>
 
 <style scoped>
-.contact { display: flex; flex-direction: column; gap: 32px; padding: 40px 24px 80px; max-width: 1080px; margin: 0 auto; }
+.contact { display: flex; flex-direction: column; gap: 32px; padding: 40px max(48px, calc((100vw - var(--container-content, 1280px)) / 2)) 80px; }
 .page-head__eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; }
 .page-head__title { font-family: var(--font-display); font-size: clamp(36px, 5vw, 48px); font-weight: 700; letter-spacing: -0.02em; margin: 8px 0 12px; color: var(--color-ink); }
 

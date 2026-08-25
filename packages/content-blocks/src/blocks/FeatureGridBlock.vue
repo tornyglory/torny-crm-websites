@@ -75,10 +75,14 @@ const gridStyle = computed(() => ({
 
 <style scoped>
 .fg {
-  padding: 96px;
   display: flex;
   flex-direction: column;
   gap: 56px;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding: 96px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+  box-sizing: border-box;
   background: var(--color-ground);
 }
 
@@ -188,7 +192,7 @@ const gridStyle = computed(() => ({
 }
 
 @media (max-width: 1023px) {
-  .fg { padding: 72px 40px; gap: 40px; }
+  .fg { padding-block: 72px; gap: 40px; }
   .fg__grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .fg__heading { font-size: 36px; }
 }

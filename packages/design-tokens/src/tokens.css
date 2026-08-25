@@ -65,7 +65,11 @@
   --bp-lg: 1024px;
   --bp-xl: 1440px;
   --container-mobile: 390px;
-  --container-content: 1200px;
+  /* Site-wide content max — used by PageRenderer .page-blocks, the
+     site chrome (SiteHeader / SiteFooter), and every full-bleed block's
+     inner padding (via `max((100% - var(--container-content)) / 2)`).
+     Matches typical 13" laptop effective resolution. */
+  --container-content: 1280px;
 
   /* Spacing */
   --space-1: 4px;

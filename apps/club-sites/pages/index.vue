@@ -85,7 +85,7 @@ function formatEventTime(iso: string): string {
 </template>
 
 <style scoped>
-.home { display: flex; flex-direction: column; gap: 64px; padding: 40px 24px 80px; max-width: 1080px; margin: 0 auto; }
+.home { display: flex; flex-direction: column; gap: 64px; padding: 40px max(48px, calc((100vw - var(--container-content, 1280px)) / 2)) 80px; }
 
 .hero { text-align: center; padding: 40px 0 24px; }
 .hero__eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; }

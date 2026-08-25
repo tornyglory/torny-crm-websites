@@ -216,7 +216,20 @@ function goingLabel(e: EventEntry): string {
 </template>
 
 <style scoped>
-.evh { display: flex; flex-direction: column; gap: 28px; padding: 40px 0; }
+.evh {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  /* Match HeroBlock + HonourBoardBlock: break out of the parent
+     .page-blocks max-width so the block spans the viewport. Horizontal
+     padding keeps the inner content aligned with the site's reading
+     rhythm and prevents cards from touching the edge on ultrawide. */
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding: 64px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+  box-sizing: border-box;
+}
 
 /* Head */
 .evh__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; flex-wrap: wrap; }

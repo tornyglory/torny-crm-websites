@@ -69,10 +69,15 @@ const bgClass = computed(() => (props.background === 'surface' ? 'ms--bg-surface
   display: flex;
   align-items: center;
   gap: 80px;
-  padding: 96px;
+  /* Break out to full viewport for the background band, then use the
+     shared padding formula (48px min → grows to keep inner content
+     capped at --container-content) so the columns align with the nav,
+     footer, hero and every other block. */
   width: 100vw;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
+  padding: 96px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+  box-sizing: border-box;
 }
 .ms--bg-ground { background: var(--color-ground); }
 .ms--bg-surface { background: var(--color-surface); }

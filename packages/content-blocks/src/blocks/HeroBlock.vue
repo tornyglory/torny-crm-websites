@@ -69,7 +69,11 @@ const showStats = computed(() => (props.stats?.length ?? 0) > 0)
 .hero__split {
   display: flex;
   min-height: 640px;
-  width: 100%;
+  /* Same padding formula as the site nav / footer / blocks so hero
+     content aligns with everything else. Outer .hero still spans 100vw
+     for the full-bleed background. */
+  padding-inline: max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+  box-sizing: border-box;
 }
 
 .hero__col {
@@ -82,7 +86,10 @@ const showStats = computed(() => (props.stats?.length ?? 0) > 0)
   flex-direction: column;
   justify-content: center;
   gap: 32px;
-  padding: 96px;
+  /* No left padding — text sits flush with the site content edge (aligned
+     with nav "Nae Nae Bowling Club" wordmark). Right padding gives the
+     media column a bit of breathing room. */
+  padding: 96px 96px 96px 0;
 }
 
 .hero__eyebrow {

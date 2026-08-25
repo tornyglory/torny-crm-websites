@@ -34,7 +34,11 @@ const spacerStyle = computed(() => ({ height: `${props.height}px` }))
 
 <style scoped>
 .dv {
-  padding: 40px 96px;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding: 40px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+  box-sizing: border-box;
   background: var(--color-ground);
 }
 

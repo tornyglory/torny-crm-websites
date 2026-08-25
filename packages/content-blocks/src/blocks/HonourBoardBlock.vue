@@ -234,7 +234,7 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
   width: 100vw;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
-  padding: 96px clamp(24px, 6vw, 120px);
+  padding: 96px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
   box-sizing: border-box;
 }
 

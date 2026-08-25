@@ -168,7 +168,10 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 22px 48px;
+  /* Horizontal padding grows on ultrawide screens so the content caps
+     at --container-content (1280px), without cutting the border-bottom
+     off at the sides. Below the cap it's a plain 48px gutter. */
+  padding: 22px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
   border-bottom: 1px solid var(--color-hairline);
   background: var(--color-ground);
   font-family: var(--font-body);

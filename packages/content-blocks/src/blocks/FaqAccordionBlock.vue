@@ -63,10 +63,11 @@ function pad(n: number): string {
 .faq {
   display: flex;
   gap: 80px;
-  padding: 96px;
   width: 100vw;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
+  padding: 96px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+  box-sizing: border-box;
   background: var(--color-surface);
 }
 

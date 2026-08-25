@@ -40,7 +40,8 @@ const showAuthor = computed(() => Boolean(props.authorName || props.authorRole))
 
 <style scoped>
 .pq {
-  padding: 96px;
+  padding: 96px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+  box-sizing: border-box;
   width: 100vw;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
@@ -53,7 +54,7 @@ const showAuthor = computed(() => Boolean(props.authorName || props.authorRole))
   flex-direction: column;
   align-items: center;
   gap: 40px;
-  max-width: 1200px;
+  max-width: var(--container-content);
   margin: 0 auto;
   text-align: center;
 }

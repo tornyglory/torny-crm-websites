@@ -24,10 +24,13 @@ const alignClass = computed(() => (props.align === 'left' ? 'st--left' : 'st--ce
 
 <style scoped>
 .st {
-  padding: 128px 96px;
+  /* Same shared padding formula so content edges align with nav / footer /
+     other blocks on any viewport. Outer background stays full-viewport. */
   width: 100vw;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
+  padding: 128px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+  box-sizing: border-box;
   background: var(--color-ground);
 }
 
@@ -35,7 +38,7 @@ const alignClass = computed(() => (props.align === 'left' ? 'st--left' : 'st--ce
   display: flex;
   flex-direction: column;
   gap: 40px;
-  max-width: 1200px;
+  max-width: var(--container-content);
   margin: 0 auto;
 }
 .st--center .st__inner { align-items: center; text-align: center; }

@@ -133,7 +133,9 @@ const year = new Date().getFullYear()
 .site-footer__top {
   display: flex;
   gap: 80px;
-  padding: 80px 96px 56px;
+  /* Horizontal padding grows on ultrawide screens so the content caps
+     at --container-content (1280px) — matches the site header. */
+  padding: 80px max(48px, calc((100vw - var(--container-content, 1280px)) / 2)) 56px;
 }
 
 .site-footer__brand-col {
@@ -289,7 +291,8 @@ const year = new Date().getFullYear()
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 24px 96px;
+  /* Same content-cap trick as .site-footer__top so both rows align. */
+  padding: 24px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 .site-footer__legal {

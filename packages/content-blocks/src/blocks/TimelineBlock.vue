@@ -47,10 +47,14 @@ function yearToneClass(tone: string | undefined): string {
 
 <style scoped>
 .tl {
-  padding: 128px 96px;
   display: flex;
   flex-direction: column;
   gap: 56px;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding: 128px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+  box-sizing: border-box;
   background: var(--color-ground);
 }
 

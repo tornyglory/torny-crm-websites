@@ -47,5 +47,15 @@ provide(BLOCK_CONTEXT_KEY, computed<BlockContext>(() => ({
 </template>
 
 <style scoped>
-.page-blocks { display: flex; flex-direction: column; gap: 24px; max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; }
+.page-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  /* Same padding formula as the site header/footer + full-bleed blocks.
+     Below viewport (--container-content) + 96px, minimum 48px gutter (matches nav).
+     Above that, grows to keep content centered on a 1280px column. This aligns
+     every non-full-bleed block (Rich text, Gallery, Contact form, etc.) with
+     the nav content edges automatically. */
+  padding: 40px max(48px, calc((100vw - var(--container-content, 1280px)) / 2)) 80px;
+}
 </style>

@@ -317,7 +317,7 @@ function loadMore() {
 </template>
 
 <style scoped>
-.hb { display: flex; flex-direction: column; gap: 40px; padding: 64px 24px 96px; max-width: 1200px; margin: 0 auto; }
+.hb { display: flex; flex-direction: column; gap: 40px; padding: 64px max(48px, calc((100vw - var(--container-content, 1280px)) / 2)) 96px; }
 
 .hb__head { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
 .hb__eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; }

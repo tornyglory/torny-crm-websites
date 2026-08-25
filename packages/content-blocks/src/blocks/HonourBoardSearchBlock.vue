@@ -462,7 +462,20 @@ function loadMore() {
 </template>
 
 <style scoped>
-.hbs { display: flex; flex-direction: column; gap: 40px; padding: 64px 0; }
+.hbs {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  /* Match HeroBlock + HonourBoardBlock + EventListBlock: break out of the
+     parent .page-blocks max-width so the block spans the viewport.
+     Horizontal padding aligns the inner rail + table with the site's
+     reading rhythm on ultrawide. */
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding: 64px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+  box-sizing: border-box;
+}
 
 .hbs__head { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
 .hbs__eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; }

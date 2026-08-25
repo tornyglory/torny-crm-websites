@@ -40,6 +40,7 @@ import type {
   HonourBoardProps,
   HonourBoardSearchProps,
   MembersSearchProps,
+  MembershipJoinFormProps,
   GalleryProps,
   ContactFormProps,
   MembershipCtaProps,
@@ -324,6 +325,18 @@ const EDITORIAL_PALETTE = [
       showSearch: true,
       pageSize: 24,
     }) },
+  { type: 'membershipJoinForm' as const, label: 'Join form', hint: 'Full-page membership application form with tier picker', icon: '✎',
+    defaults: (): MembershipJoinFormProps => ({
+      heading: 'Join the club.',
+      description: "Fill in a few details and we'll be in touch within a week. Membership runs March to March. All new members get free coaching for their first season.",
+      eyebrow: 'MEMBERSHIP · 2026 SEASON',
+      successHref: '',
+      successHeadline: 'Application received.',
+      showBowlsNumber: true,
+      showPlayingDays: true,
+      termsHref: '',
+      privacyHref: '',
+    }) },
 ]
 
 const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
@@ -366,6 +379,18 @@ const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
       defaults: (): HeroProps => heroDefault('Membership', 'Choose the tier that fits how you play.', ['Contact us', '/contact']) },
     { type: 'richText', label: 'Rich text', hint: 'Benefits, discounts, joining process', icon: '¶',
       defaults: (): RichTextProps => ({ html: '<p>Every level has full clubhouse access. Discounted first year for new joiners.</p>' }) },
+    { type: 'membershipJoinForm', label: 'Join form', hint: 'Full-page application form with tier picker', icon: '✎',
+      defaults: (): MembershipJoinFormProps => ({
+        heading: 'Join the club.',
+        description: "Fill in a few details and we'll be in touch within a week. Membership runs March to March. All new members get free coaching for their first season.",
+        eyebrow: 'MEMBERSHIP · 2026 SEASON',
+        successHref: '',
+        successHeadline: 'Application received.',
+        showBowlsNumber: true,
+        showPlayingDays: true,
+        termsHref: '',
+        privacyHref: '',
+      }) },
     { type: 'membershipCta', label: 'Membership CTA', hint: 'A join-us block with a button', icon: '★',
       defaults: (): MembershipCtaProps => ({ heading: 'Ready to join?', body: 'Send us a note and we\'ll get you sorted.', ctaLabel: 'Get in touch', ctaHref: '/contact' }) },
     { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
@@ -440,6 +465,7 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   honourBoard: 'Honour board',
   honourBoardSearch: 'Honour board · Search',
   membersSearch: 'Members',
+  membershipJoinForm: 'Join form',
   gallery: 'Gallery',
   contactForm: 'Contact form',
   membershipCta: 'Membership CTA',
@@ -1034,6 +1060,7 @@ function blockSummary(block: Block): string {
     }
     case 'gallery':       return `${(block.props as GalleryProps).images.length} photos`
     case 'contactForm':   return (block.props as ContactFormProps).heading || 'Contact form'
+    case 'membershipJoinForm': return (block.props as MembershipJoinFormProps).heading || 'Join form'
     case 'membershipCta': return (block.props as MembershipCtaProps).heading || '(no heading)'
     case 'ctaBanner':     return (block.props as CtaBannerProps).heading || '(no heading)'
     case 'mediaSplit':    return (block.props as MediaSplitProps).heading || '(no heading)'
@@ -1583,6 +1610,64 @@ const lastSavedLabel = computed(() => {
               <span class="field__label">Page size</span>
               <input v-model.number="(selectedBlock.props as MembersSearchProps).pageSize" type="number" min="4" max="100" step="4" />
               <span class="field__hint">How many cards to load per fetch. 24 fits neatly on wide screens.</span>
+            </label>
+          </template>
+
+          <!-- Membership join form -->
+          <template v-else-if="selectedBlock.type === 'membershipJoinForm'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as MembershipJoinFormProps).eyebrow" type="text" placeholder="e.g. MEMBERSHIP · 2026 SEASON" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as MembershipJoinFormProps).heading" type="text" placeholder="Join the club." />
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as MembershipJoinFormProps).description" rows="3" placeholder="Reassuring copy under the hero." />
+            </label>
+            <label class="field">
+              <span class="field__label">Terms &amp; conditions URL</span>
+              <input v-model="(selectedBlock.props as MembershipJoinFormProps).termsHref" type="text" placeholder="/legal/code-of-conduct" />
+              <span class="field__hint">Empty = the copy renders without a link.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Privacy policy URL</span>
+              <input v-model="(selectedBlock.props as MembershipJoinFormProps).privacyHref" type="text" placeholder="/legal/privacy" />
+            </label>
+            <label class="field">
+              <span class="field__label">Success redirect URL</span>
+              <input v-model="(selectedBlock.props as MembershipJoinFormProps).successHref" type="text" placeholder="/join/thanks (leave empty for inline confirmation)" />
+              <span class="field__hint">If empty, the applicant sees an inline success message with the copy below.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Success headline (inline)</span>
+              <input v-model="(selectedBlock.props as MembershipJoinFormProps).successHeadline" type="text" placeholder="Application received." />
+            </label>
+            <label class="switch-row">
+              <div>
+                <div class="switch-row__label">Show Bowls NZ number field</div>
+                <div class="switch-row__hint">Turn off for petanque or non-bowls clubs.</div>
+              </div>
+              <button
+                type="button"
+                class="switch"
+                :class="{ 'is-on': (selectedBlock.props as MembershipJoinFormProps).showBowlsNumber !== false }"
+                @click="(selectedBlock.props as MembershipJoinFormProps).showBowlsNumber = !((selectedBlock.props as MembershipJoinFormProps).showBowlsNumber !== false)"
+              ><span class="switch__knob" /></button>
+            </label>
+            <label class="switch-row">
+              <div>
+                <div class="switch-row__label">Show playing days section</div>
+                <div class="switch-row__hint">Ask which days the applicant is free to play.</div>
+              </div>
+              <button
+                type="button"
+                class="switch"
+                :class="{ 'is-on': (selectedBlock.props as MembershipJoinFormProps).showPlayingDays !== false }"
+                @click="(selectedBlock.props as MembershipJoinFormProps).showPlayingDays = !((selectedBlock.props as MembershipJoinFormProps).showPlayingDays !== false)"
+              ><span class="switch__knob" /></button>
             </label>
           </template>
 

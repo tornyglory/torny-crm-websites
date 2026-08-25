@@ -52,6 +52,7 @@ const TAGS_BY_TYPE: Record<BlockType, Tag[]> = {
   honourBoard:    ['data'],
   honourBoardSearch: ['data'],
   membersSearch: ['data'],
+  membershipJoinForm: ['forms', 'data'],
   gallery:        ['media'],
   contactForm:    ['forms'],
   membershipCta:  ['cta'],
@@ -259,6 +260,32 @@ const BlockPreview = defineComponent({
             rect(c.x + 10, 74, 24, 3, { fill: graphite, opacity: 0.5 }),
             rect(c.x + 10, 96, 20, 4, { fill: c.from, opacity: 0.35, rx: 2 }),
           ]),
+        ])
+
+      case 'membershipJoinForm':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          // Big display heading
+          rect(60, 8, 80, 8, { fill: ink }),
+          rect(75, 20, 50, 3, { fill: graphite, opacity: 0.5 }),
+          // Left rail — summary card
+          rect(12, 32, 46, 40, { fill: ink, rx: 3 }),
+          rect(16, 36, 14, 3, { fill: '#fff', opacity: 0.6 }),
+          rect(16, 44, 30, 5, { fill: '#fff' }),
+          rect(16, 55, 20, 8, { fill: '#fff' }),
+          rect(16, 65, 24, 3, { fill: '#2563EB', rx: 2 }),
+          // Rail steps
+          ...[76, 82, 88, 94, 100, 106].map((y, i) => rect(12, y, 46, 3, { fill: ink, opacity: i < 2 ? 1 : 0.3 })),
+          // Right form column
+          rect(64, 32, 124, 4, { fill: ink }),
+          rect(64, 42, 124, 6, { fill: graphite, opacity: 0.15, rx: 2 }),
+          rect(64, 52, 60, 6, { fill: graphite, opacity: 0.15, rx: 2 }),
+          rect(126, 52, 62, 6, { fill: graphite, opacity: 0.15, rx: 2 }),
+          rect(64, 66, 124, 4, { fill: ink }),
+          rect(64, 76, 124, 6, { fill: graphite, opacity: 0.15, rx: 2 }),
+          rect(64, 90, 40, 5, { fill: ink, rx: 2 }),
+          rect(108, 90, 20, 5, { fill: graphite, opacity: 0.3, rx: 2 }),
+          rect(64, 104, 40, 6, { fill: ink, rx: 3 }),
         ])
 
       case 'gallery':

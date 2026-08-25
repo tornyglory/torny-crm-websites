@@ -6,6 +6,7 @@ export type BlockType =
   | 'honourBoard'
   | 'honourBoardSearch'
   | 'membersSearch'
+  | 'membershipJoinForm'
   | 'gallery'
   | 'contactForm'
   | 'membershipCta'
@@ -119,6 +120,29 @@ export interface MembersSearchProps {
 export interface GalleryProps {
   heading?: string
   images: Array<{ url: string; alt?: string; caption?: string }>
+}
+
+/**
+ * Full-page membership join form. Reads the club's membership tiers from
+ * BlockContext (no separate fetch) and POSTs the completed form to the
+ * public applications endpoint (see backend brief 38).
+ */
+export interface MembershipJoinFormProps {
+  eyebrow?: string
+  heading?: string
+  description?: string
+  /** Slug the applicant navigates to on submit. Defaults to `/join/thanks`. */
+  successHref?: string
+  /** Optional inline confirmation copy — used if `successHref` is empty. */
+  successHeadline?: string
+  /** Enable/disable the Bowls NZ number field (irrelevant for petanque etc.). */
+  showBowlsNumber?: boolean
+  /** Enable the "Playing days available" section. Off for non-club sites. */
+  showPlayingDays?: boolean
+  /** URL of the terms document. Empty = link disabled. */
+  termsHref?: string
+  /** URL of the privacy document. Empty = link disabled. */
+  privacyHref?: string
 }
 
 export interface ContactFormProps {
@@ -260,6 +284,7 @@ export type Block =
   | BlockBase<'honourBoard', HonourBoardProps>
   | BlockBase<'honourBoardSearch', HonourBoardSearchProps>
   | BlockBase<'membersSearch', MembersSearchProps>
+  | BlockBase<'membershipJoinForm', MembershipJoinFormProps>
   | BlockBase<'gallery', GalleryProps>
   | BlockBase<'contactForm', ContactFormProps>
   | BlockBase<'membershipCta', MembershipCtaProps>
@@ -301,6 +326,18 @@ export interface BlockContext {
     rsvp_maybe_count?: number
     rsvp_going_preview?: Array<{ initials: string; avatar_url?: string | null }>
   }>
+  membershipTiers?: Array<{
+    id: number
+    type_name: string
+    description?: string | null
+    cadence?: 'annual' | 'monthly' | 'season' | null
+    fee?: number | null
+    is_default: boolean
+  }>
+  /** Club-level billing cadence — used by the join-form price suffix. */
+  cadence?: 'annual' | 'monthly' | 'season' | null
+  /** First-year discount flag from the tiers settings. Drives the "20% off first year" chip. */
+  firstYearDiscount?: boolean
   honourEntries?: Array<{
     category_slug: string
     category_name: string

@@ -6,6 +6,7 @@ export { default as EventsCalendarBlock } from './blocks/EventsCalendarBlock.vue
 export { default as HonourBoardBlock } from './blocks/HonourBoardBlock.vue'
 export { default as HonourBoardSearchBlock } from './blocks/HonourBoardSearchBlock.vue'
 export { default as MembersSearchBlock } from './blocks/MembersSearchBlock.vue'
+export { default as MembershipJoinFormBlock } from './blocks/MembershipJoinFormBlock.vue'
 export { default as GalleryBlock } from './blocks/GalleryBlock.vue'
 export { default as ContactFormBlock } from './blocks/ContactFormBlock.vue'
 export { default as MembershipCtaBlock } from './blocks/MembershipCtaBlock.vue'

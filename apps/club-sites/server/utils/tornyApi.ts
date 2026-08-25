@@ -153,8 +153,12 @@ export interface SitePagesEnabled {
   shop: boolean
 }
 
-/** Slugs that map to a `pages` layout entry from brief 16 §3. */
-export type PageSlug = 'home' | 'about' | 'membership' | 'events' | 'honour-board' | 'contact'
+/** The six well-known system pages from brief 16 §3. */
+export type SystemPageSlug = 'home' | 'about' | 'membership' | 'events' | 'honour-board' | 'contact'
+/** Any published page slug — the six system pages plus any custom slug
+ *  minted by an owner via the CRM (brief 27). Kept as `string` so custom
+ *  pages type-check everywhere the six-slug union used to. */
+export type PageSlug = SystemPageSlug | (string & { readonly brand?: 'PageSlug' })
 
 export interface Site {
   club: SiteClub
@@ -172,10 +176,10 @@ export interface Site {
    * in `apps/club-sites/pages/*`. `meta` (brief 26) is always populated
    * server-side — falls back to site defaults then club-derived values.
    */
-  pages?: Partial<Record<PageSlug, {
+  pages?: Record<string, {
     blocks: unknown[]
     meta?: SitePageMeta
-  }>>
+  } | undefined>
 }
 
 /** Fully-resolved per-page SEO metadata. Server picks page → site default → derived. */

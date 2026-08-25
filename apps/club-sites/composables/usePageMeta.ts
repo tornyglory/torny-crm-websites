@@ -6,15 +6,25 @@
 // Falls back to a page-label derived title on cold loads before the /site
 // payload lands, so cold SSR never emits an empty <title>.
 
-import type { PageSlug } from '~/server/utils/tornyApi'
+import type { PageSlug, SystemPageSlug } from '~/server/utils/tornyApi'
 
-const PAGE_LABEL: Record<PageSlug, string> = {
+const SYSTEM_LABEL: Record<SystemPageSlug, string> = {
   home: '',
   about: 'About',
   membership: 'Membership',
   events: 'Events',
   'honour-board': 'Honour board',
   contact: 'Contact',
+}
+
+/** Turn a kebab-case slug into a human label ("meet-the-team" → "Meet the team"). */
+function labelForSlug(slug: string): string {
+  if (slug in SYSTEM_LABEL) return SYSTEM_LABEL[slug as SystemPageSlug]
+  return slug
+    .split('-')
+    .filter(Boolean)
+    .map((w, i) => (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(' ')
 }
 
 export function usePageMeta(slug: PageSlug) {
@@ -28,7 +38,7 @@ export function usePageMeta(slug: PageSlug) {
       if (stored) return stored
       // Fallback: derive from page label + club name.
       const clubName = site.value?.club?.name ?? club.value?.name ?? 'Torny'
-      const label = PAGE_LABEL[slug]
+      const label = labelForSlug(slug)
       return label ? `${label} — ${clubName}` : clubName
     },
     description: () => {
@@ -40,7 +50,7 @@ export function usePageMeta(slug: PageSlug) {
       const stored = site.value?.pages?.[slug]?.meta?.title
       if (stored) return stored
       const clubName = site.value?.club?.name ?? club.value?.name ?? 'Torny'
-      const label = PAGE_LABEL[slug]
+      const label = labelForSlug(slug)
       return label ? `${label} — ${clubName}` : clubName
     },
     ogDescription: () => {
@@ -54,7 +64,7 @@ export function usePageMeta(slug: PageSlug) {
       const stored = site.value?.pages?.[slug]?.meta?.title
       if (stored) return stored
       const clubName = site.value?.club?.name ?? club.value?.name ?? 'Torny'
-      const label = PAGE_LABEL[slug]
+      const label = labelForSlug(slug)
       return label ? `${label} — ${clubName}` : clubName
     },
     twitterDescription: () => {

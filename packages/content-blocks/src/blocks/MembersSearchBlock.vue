@@ -194,43 +194,32 @@ function avatarPalette(m: PublicMember) {
     </div>
 
     <template v-else>
-      <!-- Toolbar (chips + search) — only when both are enabled and useful. -->
-      <div v-if="(props.showFilterChips && visibleChips.length > 1) || props.showSearch" class="mem__toolbar">
-        <div v-if="props.showFilterChips && visibleChips.length > 1" class="mem__chips" aria-label="Filter by position">
-          <button
-            type="button"
-            class="mem__chip"
-            :class="{ 'mem__chip--active': activePosition === 'all' }"
-            @click="activePosition = 'all'"
-          >
-            <span>All</span>
-            <span class="mem__chip-count">{{ totalDisplayed }}</span>
-          </button>
-          <button
-            v-for="p in visibleChips"
-            :key="p"
-            type="button"
-            class="mem__chip"
-            :class="{ 'mem__chip--active': activePosition === p }"
-            @click="activePosition = p"
-          >
-            <span class="mem__chip-dot" :style="{ background: positionMeta(p).from } as any" />
-            <span>{{ positionMeta(p).label }}</span>
-            <span class="mem__chip-count">{{ countsByPosition[p] }}</span>
-          </button>
-        </div>
+      <!-- Toolbar — same look + feel as HonourBoardSearchBlock: full-width
+           search input on the left, Position dropdown on the right. -->
+      <div v-if="props.showSearch || (props.showFilterChips && visibleChips.length > 1)" class="mem__toolbar">
         <div v-if="props.showSearch" class="mem__search">
-          <svg class="mem__search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg class="mem__search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
           </svg>
           <input
             v-model="searchQuery"
             type="text"
             class="mem__search-input"
-            placeholder="Search by name or title…"
+            :placeholder="`Search members — name or title…`"
             autocomplete="off"
           />
           <button v-if="searchQuery" type="button" class="mem__search-clear" @click="searchQuery = ''" aria-label="Clear search">×</button>
+        </div>
+        <div v-if="props.showFilterChips && visibleChips.length > 1" class="mem__filters">
+          <label class="mem__select">
+            <span>Position</span>
+            <select v-model="activePosition">
+              <option value="all">All ({{ totalDisplayed }})</option>
+              <option v-for="p in visibleChips" :key="p" :value="p">
+                {{ positionMeta(p).label }} ({{ countsByPosition[p] }})
+              </option>
+            </select>
+          </label>
         </div>
       </div>
 
@@ -308,20 +297,18 @@ function avatarPalette(m: PublicMember) {
 .mem__placeholder { padding: 40px; text-align: center; background: var(--color-surface); border: 1px dashed var(--color-hairline); border-radius: 16px; font-family: var(--font-body); color: var(--color-graphite); }
 .mem__placeholder-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--color-ink); margin-bottom: 6px; }
 
-/* Toolbar */
-.mem__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.mem__chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.mem__chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; background: transparent; border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-graphite); cursor: pointer; }
-.mem__chip:hover { background: #fff; }
-.mem__chip--active { background: var(--color-ink); color: #fff; border-color: var(--color-ink); font-weight: 600; }
-.mem__chip-dot { width: 6px; height: 6px; border-radius: 999px; }
-.mem__chip-count { font-family: var(--font-mono); font-size: 11px; opacity: 0.65; }
-
-.mem__search { position: relative; min-width: 260px; }
+/* Toolbar — matches HonourBoardSearchBlock exactly */
+.mem__toolbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.mem__search { position: relative; flex: 1; min-width: 280px; }
 .mem__search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--color-fog); pointer-events: none; }
-.mem__search-input { width: 100%; padding: 10px 44px 10px 40px; border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 13px; background: #fff; color: var(--color-ink); box-sizing: border-box; }
+.mem__search-input { width: 100%; padding: 12px 44px 12px 42px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 14px; background: #fff; color: var(--color-ink); box-sizing: border-box; }
 .mem__search-input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 15%, transparent); }
-.mem__search-clear { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: transparent; border: 0; font-size: 20px; color: var(--color-fog); cursor: pointer; padding: 0 6px; }
+.mem__search-clear { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: transparent; border: 0; font-size: 20px; color: var(--color-fog); cursor: pointer; padding: 0 6px; line-height: 1; }
+.mem__filters { display: flex; gap: 10px; }
+.mem__select { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; }
+.mem__select span { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; }
+.mem__select select { border: 0; background: transparent; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); font-weight: 600; cursor: pointer; }
+.mem__select select:focus { outline: none; }
 
 /* Empty */
 .mem__empty { padding: 40px; text-align: center; background: var(--color-surface); border: 1px dashed var(--color-hairline); border-radius: 16px; font-family: var(--font-body); color: var(--color-fog); }

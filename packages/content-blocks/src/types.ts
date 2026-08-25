@@ -49,9 +49,17 @@ export interface RichTextProps {
 }
 
 export interface EventListProps {
+  /** Small mono label above the heading. Auto = "This month · September 2026". */
+  eyebrow?: string
   heading?: string
+  description?: string
   limit?: number
   upcomingOnly?: boolean
+  /** Show the filter chips row (All / event types). Default true. */
+  showTypeChips?: boolean
+  /** "See the full calendar" style CTA in the top-right of the header. */
+  ctaLabel?: string
+  ctaHref?: string
 }
 
 /** Full-page events calendar block — month grid + highlights + stats.

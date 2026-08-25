@@ -165,11 +165,24 @@ const BlockPreview = defineComponent({
       case 'eventList':
         return shell([
           rect(0, 0, 200, 120, { fill: '#fff' }),
-          rect(16, 12, 60, 6, { fill: ink }),
-          ...[28, 60, 92].flatMap((y) => [
-            rect(16, y, 26, 22, { fill: accent }),
-            rect(48, y + 4, 90, 5, { fill: ink }),
-            rect(48, y + 14, 60, 4, { fill: graphite, opacity: 0.7 }),
+          // Heading + chips row
+          rect(14, 10, 90, 6, { fill: ink }),
+          rect(14, 22, 20, 5, { fill: ink, opacity: 0.85, rx: 2 }),
+          rect(38, 22, 22, 5, { fill: graphite, opacity: 0.35, rx: 2 }),
+          rect(64, 22, 22, 5, { fill: graphite, opacity: 0.35, rx: 2 }),
+          // Four cards in a row with coloured top borders
+          ...[
+            { x: 14, from: '#F5A623' },
+            { x: 62, from: '#0EA5E9' },
+            { x: 110, from: '#EC4899' },
+            { x: 158, from: '#7C3AED' },
+          ].flatMap((c) => [
+            rect(c.x, 34, 44, 72, { fill: '#fff', stroke: graphite, opacity: 0.15, rx: 3 }),
+            rect(c.x, 34, 44, 2, { fill: c.from }),
+            rect(c.x + 6, 42, 14, 14, { fill: ink, rx: 2 }),
+            rect(c.x + 6, 62, 32, 4, { fill: ink }),
+            rect(c.x + 6, 70, 24, 3, { fill: graphite, opacity: 0.6 }),
+            rect(c.x + 6, 96, 20, 3, { fill: graphite, opacity: 0.4 }),
           ]),
         ])
 

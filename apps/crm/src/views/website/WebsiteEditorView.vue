@@ -321,8 +321,16 @@ const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
       defaults: (): HeroProps => heroDefault("Roll up whenever the sun's out.", 'A friendly bowls club. New members always welcome.', ['Join the club', '/membership'], ['See what\'s on this month', '/events'], homeHeroExtras) },
     { type: 'richText', label: 'Rich text', hint: 'A block of writing', icon: '¶',
       defaults: (): RichTextProps => ({ html: '<p>Tell your visitors about the club — history, atmosphere, what makes you different.</p>' }) },
-    { type: 'eventList', label: 'Events', hint: 'Auto-pulled from your events calendar', icon: '◧',
-      defaults: (): EventListProps => ({ heading: "What's on", limit: 4, upcomingOnly: true }) },
+    { type: 'eventList', label: "What's on", hint: 'Compact card strip of upcoming events with filter chips', icon: '◧',
+      defaults: (): EventListProps => ({
+        heading: "What's on the greens.",
+        description: '',
+        limit: 4,
+        upcomingOnly: true,
+        showTypeChips: true,
+        ctaLabel: 'See the full calendar',
+        ctaHref: '/events',
+      }) },
     { type: 'gallery', label: 'Gallery', hint: 'A photo strip of the club', icon: '▨',
       defaults: (): GalleryProps => ({ heading: 'Around the club', images: [] }) },
     { type: 'membershipCta', label: 'Membership CTA', hint: 'Push people to /membership', icon: '★',
@@ -358,8 +366,16 @@ const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
       defaults: (): HeroProps => heroDefault("What's on", 'Tournaments, roll-ups, training nights.', ['Contact us', '/contact']) },
     { type: 'richText', label: 'Rich text', hint: 'Intro / booking notes', icon: '¶',
       defaults: (): RichTextProps => ({ html: '<p>Everything coming up at the club. Members can RSVP directly.</p>' }) },
-    { type: 'eventList', label: 'Events list', hint: 'The full upcoming feed', icon: '◧',
-      defaults: (): EventListProps => ({ heading: 'Upcoming', limit: 20, upcomingOnly: true }) },
+    { type: 'eventList', label: "What's on", hint: 'Compact card strip of upcoming events with filter chips', icon: '◧',
+      defaults: (): EventListProps => ({
+        heading: "What's on the greens.",
+        description: '',
+        limit: 8,
+        upcomingOnly: true,
+        showTypeChips: true,
+        ctaLabel: 'See the full calendar',
+        ctaHref: '/events',
+      }) },
     { type: 'eventsCalendar', label: 'Events · Calendar', hint: 'Month grid, filter chips, highlights + stats', icon: '▤',
       defaults: (): EventsCalendarProps => ({
         heading: "What's on the greens.",
@@ -439,7 +455,7 @@ function seed(...blocks: Array<{ type: BlockType; props: Block['props'] }>): Blo
 const SEEDS: Record<SystemPageSlug, () => Block[]> = {
   home: () => seed(
     { type: 'hero', props: heroDefault("Roll up whenever the sun's out.", 'A friendly bowls club. New members always welcome.', ['Join the club', '/membership'], ['See what\'s on this month', '/events'], homeHeroExtras) },
-    { type: 'eventList', props: { heading: "What's on", limit: 4, upcomingOnly: true } satisfies EventListProps },
+    { type: 'eventList', props: { heading: "What's on the greens.", limit: 4, upcomingOnly: true, showTypeChips: true, ctaLabel: 'See the full calendar', ctaHref: '/events' } satisfies EventListProps },
     { type: 'membershipCta', props: { heading: 'Play with us this season', body: 'Whether you\'re a first-time bowler or a seasoned skip, there\'s a spot for you.', ctaLabel: 'See tiers', ctaHref: '/membership' } satisfies MembershipCtaProps },
   ),
   about: () => seed(
@@ -1333,15 +1349,50 @@ const lastSavedLabel = computed(() => {
             </label>
           </template>
 
-          <!-- Event list -->
+          <!-- Event list — "What's on" card strip -->
           <template v-else-if="selectedBlock.type === 'eventList'">
             <label class="field">
-              <span class="field__label">Heading</span>
-              <input v-model="(selectedBlock.props as EventListProps).heading" type="text" />
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as EventListProps).eyebrow" type="text" placeholder="Leave blank for auto This month · MONTH YYYY" />
+              <span class="field__hint">Overrides the auto-generated month label above the heading.</span>
             </label>
             <label class="field">
-              <span class="field__label">Limit (max events shown)</span>
-              <input v-model.number="(selectedBlock.props as EventListProps).limit" type="number" min="1" max="20" />
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as EventListProps).heading" type="text" placeholder="What's on the greens." />
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as EventListProps).description" rows="3" placeholder="Leave blank for auto — 'Twelve events on the schedule.'" />
+              <span class="field__hint">Falls back to an auto-count line when blank.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Limit (max cards shown)</span>
+              <input v-model.number="(selectedBlock.props as EventListProps).limit" type="number" min="1" max="12" />
+              <span class="field__hint">4 fits a single row cleanly on desktop.</span>
+            </label>
+            <div class="field__group">
+              <div class="field__group-title">CTA</div>
+              <label class="field">
+                <span class="field__label">Label</span>
+                <input v-model="(selectedBlock.props as EventListProps).ctaLabel" type="text" placeholder="See the full calendar" />
+                <span class="field__hint">Leave blank to hide the button entirely.</span>
+              </label>
+              <label class="field">
+                <span class="field__label">Link</span>
+                <input v-model="(selectedBlock.props as EventListProps).ctaHref" type="text" placeholder="/events" />
+              </label>
+            </div>
+            <label class="switch-row">
+              <div>
+                <div class="switch-row__label">Filter chips</div>
+                <div class="switch-row__hint">Show the All / Tournament / Pennant / … chip row above the cards.</div>
+              </div>
+              <button
+                type="button"
+                class="switch"
+                :class="{ 'is-on': (selectedBlock.props as EventListProps).showTypeChips !== false }"
+                @click="(selectedBlock.props as EventListProps).showTypeChips = !((selectedBlock.props as EventListProps).showTypeChips !== false)"
+              ><span class="switch__knob" /></button>
             </label>
             <label class="switch-row">
               <div>

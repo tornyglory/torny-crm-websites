@@ -201,13 +201,52 @@ export interface MembersSummary {
 export interface MembershipTierListItem {
   id: number
   type_name: string
-  type_code?: string | null
-  slug?: string | null
+  type_code: string | null
+  slug: string | null
+  description: string | null
   cadence: MembershipCadence | null
   fee: number | null
+  tone: string | null
+  sort_order: number
   is_default: boolean
-  tone?: MembershipTone | null
 }
+
+/** Club-level membership settings — cadence default + first-year discount toggle. */
+export interface MembershipSettings {
+  cadence: MembershipCadence | null
+  first_year_discount: boolean
+}
+
+/** Envelope for GET /membership-tiers — brief 36 extended shape. */
+export interface MembershipTiersResponse {
+  tiers: MembershipTierListItem[]
+  settings: MembershipSettings
+}
+
+export interface CreateTierInput {
+  type_name: string
+  type_code?: string
+  description?: string | null
+  cadence?: MembershipCadence
+  fee?: number | null
+  tone?: string | null
+  sort_order?: number
+  is_default?: boolean
+}
+export type UpdateTierInput = Partial<CreateTierInput>
+
+export type MembershipTierErrorCode =
+  | 'bad_type_name'
+  | 'bad_cadence'
+  | 'bad_fee'
+  | 'bad_description'
+  | 'bad_sort_order'
+  | 'slug_conflict'
+  | 'default_required'
+  | 'default_tier'
+  | 'last_tier'
+  | 'tier_in_use'
+  | 'not_found'
 
 /**
  * GET /clubs/:clubId/members/summary — server-side finance stats.
@@ -228,16 +267,85 @@ export async function summary(
   return res.data
 }
 
-/** GET /clubs/:clubId/membership-tiers — the club's active tiers. */
+/**
+ * GET /clubs/:clubId/membership-tiers — tiers + club-level settings.
+ * Envelope shape extended in brief 36 (adds `settings` block + per-tier
+ * `sort_order` / `description` / `tone`).
+ */
 export async function listTiers(
   clubId: number,
   opts: { signal?: AbortSignal } = {},
-): Promise<MembershipTierListItem[]> {
-  const res = await authedFetch<Envelope<{ tiers: MembershipTierListItem[] }>>(
+): Promise<MembershipTiersResponse> {
+  const res = await authedFetch<Envelope<MembershipTiersResponse>>(
     `${CRM_BASE}/clubs/${clubId}/membership-tiers`,
     { signal: opts.signal },
   )
-  return res.data.tiers
+  return res.data
+}
+
+/** POST /clubs/:clubId/membership-tiers — create a tier. */
+export async function createTier(
+  clubId: number,
+  input: CreateTierInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<MembershipTierListItem> {
+  const res = await authedFetch<Envelope<MembershipTierListItem>>(
+    `${CRM_BASE}/clubs/${clubId}/membership-tiers`,
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+  )
+  return res.data
+}
+
+/** PATCH /clubs/:clubId/membership-tiers/:tierId — partial update. */
+export async function updateTier(
+  clubId: number,
+  tierId: number,
+  patch: UpdateTierInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<MembershipTierListItem> {
+  const res = await authedFetch<Envelope<MembershipTierListItem>>(
+    `${CRM_BASE}/clubs/${clubId}/membership-tiers/${tierId}`,
+    { method: 'PATCH', body: JSON.stringify(patch), signal: opts.signal },
+  )
+  return res.data
+}
+
+/** DELETE /clubs/:clubId/membership-tiers/:tierId — hard delete (guarded). */
+export async function deleteTier(
+  clubId: number,
+  tierId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<void> {
+  await authedFetch(
+    `${CRM_BASE}/clubs/${clubId}/membership-tiers/${tierId}`,
+    { method: 'DELETE', signal: opts.signal },
+  )
+}
+
+/** POST /clubs/:clubId/membership-tiers/:tierId/set-default — atomic flip. */
+export async function setDefaultTier(
+  clubId: number,
+  tierId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<MembershipTierListItem> {
+  const res = await authedFetch<Envelope<MembershipTierListItem>>(
+    `${CRM_BASE}/clubs/${clubId}/membership-tiers/${tierId}/set-default`,
+    { method: 'POST', body: '{}', signal: opts.signal },
+  )
+  return res.data
+}
+
+/** PATCH /clubs/:clubId/membership-settings — club-level cadence + discount. */
+export async function updateMembershipSettings(
+  clubId: number,
+  patch: Partial<MembershipSettings>,
+  opts: { signal?: AbortSignal } = {},
+): Promise<MembershipSettings> {
+  const res = await authedFetch<Envelope<MembershipSettings>>(
+    `${CRM_BASE}/clubs/${clubId}/membership-settings`,
+    { method: 'PATCH', body: JSON.stringify(patch), signal: opts.signal },
+  )
+  return res.data
 }
 
 // ── Add / edit / remove (brief 12) ────────────────────────────────

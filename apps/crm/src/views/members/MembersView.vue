@@ -507,7 +507,8 @@ async function loadTiers() {
   if (cid == null) { availableTiers.value = []; return }
   tiersLoading.value = true
   try {
-    availableTiers.value = await membersApi.listTiers(cid)
+    const res = await membersApi.listTiers(cid)
+    availableTiers.value = res.tiers
   } catch {
     availableTiers.value = []
   } finally {

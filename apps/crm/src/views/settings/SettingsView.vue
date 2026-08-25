@@ -3,15 +3,17 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
 import { useToast } from '@/composables/useToast'
-import { useOnboardingStore, type MembershipTier } from '@/stores/onboarding'
+import { useOnboardingStore } from '@/stores/onboarding'
 import { useClubStore } from '@/stores/club'
 import { useClubSettingsStore } from '@/stores/clubSettings'
-import { ApiError, clubs } from '@torny/api-client'
+import { useMembershipTiersStore } from '@/stores/membershipTiers'
+import { ApiError, clubs, type MembershipTierListItem } from '@torny/api-client'
 
 const toast = useToast()
 const onboarding = useOnboardingStore()
 const clubStore = useClubStore()
 const settingsStore = useClubSettingsStore()
+const tiersStore = useMembershipTiersStore()
 
 // Fetch the one-shot settings payload on mount + whenever the active club
 // changes. Reads brand.logo_url / favicon_url out of this response instead
@@ -22,8 +24,16 @@ async function loadSettings() {
     await settingsStore.fetch(cid)
   }
 }
-onMounted(loadSettings)
-watch(() => clubStore.current?.id, loadSettings)
+async function loadTiers() {
+  const cid = clubStore.current?.id
+  if (typeof cid === 'number') {
+    await tiersStore.fetch(cid)
+  } else {
+    tiersStore.clear()
+  }
+}
+onMounted(() => { void loadSettings(); void loadTiers() })
+watch(() => clubStore.current?.id, () => { void loadSettings(); void loadTiers() })
 
 type SectionKey =
   | 'club'
@@ -48,41 +58,128 @@ const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
 
 const active = ref<SectionKey>('club')
 
-// ── Membership tiers (shared with onboarding store) ────────────
-// Tiers, cadence and discount live in onboarding — same source of truth
-// whether the owner is completing setup or editing later. Backend swap
-// (brief 10 §3) writes both surfaces to `membership_tiers` in one place.
-const cadenceLabel = computed(
-  () => ({ annual: 'per year', monthly: 'per month', season: 'per season' })[onboarding.data.cadence],
-)
-const tierToneMap: Record<MembershipTier['tone'], { bg: string; fg: string }> = {
-  accent: { bg: 'var(--color-accent-soft)', fg: 'var(--color-accent-strong)' },
-  mint: { bg: '#DCFCE7', fg: '#166534' },
-  tangerine: { bg: '#FEF3C7', fg: '#92400E' },
-  violet: { bg: '#EDE9FE', fg: '#5B21B6' },
-}
-const tierTones: MembershipTier['tone'][] = ['accent', 'mint', 'tangerine', 'violet']
+// ── Membership tiers (brief 36 — real CRUD, no onboarding blob) ─────
+// Reads / writes via useMembershipTiersStore. Cadence + first-year
+// discount toggles auto-save on change via the store's updateSettings
+// call. Tier edits (name / description / price) auto-save via PATCH on
+// blur — see `commitTierField` below.
 
-function addTier() {
-  const nextTone = tierTones[onboarding.data.tiers.length % tierTones.length]!
-  onboarding.data.tiers.push({
-    id: `tier-${Date.now()}`,
-    name: 'New tier',
-    description: 'What this membership includes.',
-    price: 0,
-    tone: nextTone,
-  })
+const CADENCE_UNIT: Record<'annual' | 'monthly' | 'season', string> = {
+  annual: 'per year', monthly: 'per month', season: 'per season',
 }
-function removeTier(id: string) {
-  onboarding.data.tiers = onboarding.data.tiers.filter((t) => t.id !== id)
+const cadenceLabel = computed(() => {
+  const c = tiersStore.settings.cadence ?? 'annual'
+  return CADENCE_UNIT[c] ?? 'per year'
+})
+
+/** Palette rotation for the tone chip — matches the honour-board treatment. */
+const TIER_TONES: Array<{ key: string; bg: string; fg: string }> = [
+  { key: 'accent', bg: 'var(--color-accent-soft)', fg: 'var(--color-accent-strong)' },
+  { key: 'mint', bg: '#DCFCE7', fg: '#166534' },
+  { key: 'tangerine', bg: '#FEF3C7', fg: '#92400E' },
+  { key: 'violet', bg: '#EDE9FE', fg: '#5B21B6' },
+]
+function tierToneStyle(tier: MembershipTierListItem): { background: string; color: string } {
+  const stored = TIER_TONES.find((t) => t.key === tier.tone)
+  const fallback = TIER_TONES[tier.sort_order % TIER_TONES.length]!
+  const t = stored ?? fallback
+  return { background: t.bg, color: t.fg }
 }
-function setDefaultTier(id: string) {
-  onboarding.data.tiers = onboarding.data.tiers.map((t) => ({ ...t, isDefault: t.id === id }))
+
+function tierErrorMessage(err: unknown): string {
+  if (!(err instanceof ApiError)) return err instanceof Error ? err.message : 'Something went wrong.'
+  const body = (err.body ?? {}) as { code?: string }
+  switch (body.code) {
+    case 'default_tier': return 'Promote another tier as the default before deleting this one.'
+    case 'last_tier': return 'Every club needs at least one tier. Add another before deleting this one.'
+    case 'tier_in_use': return 'Members are still on this tier — move them to another tier first.'
+    case 'default_required': return "Can't remove the default flag — promote another tier first."
+    case 'bad_type_name': return 'Tier name needs to be 1–80 characters.'
+    case 'bad_cadence': return 'Cadence must be Annual, Monthly, or Season.'
+    case 'bad_fee': return 'Price has to be a non-negative number.'
+    case 'bad_description': return 'Description must be under 500 characters.'
+    default: return err.message
+  }
 }
-function saveMembership() {
-  // Onboarding store already auto-persists via the watch — this is UX
-  // affordance parity with the other Settings sections.
-  toast.success('Membership settings saved.')
+
+async function addTier() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  const nextTone = TIER_TONES[tiersStore.tiers.length % TIER_TONES.length]!.key
+  try {
+    await tiersStore.create(cid, {
+      type_name: 'New tier',
+      description: 'What this membership includes.',
+      fee: 0,
+      tone: nextTone,
+    })
+    toast.success('Tier added.')
+  } catch (err) {
+    toast.error(tierErrorMessage(err))
+  }
+}
+
+async function removeTier(tier: MembershipTierListItem) {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  const ok = confirm(`Delete the "${tier.type_name}" tier? This cannot be undone.`)
+  if (!ok) return
+  try {
+    await tiersStore.remove(cid, tier.id)
+    toast.success('Tier removed.')
+  } catch (err) {
+    toast.error(tierErrorMessage(err))
+  }
+}
+
+async function promoteDefault(tier: MembershipTierListItem) {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number' || tier.is_default) return
+  try {
+    await tiersStore.setDefault(cid, tier.id)
+    toast.success(`${tier.type_name} is now the default tier.`)
+  } catch (err) {
+    toast.error(tierErrorMessage(err))
+  }
+}
+
+/** Debounced per-tier field autosave — one PATCH per tier per idle burst. */
+const tierPatchTimers: Record<number, ReturnType<typeof setTimeout>> = {}
+function commitTierField(
+  tier: MembershipTierListItem,
+  field: 'type_name' | 'description' | 'fee',
+  value: string | number | null,
+) {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  if (tierPatchTimers[tier.id]) clearTimeout(tierPatchTimers[tier.id])
+  tierPatchTimers[tier.id] = setTimeout(async () => {
+    try {
+      await tiersStore.update(cid, tier.id, { [field]: value })
+    } catch (err) {
+      toast.error(tierErrorMessage(err))
+    }
+  }, 500)
+}
+
+async function setCadence(next: 'annual' | 'monthly' | 'season') {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number' || tiersStore.settings.cadence === next) return
+  try {
+    await tiersStore.updateSettings(cid, { cadence: next })
+  } catch (err) {
+    toast.error(tierErrorMessage(err))
+  }
+}
+async function toggleFirstYearDiscount() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  const next = !tiersStore.settings.first_year_discount
+  try {
+    await tiersStore.updateSettings(cid, { first_year_discount: next })
+  } catch (err) {
+    toast.error(tierErrorMessage(err))
+  }
 }
 
 // ── Opening hours (shared with onboarding store) ───────────────
@@ -458,7 +555,7 @@ function sendInvite() {
                 <div class="card__eyebrow">Membership types</div>
                 <h2 class="card__title">Tiers &amp; pricing</h2>
               </div>
-              <button class="btn btn--outline" @click="saveMembership">Save changes</button>
+              <span v-if="tiersStore.saving" class="tier__saving">Saving…</span>
             </div>
             <p class="card__sub">Tiers your members pay to join. Prices show on the public /membership page and drive the application flow.</p>
 
@@ -466,37 +563,56 @@ function sendInvite() {
               <div>
                 <div class="field__label">Billing cadence</div>
                 <div class="segmented">
-                  <button type="button" :class="{ 'is-on': onboarding.data.cadence === 'annual' }" @click="onboarding.data.cadence = 'annual'">Annual</button>
-                  <button type="button" :class="{ 'is-on': onboarding.data.cadence === 'monthly' }" @click="onboarding.data.cadence = 'monthly'">Monthly</button>
-                  <button type="button" :class="{ 'is-on': onboarding.data.cadence === 'season' }" @click="onboarding.data.cadence = 'season'">Season</button>
+                  <button type="button" :class="{ 'is-on': tiersStore.settings.cadence === 'annual' }" @click="setCadence('annual')">Annual</button>
+                  <button type="button" :class="{ 'is-on': tiersStore.settings.cadence === 'monthly' }" @click="setCadence('monthly')">Monthly</button>
+                  <button type="button" :class="{ 'is-on': tiersStore.settings.cadence === 'season' }" @click="setCadence('season')">Season</button>
                 </div>
               </div>
               <div class="discount">
                 <span class="discount__dot" />
                 <span class="discount__label"><b>First year 20% off</b> — new joiners only</span>
-                <button type="button" class="switch" :class="{ 'is-on': onboarding.data.firstYearDiscount }" @click="onboarding.data.firstYearDiscount = !onboarding.data.firstYearDiscount"><span class="switch__knob" /></button>
+                <button type="button" class="switch" :class="{ 'is-on': tiersStore.settings.first_year_discount }" @click="toggleFirstYearDiscount"><span class="switch__knob" /></button>
               </div>
             </div>
 
-            <ul class="tiers">
-              <li v-for="tier in onboarding.data.tiers" :key="tier.id" class="tier">
-                <div class="tier__icon" :style="{ background: tierToneMap[tier.tone].bg, color: tierToneMap[tier.tone].fg }">
+            <div v-if="tiersStore.loading && tiersStore.tiers.length === 0" class="tier__loading">
+              Loading tiers…
+            </div>
+            <ul v-else class="tiers">
+              <li v-for="tier in tiersStore.sortedTiers" :key="tier.id" class="tier">
+                <div class="tier__icon" :style="tierToneStyle(tier)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="8" r="3" /><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" /></svg>
                 </div>
                 <div class="tier__body">
                   <div class="tier__row">
-                    <input v-model="tier.name" class="tier__name" />
-                    <span v-if="tier.isDefault" class="tier__flag">Default</span>
-                    <button v-else type="button" class="tier__make-default" @click="setDefaultTier(tier.id)">Make default</button>
+                    <input
+                      :value="tier.type_name"
+                      class="tier__name"
+                      @input="commitTierField(tier, 'type_name', ($event.target as HTMLInputElement).value)"
+                    />
+                    <span v-if="tier.is_default" class="tier__flag">Default</span>
+                    <button v-else type="button" class="tier__make-default" @click="promoteDefault(tier)">Make default</button>
                   </div>
-                  <input v-model="tier.description" class="tier__desc" />
+                  <input
+                    :value="tier.description ?? ''"
+                    class="tier__desc"
+                    placeholder="What this membership includes."
+                    @input="commitTierField(tier, 'description', ($event.target as HTMLInputElement).value || null)"
+                  />
                 </div>
                 <div class="tier__price">
                   <span class="tier__price-sign">$</span>
-                  <input v-model.number="tier.price" type="number" min="0" step="5" class="tier__price-input" />
+                  <input
+                    :value="tier.fee ?? 0"
+                    type="number"
+                    min="0"
+                    step="5"
+                    class="tier__price-input"
+                    @input="commitTierField(tier, 'fee', Number(($event.target as HTMLInputElement).value) || 0)"
+                  />
                   <span class="tier__price-unit">{{ cadenceLabel }}</span>
                 </div>
-                <button v-if="!tier.isDefault" type="button" class="tier__remove" aria-label="Remove tier" @click="removeTier(tier.id)">
+                <button v-if="!tier.is_default" type="button" class="tier__remove" aria-label="Remove tier" @click="removeTier(tier)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" width="14" height="14"><path d="M6 6l12 12M6 18L18 6" /></svg>
                 </button>
               </li>
@@ -799,6 +915,8 @@ function sendInvite() {
 .tier__desc { border: 0; background: transparent; padding: 0; font-family: var(--font-body); font-size: 12px; color: var(--color-fog); width: 100%; }
 .tier__desc:focus { outline: none; color: var(--color-ink); }
 .tier__flag { font-family: var(--font-mono); font-size: 10px; padding: 2px 8px; background: var(--color-accent-soft); color: var(--color-accent-strong); border-radius: 6px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; }
+.tier__saving { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--color-fog); text-transform: uppercase; }
+.tier__loading { padding: 32px; text-align: center; font-family: var(--font-body); font-size: 14px; color: var(--color-fog); border: 1px dashed var(--color-hairline); border-radius: 12px; }
 .tier__make-default { background: transparent; border: 0; padding: 0; font-family: var(--font-body); font-size: 11px; color: var(--color-accent); font-weight: 600; cursor: pointer; text-decoration: underline; }
 .tier__make-default:hover { color: var(--color-accent-strong); }
 .tier__price { display: inline-flex; align-items: center; padding: 8px 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; gap: 4px; flex-shrink: 0; }

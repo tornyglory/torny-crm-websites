@@ -9,7 +9,7 @@ import { useToast } from '@/composables/useToast'
 import { useMemberSearch } from '@/composables/useMemberSearch'
 import { useClubStore } from '@/stores/club'
 import { useAuthStore } from '@/stores/auth'
-import { members as membersApi, seasons as seasonsApi, ApiError, type PaymentMethod, type RosterMember, type MembersSummary, type MembershipTierListItem, type Season } from '@torny/api-client'
+import { members as membersApi, seasons as seasonsApi, ApiError, type PaymentMethod, type PositionGroup, type RosterMember, type MembersSummary, type MembershipTierListItem, type Season } from '@torny/api-client'
 
 const toast = useToast()
 const clubStore = useClubStore()
@@ -67,6 +67,12 @@ interface Member {
   lastPaymentDate?: string | null
   /** ISO 8601 UTC — when the member was revoked (lapsed rows only). */
   revokedAt?: string | null
+  /** Public directory grouping — brief 35. */
+  positionGroup?: PositionGroup
+  /** When false the member is hidden from the public directory + player profile. */
+  publicVisible?: boolean
+  /** Member-authored bio, shown on the public player profile. */
+  bio?: string | null
 }
 
 const {
@@ -184,6 +190,9 @@ function rosterToView(r: RosterMember): Member {
     dob: r.dob ?? undefined,
     address: r.address ?? undefined,
     notes: r.notes ?? undefined,
+    positionGroup: r.position_group,
+    publicVisible: r.public_visible,
+    bio: r.bio,
     fee: r.membership?.fee ?? r.membership?.annual_fee ?? null,
     lastPaymentAmount: r.membership?.last_payment_amount ?? null,
     totalPaidThisSeason: r.membership?.total_paid_this_season ?? null,
@@ -649,7 +658,17 @@ const editForm = reactive({
   title: '' as string,
   notes: '' as string,
   typeId: null as number | null,
+  positionGroup: 'member' as PositionGroup,
+  publicVisible: true,
+  bio: '' as string,
 })
+
+const POSITION_GROUPS: Array<{ value: PositionGroup; label: string; hint: string }> = [
+  { value: 'board', label: 'Board', hint: 'President, Secretary, Treasurer, Committee chairs.' },
+  { value: 'staff', label: 'Staff', hint: 'General Manager, CEO, Greenkeeper, Bar Manager.' },
+  { value: 'committee', label: 'Committee', hint: 'Voting members of a sub-committee.' },
+  { value: 'member', label: 'Member', hint: 'Regular playing member — the default.' },
+]
 
 
 function openEditMember() {
@@ -664,6 +683,9 @@ function openEditMember() {
   editForm.title = m.title ?? ''
   editForm.notes = m.notes ?? ''
   editForm.typeId = m.membershipTypeId ?? null
+  editForm.positionGroup = m.positionGroup ?? 'member'
+  editForm.publicVisible = m.publicVisible ?? true
+  editForm.bio = m.bio ?? ''
   editError.value = null
   editOpen.value = true
 }
@@ -679,11 +701,14 @@ async function submitEdit() {
   editSubmitting.value = true
   editError.value = null
   try {
-    await membersApi.update(cid, Number(m.id), {
+    await membersApi.patchMember(cid, Number(m.id), {
       role: editForm.role,
       title: editForm.title.trim() || null,
       notes: editForm.notes.trim() || null,
-      type_id: editForm.typeId,
+      membership_type_id: editForm.typeId,
+      position_group: editForm.positionGroup,
+      public_visible: editForm.publicVisible,
+      bio: editForm.bio.trim() || null,
     })
     toast.success(`Updated ${m.name}.`)
     editOpen.value = false
@@ -1297,6 +1322,38 @@ async function submit() {
         </label>
 
         <label class="field">
+          <span class="field__label">Position group</span>
+          <select v-model="editForm.positionGroup">
+            <option v-for="g in POSITION_GROUPS" :key="g.value" :value="g.value">{{ g.label }}</option>
+          </select>
+          <span class="field__hint">
+            {{ POSITION_GROUPS.find((g) => g.value === editForm.positionGroup)?.hint }}
+          </span>
+        </label>
+
+        <label class="field field--switch">
+          <span class="field__switch-copy">
+            <span class="field__label">Show on the public directory</span>
+            <span class="field__hint">Uncheck to hide this member from the meet-the-club block and their public player profile.</span>
+          </span>
+          <button
+            type="button"
+            class="edit-switch"
+            :class="{ 'is-on': editForm.publicVisible }"
+            @click="editForm.publicVisible = !editForm.publicVisible"
+            :aria-pressed="editForm.publicVisible"
+          >
+            <span class="edit-switch__knob" />
+          </button>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Public bio</span>
+          <textarea v-model="editForm.bio" rows="4" maxlength="1000" placeholder="A short intro shown on this member's public player profile." />
+          <span class="field__hint">Visible to anyone on the public site. Max 1000 characters.</span>
+        </label>
+
+        <label class="field">
           <span class="field__label">Notes (admin-only)</span>
           <textarea v-model="editForm.notes" rows="3" placeholder="e.g. Prefers cheque payments. Life member since 2018." />
           <span class="field__hint">Not visible to the member — for club admins only.</span>
@@ -1754,8 +1811,16 @@ async function submit() {
 .form__row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
-.field input, .field select { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; }
-.field input:focus, .field select:focus { outline: none; border-color: var(--color-ink); }
+.field__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
+.field input, .field select, .field textarea { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; resize: vertical; }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--color-ink); }
+
+.field--switch { flex-direction: row; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--color-hairline); border-bottom: 1px solid var(--color-hairline); }
+.field__switch-copy { display: flex; flex-direction: column; gap: 4px; }
+.edit-switch { width: 40px; height: 24px; padding: 3px; border-radius: 999px; background: var(--color-hairline); border: 0; display: flex; cursor: pointer; flex-shrink: 0; }
+.edit-switch.is-on { background: var(--color-ink); }
+.edit-switch__knob { width: 18px; height: 18px; border-radius: 999px; background: #fff; transition: transform 0.15s ease; }
+.edit-switch.is-on .edit-switch__knob { transform: translateX(16px); }
 
 .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--color-hairline); }
 .switch-row__label { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }

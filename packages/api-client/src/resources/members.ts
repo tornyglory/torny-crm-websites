@@ -73,6 +73,12 @@ export interface RosterMember {
   title: string | null
   /** Admin-only free-text notes on this member. */
   notes: string | null
+  /** Public directory grouping — drives the meet-the-club block (brief 35). */
+  position_group: PositionGroup
+  /** When false, the member is hidden from the public directory + player profile. */
+  public_visible: boolean
+  /** Member-authored bio shown on the public player profile. */
+  bio: string | null
   membership: RosterMembership | null
 }
 

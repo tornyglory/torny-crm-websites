@@ -15,6 +15,7 @@
  */
 import { computed, inject, isRef, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { events as eventsApi, type PublicEvent } from '@torny/api-client'
+import Skeleton from '../components/Skeleton.vue'
 import { BLOCK_CONTEXT_KEY, type BlockContext, type EventsCalendarProps } from '../types'
 
 const props = withDefaults(defineProps<EventsCalendarProps>(), {
@@ -119,12 +120,16 @@ watch([clubSlug, visibleYear, visibleMonth], () => { void loadMonth() })
 type FilterEventType = 'all' | 'tournament' | 'pennant' | 'social' | 'training' | 'other'
 type LiveEventType = Exclude<FilterEventType, 'all'>
 
-const TYPE_META: Record<LiveEventType, { label: string; color: string }> = {
-  tournament: { label: 'Tournament', color: '#1F2937' },
-  pennant:    { label: 'Pennant',    color: '#0369A1' },
-  social:     { label: 'Social',     color: '#DC2626' },
-  training:   { label: 'Training',   color: '#7C3AED' },
-  other:      { label: 'Other',      color: '#6B7280' },
+/** Per-type palette — richer than the previous single-hue setup so tiles,
+ *  chips and card top-borders can pull from consistent gradient stops.
+ *  `color` remains the single-hex accent used by dot chips and inline
+ *  text tints; `from` / `to` / `ring` power gradients + glows. */
+const TYPE_META: Record<LiveEventType, { label: string; color: string; from: string; to: string; ring: string }> = {
+  tournament: { label: 'Tournament', color: '#B45309', from: '#F5A623', to: '#E85D5D', ring: '#F5A623' }, // gold → red
+  pennant:    { label: 'Pennant',    color: '#0369A1', from: '#0EA5E9', to: '#0369A1', ring: '#38BDF8' }, // sky → deep blue
+  social:     { label: 'Social',     color: '#BE185D', from: '#EC4899', to: '#831843', ring: '#F472B6' }, // pink → burgundy
+  training:   { label: 'Training',   color: '#7C3AED', from: '#7C3AED', to: '#DB2777', ring: '#A855F7' }, // violet → pink
+  other:      { label: 'Other',      color: '#4B5563', from: '#6B7280', to: '#374151', ring: '#9CA3AF' }, // greys
 }
 
 const activeType = ref<FilterEventType>('all')
@@ -256,6 +261,11 @@ function typeColor(t: string | null | undefined): string {
 function typeLabel(t: string | null | undefined): string {
   const key = (t ?? 'other') as LiveEventType
   return TYPE_META[key]?.label ?? 'Other'
+}
+/** Full palette for a type — gradient + glow ring. Used by date tiles + card borders. */
+function typePalette(t: string | null | undefined): { from: string; to: string; ring: string } {
+  const key = (t ?? 'other') as LiveEventType
+  return TYPE_META[key] ?? TYPE_META.other
 }
 function formatTimeRange(iso: string, endIso?: string | null): string {
   const start = new Date(iso).toLocaleString('en-NZ', {
@@ -409,8 +419,55 @@ function spotsTaken(e: EventEntry): number {
         </a>
       </div>
 
+      <!-- Skeleton — fires on the first load of a month before any events land. -->
+      <div
+        v-if="fetching && monthEventsFetched.length === 0"
+        class="evc__body evc__body--skel"
+        aria-busy="true"
+        aria-label="Loading events"
+      >
+        <div class="cal cal--skel">
+          <div class="cal__week">
+            <div v-for="w in WEEKDAY_LABELS" :key="w" class="cal__wday">{{ w }}</div>
+          </div>
+          <div class="cal__grid">
+            <div v-for="n in 35" :key="n" class="cal__cell">
+              <Skeleton width="22px" height="22px" radius="pill" />
+              <div v-if="[3, 9, 15, 16, 22, 27].includes(n)" class="cal__events">
+                <Skeleton width="80%" height="14px" radius="sm" />
+                <Skeleton v-if="n === 15 || n === 22" width="65%" height="14px" radius="sm" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <aside class="side side--skel">
+          <div class="side__label">Highlights</div>
+          <ul class="side__list">
+            <li v-for="n in 3" :key="n">
+              <div class="hl hl--skel">
+                <Skeleton width="44px" height="52px" radius="md" />
+                <div class="hl__body" style="width: 100%;">
+                  <Skeleton :width="`${75 - n * 8}%`" height-variant="lg" />
+                  <Skeleton width="60%" style="margin-top: 6px;" />
+                  <Skeleton width="45%" style="margin-top: 6px;" />
+                </div>
+              </div>
+            </li>
+          </ul>
+          <div class="stats stats--skel">
+            <div class="stats__label">This month at a glance</div>
+            <div class="stats__row">
+              <Skeleton width="60px" height-variant="xl" />
+            </div>
+            <div class="stats__row">
+              <Skeleton width="48px" height-variant="xl" />
+            </div>
+          </div>
+        </aside>
+      </div>
+
       <!-- Grid + side panel (calendar view) -->
-      <div v-if="viewMode === 'calendar'" class="evc__body">
+      <div v-else-if="viewMode === 'calendar'" class="evc__body">
         <div class="cal">
           <!-- Weekday header -->
           <div class="cal__week">
@@ -452,7 +509,16 @@ function spotsTaken(e: EventEntry): number {
           </div>
           <ul v-else class="side__list">
             <li v-for="e in highlights" :key="e.id">
-              <button type="button" class="hl" @click="openEvent(e)">
+              <button
+                type="button"
+                class="hl"
+                :style="{
+                  '--hl-from': typePalette(e.event_type).from,
+                  '--hl-to': typePalette(e.event_type).to,
+                  '--hl-ring': typePalette(e.event_type).ring,
+                } as any"
+                @click="openEvent(e)"
+              >
                 <div class="hl__date">
                   <div class="hl__date-month">{{ formatShortDate(e.starts_at).month }}</div>
                   <div class="hl__date-day">{{ formatShortDate(e.starts_at).day }}</div>
@@ -489,7 +555,7 @@ function spotsTaken(e: EventEntry): number {
       </div>
 
       <!-- List view -->
-      <div v-else class="evc__list-wrap">
+      <div v-else-if="viewMode === 'list'" class="evc__list-wrap">
         <div class="evc__list-toolbar">
           <div class="evc__search">
             <svg class="evc__search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -535,7 +601,16 @@ function spotsTaken(e: EventEntry): number {
 
         <ul v-else class="evc__list">
           <li v-for="e in listEvents" :key="e.id">
-            <button type="button" class="lst" @click="openEvent(e)">
+            <button
+              type="button"
+              class="lst"
+              :style="{
+                '--lst-from': typePalette(e.event_type).from,
+                '--lst-to': typePalette(e.event_type).to,
+                '--lst-ring': typePalette(e.event_type).ring,
+              } as any"
+              @click="openEvent(e)"
+            >
               <div class="lst__date">
                 <div class="lst__date-month">{{ formatShortDate(e.starts_at).month }}</div>
                 <div class="lst__date-day">{{ formatShortDate(e.starts_at).day }}</div>
@@ -711,10 +786,11 @@ function spotsTaken(e: EventEntry): number {
 .evc__list-empty-title { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--color-ink); margin-bottom: 4px; }
 .evc__list-empty p { margin: 0; font-size: 13px; }
 
-.lst { display: grid; grid-template-columns: 56px 1fr auto; gap: 16px; align-items: start; width: 100%; padding: 16px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; cursor: pointer; text-align: left; transition: border-color 120ms, transform 120ms; }
-.lst:hover { border-color: var(--brand); transform: translateY(-1px); }
-.lst:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.lst__date { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 4px; background: var(--color-ink); color: #fff; border-radius: 10px; }
+.lst { position: relative; display: grid; grid-template-columns: 56px 1fr auto; gap: 16px; align-items: start; width: 100%; padding: 16px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; cursor: pointer; text-align: left; transition: transform 160ms, box-shadow 160ms; overflow: hidden; }
+.lst::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--lst-from, #F5A623), var(--lst-to, #E85D5D)); }
+.lst:hover { transform: translateY(-1px); box-shadow: 0 8px 24px color-mix(in oklab, var(--lst-ring, var(--brand)) 22%, transparent); }
+.lst:focus-visible { outline: 2px solid var(--lst-ring, var(--brand)); outline-offset: 2px; }
+.lst__date { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 4px; background-image: linear-gradient(160deg, var(--lst-from, #F5A623) 0%, var(--lst-to, #E85D5D) 100%); color: #fff; border-radius: 10px; box-shadow: 0 4px 12px color-mix(in oklab, var(--lst-ring, #F5A623) 28%, transparent); }
 .lst__date-month { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; opacity: 0.8; }
 .lst__date-day { font-family: var(--font-display); font-size: 22px; font-weight: 700; line-height: 1; margin-top: 2px; }
 .lst__body { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -732,6 +808,12 @@ function spotsTaken(e: EventEntry): number {
 
 /* Body: grid + side */
 .evc__body { display: grid; grid-template-columns: 1fr 300px; gap: 24px; align-items: start; }
+/* Skeleton state — dampen colour and hide interactions. Rainbow ribbon on
+   the stats card is hidden too so the load looks calm. */
+.evc__body--skel { pointer-events: none; }
+.cal--skel .cal__cell, .side--skel .hl--skel { animation: none; }
+.stats--skel::before { display: none; }
+.hl--skel { display: flex; gap: 12px; padding: 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; align-items: flex-start; }
 
 /* Calendar */
 .cal { background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; overflow: hidden; }
@@ -753,10 +835,11 @@ function spotsTaken(e: EventEntry): number {
 .side__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .side__empty { padding: 20px; background: #fff; border: 1px dashed var(--color-hairline); border-radius: 12px; font-family: var(--font-body); font-size: 13px; color: var(--color-fog); text-align: center; }
 
-.hl { display: flex; gap: 12px; padding: 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; cursor: pointer; text-align: left; width: 100%; transition: border-color 120ms, transform 120ms; }
-.hl:hover { border-color: var(--brand); transform: translateY(-1px); }
-.hl:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.hl__date { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 44px; padding: 6px 4px; background: var(--color-ink); color: #fff; border-radius: 8px; flex-shrink: 0; }
+.hl { position: relative; display: flex; gap: 12px; padding: 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; cursor: pointer; text-align: left; width: 100%; transition: transform 160ms, box-shadow 160ms; overflow: hidden; }
+.hl::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--hl-from, #F5A623), var(--hl-to, #E85D5D)); }
+.hl:hover { transform: translateY(-1px); box-shadow: 0 6px 16px color-mix(in oklab, var(--hl-ring, var(--brand)) 22%, transparent); }
+.hl:focus-visible { outline: 2px solid var(--hl-ring, var(--brand)); outline-offset: 2px; }
+.hl__date { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 44px; padding: 6px 4px; background-image: linear-gradient(160deg, var(--hl-from, #F5A623) 0%, var(--hl-to, #E85D5D) 100%); color: #fff; border-radius: 8px; flex-shrink: 0; box-shadow: 0 2px 8px color-mix(in oklab, var(--hl-ring, #F5A623) 25%, transparent); }
 .hl__date-month { font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; opacity: 0.8; }
 .hl__date-day { font-family: var(--font-display); font-size: 18px; font-weight: 700; line-height: 1; margin-top: 2px; }
 .hl__body { flex: 1; min-width: 0; }
@@ -768,7 +851,8 @@ function spotsTaken(e: EventEntry): number {
 .hl__going { font-family: var(--font-body); font-size: 10px; padding: 2px 8px; background: var(--color-surface); border-radius: 999px; color: var(--color-graphite); font-weight: 600; }
 
 /* Stats */
-.stats { display: flex; flex-direction: column; gap: 12px; padding: 20px; background: var(--color-ink); color: #fff; border-radius: 14px; }
+.stats { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 20px; background: radial-gradient(circle at 20% 20%, rgba(245, 166, 35, 0.22) 0%, transparent 55%), radial-gradient(circle at 80% 100%, rgba(124, 58, 237, 0.18) 0%, transparent 55%), var(--color-ink); color: #fff; border-radius: 14px; overflow: hidden; }
+.stats::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #F5A623, #E85D5D 30%, #7C3AED 60%, #0EA5E9); }
 .stats__label { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.7; }
 .stats__row { display: flex; align-items: baseline; gap: 12px; }
 .stats__num { font-family: var(--font-display); font-size: 36px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
@@ -792,6 +876,7 @@ function spotsTaken(e: EventEntry): number {
 .evd { position: fixed; inset: 0; background: rgba(10, 10, 11, 0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 24px; animation: evd-fade 160ms ease-out; }
 @keyframes evd-fade { from { opacity: 0; } to { opacity: 1; } }
 .evd__card { position: relative; width: 100%; max-width: 520px; max-height: calc(100vh - 48px); overflow-y: auto; background: #fff; border-radius: 20px; padding: 32px; box-shadow: 0 24px 64px rgba(0,0,0,0.24); animation: evd-slide 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+.evd__card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 20px 20px 0 0; background: linear-gradient(90deg, #F5A623, #E85D5D 30%, #7C3AED 60%, #0EA5E9); }
 @keyframes evd-slide { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 .evd__close { position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; border-radius: 999px; background: var(--color-surface); border: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--color-fog); cursor: pointer; transition: background 120ms, color 120ms; }
 .evd__close:hover { background: var(--color-hairline); color: var(--color-ink); }

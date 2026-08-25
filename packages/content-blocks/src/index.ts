@@ -25,4 +25,7 @@ export { default as SiteHeader } from './chrome/SiteHeader.vue'
 export { default as SiteMobileDrawer } from './chrome/SiteMobileDrawer.vue'
 export { default as SiteFooter } from './chrome/SiteFooter.vue'
 
+// Shared primitives.
+export { default as Skeleton } from './components/Skeleton.vue'
+
 export * from './types'

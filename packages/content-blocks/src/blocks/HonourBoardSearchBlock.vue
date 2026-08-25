@@ -18,6 +18,7 @@ import {
   type PublicHonourEntry,
   type PublicHonourEntriesResponse,
 } from '@torny/api-client'
+import Skeleton from '../components/Skeleton.vue'
 import {
   BLOCK_CONTEXT_KEY,
   type BlockContext,
@@ -179,6 +180,35 @@ function initialsOf(name: string): string {
     .map((w) => (w[0] ?? '').toUpperCase())
     .join('')
 }
+
+/** Stable-per-key colour palette (same values as HonourBoardBlock's).
+ *  Used to tint the champion avatar per team and the rail dot per
+ *  category so the wall doesn't read as one giant grey table. */
+const AVATAR_PALETTE: Array<{ from: string; to: string; ring: string }> = [
+  { from: '#F5A623', to: '#E85D5D', ring: '#F5A623' },
+  { from: '#7C3AED', to: '#DB2777', ring: '#A855F7' },
+  { from: '#0EA5E9', to: '#0369A1', ring: '#38BDF8' },
+  { from: '#10B981', to: '#0F766E', ring: '#34D399' },
+  { from: '#F97316', to: '#B45309', ring: '#FB923C' },
+  { from: '#3B82F6', to: '#1E3A8A', ring: '#60A5FA' },
+  { from: '#EC4899', to: '#831843', ring: '#F472B6' },
+]
+function hashCode(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+function paletteFor(key: string): { from: string; to: string; ring: string } {
+  return AVATAR_PALETTE[hashCode(key) % AVATAR_PALETTE.length]!
+}
+/** Identity key used for tinting a row consistently across renders. */
+function teamKey(entry: PublicHonourEntry): string {
+  return [...entry.players]
+    .map((p) => (p.user_id !== null ? `u:${p.user_id}` : `n:${p.display_name.toLowerCase()}`))
+    .sort()
+    .join('|') || `e:${entry.entry_id}`
+}
+
 function formatAwarded(iso: string | null | undefined): string {
   if (!iso) return '—'
   try {
@@ -211,6 +241,50 @@ function loadMore() {
     <div v-if="!clubSlug" class="hbs__placeholder">
       <div class="hbs__placeholder-title">Honour board search</div>
       <p>Preview shows on the public site — this block renders a searchable table of every entry across every category.</p>
+    </div>
+
+    <!-- Initial-load skeleton — shape-matches the real UI so nothing pops. -->
+    <div
+      v-else-if="catsLoading && categories.length === 0"
+      class="hbs__grid"
+      aria-busy="true"
+      aria-label="Loading honour board"
+    >
+      <aside class="rail rail--skel">
+        <div class="rail__label">Categories</div>
+        <ul class="rail__list">
+          <li v-for="n in 7" :key="n" class="rail__item rail__item--skel">
+            <Skeleton :width="`${72 - n * 4}%`" />
+          </li>
+        </ul>
+      </aside>
+      <section class="results">
+        <header class="results__head">
+          <Skeleton width="160px" />
+          <div class="results__title-row" style="margin-top: 10px;">
+            <Skeleton width="220px" height-variant="xl" />
+          </div>
+        </header>
+        <div class="results__skel">
+          <div class="results__skel-header">
+            <Skeleton width="60px" />
+            <Skeleton width="120px" />
+            <Skeleton width="120px" />
+            <Skeleton width="80px" />
+            <Skeleton width="90px" />
+          </div>
+          <div v-for="n in 6" :key="n" class="results__skel-row">
+            <Skeleton width="42px" />
+            <div class="results__skel-champ">
+              <Skeleton width="32px" height="32px" radius="pill" />
+              <Skeleton :width="`${65 - n * 4}%`" />
+            </div>
+            <Skeleton :width="`${45 - n * 3}%`" />
+            <Skeleton width="52px" />
+            <Skeleton width="72px" />
+          </div>
+        </div>
+      </section>
     </div>
 
     <!-- Search + filters -->
@@ -269,7 +343,7 @@ function loadMore() {
               :class="{ 'rail__item--active': activeCategorySlug === c.slug }"
               @click="activeCategorySlug = c.slug"
             >
-              <span class="rail__item-dot" />
+              <span class="rail__item-dot" :style="{ background: paletteFor(c.slug).from } as any" />
               <span class="rail__item-name">{{ c.name }}</span>
               <span class="rail__item-count">{{ c.entry_count }}</span>
             </button>
@@ -291,7 +365,25 @@ function loadMore() {
           </div>
         </header>
 
-        <div v-if="entriesLoading && entries.length === 0" class="results__loading">Loading…</div>
+        <div v-if="entriesLoading && entries.length === 0" class="results__skel">
+          <div class="results__skel-header">
+            <Skeleton width="60px" />
+            <Skeleton width="120px" />
+            <Skeleton width="120px" />
+            <Skeleton width="80px" />
+            <Skeleton width="90px" />
+          </div>
+          <div v-for="n in 5" :key="n" class="results__skel-row">
+            <Skeleton width="42px" />
+            <div class="results__skel-champ">
+              <Skeleton width="32px" height="32px" radius="pill" />
+              <Skeleton :width="`${60 - n * 4}%`" />
+            </div>
+            <Skeleton :width="`${40 - n * 3}%`" />
+            <Skeleton width="52px" />
+            <Skeleton width="72px" />
+          </div>
+        </div>
 
         <div v-else-if="entries.length === 0" class="results__empty">
           <div class="results__empty-title">No results.</div>
@@ -316,7 +408,13 @@ function loadMore() {
               </td>
               <td class="col-champ">
                 <div class="row__champ">
-                  <span class="row__avatar" :style="{ background: brand } as any">{{ initialsOf(e.players[0]?.display_name ?? '') }}</span>
+                  <span
+                    class="row__avatar"
+                    :style="{
+                      backgroundImage: `linear-gradient(160deg, ${paletteFor(teamKey(e)).from} 0%, ${paletteFor(teamKey(e)).to} 100%)`,
+                      boxShadow: `0 2px 8px ${paletteFor(teamKey(e)).ring}55`,
+                    } as any"
+                  >{{ initialsOf(e.players[0]?.display_name ?? '') }}</span>
                   <div class="row__names">
                     <div class="row__name">
                       <template v-for="(p, i) in e.players" :key="p.user_id ?? p.display_name">
@@ -394,7 +492,8 @@ function loadMore() {
 .rail__item-count { font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); flex-shrink: 0; }
 .rail__item--active .rail__item-count { color: var(--color-graphite); }
 
-.results { min-width: 0; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; overflow: hidden; }
+.results { position: relative; min-width: 0; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; overflow: hidden; }
+.results::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #F5A623 0%, #E85D5D 30%, #7C3AED 60%, #0EA5E9 100%); }
 .results__head { padding: 20px 24px 16px; border-bottom: 1px solid var(--color-hairline); }
 .results__eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; margin-bottom: 8px; }
 .results__title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
@@ -426,6 +525,22 @@ function loadMore() {
 
 .results__loading, .results__empty { padding: 48px 24px; text-align: center; color: var(--color-fog); font-family: var(--font-body); }
 .results__empty-title { font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--color-ink); margin-bottom: 6px; }
+
+/* Skeleton table body — matches the real thead + row layout so the swap
+   doesn't reflow when data lands. */
+.results__skel { display: flex; flex-direction: column; }
+.results__skel-header { display: grid; grid-template-columns: 100px minmax(240px, 1fr) 160px 100px 130px; gap: 16px; align-items: center; padding: 14px 16px; background: var(--color-surface); border-bottom: 1px solid var(--color-hairline); }
+.results__skel-row { display: grid; grid-template-columns: 100px minmax(240px, 1fr) 160px 100px 130px; gap: 16px; align-items: center; padding: 16px; border-bottom: 1px solid var(--color-hairline); }
+.results__skel-row:last-child { border-bottom: 0; }
+.results__skel-champ { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+.rail--skel { pointer-events: none; }
+.rail__item--skel { padding: 12px 12px; pointer-events: none; }
+
+@media (max-width: 900px) {
+  .results__skel-header, .results__skel-row { grid-template-columns: 70px minmax(160px, 1fr) 80px; }
+  .results__skel-header > :nth-child(n+4), .results__skel-row > :nth-child(n+4) { display: none; }
+}
 
 .results__foot { padding: 16px 24px; border-top: 1px solid var(--color-hairline); display: flex; justify-content: center; }
 .results__load { padding: 10px 20px; background: var(--color-ink); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }

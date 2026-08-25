@@ -79,6 +79,29 @@ function playerHref(userId: number | null | undefined): string | null {
   return userId ? `/players/${userId}` : null
 }
 
+/**
+ * Stable-per-player color palette. Hashes the identity key so a given
+ * winner keeps the same avatar gradient across the strip (and across
+ * renders). Same palette runs through the search page for consistency.
+ */
+const AVATAR_PALETTE: Array<{ from: string; to: string; ring: string }> = [
+  { from: '#F5A623', to: '#E85D5D', ring: '#F5A623' }, // gold → red
+  { from: '#7C3AED', to: '#DB2777', ring: '#A855F7' }, // violet → pink
+  { from: '#0EA5E9', to: '#0369A1', ring: '#38BDF8' }, // sky → deep blue
+  { from: '#10B981', to: '#0F766E', ring: '#34D399' }, // emerald
+  { from: '#F97316', to: '#B45309', ring: '#FB923C' }, // orange → amber
+  { from: '#3B82F6', to: '#1E3A8A', ring: '#60A5FA' }, // blue
+  { from: '#EC4899', to: '#831843', ring: '#F472B6' }, // pink → burgundy
+]
+function hashCode(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+function paletteFor(key: string): { from: string; to: string; ring: string } {
+  return AVATAR_PALETTE[hashCode(key) % AVATAR_PALETTE.length]!
+}
+
 const awardedLabel = computed(() => {
   if (!reigning.value?.awarded_at) return null
   const d = new Date(reigning.value.awarded_at)
@@ -109,9 +132,19 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
 
     <!-- Reigning champion feature -->
     <div v-if="reigning" class="hb__feature">
-      <div class="hb__avatar">
+      <div
+        class="hb__avatar"
+        :style="{
+          backgroundImage: `linear-gradient(160deg, ${paletteFor(teamKey(reigning)).from} 0%, ${paletteFor(teamKey(reigning)).to} 100%)`,
+          boxShadow: `0 8px 32px ${paletteFor(teamKey(reigning)).ring}55`,
+        } as any"
+      >
         <span>{{ reigning.initials || initialsFromName(reigning.member_name) }}</span>
-        <span class="hb__avatar-pip" aria-hidden="true">
+        <span
+          class="hb__avatar-pip"
+          aria-hidden="true"
+          :style="{ background: paletteFor(teamKey(reigning)).ring } as any"
+        >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L14.6 8.6L22 9.3L16.4 14L18.1 21L12 17.3L5.9 21L7.6 14L2 9.3L9.4 8.6L12 2Z"/></svg>
         </span>
       </div>
@@ -164,7 +197,16 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
         </div>
       </div>
       <ol class="hb__winners">
-        <li v-for="entry in recentDecade" :key="`${entry.year}-${teamKey(entry)}`" class="hb__winner">
+        <li
+          v-for="entry in recentDecade"
+          :key="`${entry.year}-${teamKey(entry)}`"
+          class="hb__winner"
+          :style="{
+            '--wc-from': paletteFor(teamKey(entry)).from,
+            '--wc-to': paletteFor(teamKey(entry)).to,
+            '--wc-ring': paletteFor(teamKey(entry)).ring,
+          } as any"
+        >
           <div class="hb__winner-year">{{ entry.year }}</div>
           <div class="hb__winner-avatar">{{ entry.initials || initialsFromName(entry.member_name) }}</div>
           <div class="hb__winner-name" :title="teamNames(entry)">{{ teamNames(entry) }}</div>
@@ -258,13 +300,27 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
 
 /* Reigning champion feature */
 .hb__feature {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 48px;
   padding: 48px;
-  background: var(--color-ink);
+  background:
+    radial-gradient(circle at 15% 30%, rgba(245, 166, 35, 0.18) 0%, transparent 42%),
+    radial-gradient(circle at 85% 90%, rgba(232, 93, 93, 0.15) 0%, transparent 40%),
+    var(--color-ink);
   border-radius: var(--radius-lg);
   color: var(--color-ground);
+  overflow: hidden;
+}
+.hb__feature::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #F5A623 0%, #E85D5D 30%, #7C3AED 60%, #0EA5E9 100%);
 }
 
 .hb__avatar {
@@ -272,6 +328,7 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
   width: 200px;
   height: 200px;
   border-radius: var(--radius-pill);
+  /* Gradient set inline via :style — palette hashed per team. */
   background-image: linear-gradient(160deg, #F5A623 0%, #E85D5D 100%);
   display: flex;
   align-items: center;
@@ -397,6 +454,7 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
   gap: 16px;
 }
 .hb__winner {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -405,21 +463,34 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
   background: var(--color-surface);
   border-radius: var(--radius-md);
   text-align: center;
+  transition: transform 160ms, box-shadow 160ms;
+  overflow: hidden;
 }
+.hb__winner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--wc-from, #F5A623), var(--wc-to, #E85D5D));
+}
+.hb__winner:hover { transform: translateY(-2px); box-shadow: 0 8px 20px color-mix(in oklab, var(--wc-ring, #F5A623) 25%, transparent); }
 .hb__winner-year {
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-bold);
   letter-spacing: var(--track-label);
   line-height: 14px;
   text-transform: uppercase;
-  color: var(--color-fog);
+  color: var(--wc-to, var(--color-fog));
 }
 .hb__winner-avatar {
   width: 56px;
   height: 56px;
   border-radius: var(--radius-pill);
-  background-image: linear-gradient(160deg, #F5A623 0%, #E85D5D 100%);
+  background-image: linear-gradient(160deg, var(--wc-from, #F5A623) 0%, var(--wc-to, #E85D5D) 100%);
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--wc-ring, #F5A623) 30%, transparent);
   display: inline-flex;
   align-items: center;
   justify-content: center;

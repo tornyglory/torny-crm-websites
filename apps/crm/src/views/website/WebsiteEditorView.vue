@@ -39,6 +39,7 @@ import type {
   EventsCalendarProps,
   HonourBoardProps,
   HonourBoardSearchProps,
+  MembersSearchProps,
   GalleryProps,
   ContactFormProps,
   MembershipCtaProps,
@@ -313,6 +314,16 @@ const EDITORIAL_PALETTE = [
     defaults: () => twoColumnDefault() },
   { type: 'divider' as const, label: 'Divider', hint: 'Section break line, label, or spacer', icon: '—',
     defaults: () => dividerDefault('hairline') },
+  { type: 'membersSearch' as const, label: 'Members', hint: 'Grid of members — filter to Board, Staff, Committee, or all', icon: '☺',
+    defaults: (): MembersSearchProps => ({
+      heading: 'Meet the club',
+      description: '',
+      positions: [],
+      defaultPosition: 'all',
+      showFilterChips: true,
+      showSearch: true,
+      pageSize: 24,
+    }) },
 ]
 
 const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
@@ -428,6 +439,7 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   eventsCalendar: 'Events · Calendar',
   honourBoard: 'Honour board',
   honourBoardSearch: 'Honour board · Search',
+  membersSearch: 'Members',
   gallery: 'Gallery',
   contactForm: 'Contact form',
   membershipCta: 'Membership CTA',
@@ -1014,6 +1026,12 @@ function blockSummary(block: Block): string {
     case 'eventsCalendar': return (block.props as EventsCalendarProps).heading || 'Events calendar'
     case 'honourBoard':   return (block.props as HonourBoardProps).heading || `Honour board — last ${(block.props as HonourBoardProps).yearsToShow ?? 10} years`
     case 'honourBoardSearch': return (block.props as HonourBoardSearchProps).heading || 'Full searchable honour board'
+    case 'membersSearch': {
+      const p = block.props as MembersSearchProps
+      const positions = p.positions ?? []
+      const scope = positions.length > 0 ? positions.join(', ') : 'all positions'
+      return p.heading ? `${p.heading} — ${scope}` : `Members — ${scope}`
+    }
     case 'gallery':       return `${(block.props as GalleryProps).images.length} photos`
     case 'contactForm':   return (block.props as ContactFormProps).heading || 'Contact form'
     case 'membershipCta': return (block.props as MembershipCtaProps).heading || '(no heading)'
@@ -1498,6 +1516,73 @@ const lastSavedLabel = computed(() => {
               <span class="field__label">Page size</span>
               <input v-model.number="(selectedBlock.props as HonourBoardSearchProps).pageSize" type="number" min="10" max="100" step="10" />
               <span class="field__hint">Rows per "Load older" page. 50 is a sensible default.</span>
+            </label>
+          </template>
+
+          <!-- Members — meet the club (brief 35) -->
+          <template v-else-if="selectedBlock.type === 'membersSearch'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as MembersSearchProps).eyebrow" type="text" placeholder="e.g. OUR TEAM" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as MembersSearchProps).heading" type="text" placeholder="Meet the club" />
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as MembersSearchProps).description" rows="3" placeholder="One line about the people behind the club." />
+            </label>
+            <div class="field__group">
+              <div class="field__group-title">Positions to show</div>
+              <p class="field__hint" style="margin: 4px 0 8px;">Leave all off to show every position. Pick a subset to curate — e.g. just Staff for a "Meet the staff" block.</p>
+              <div class="chip-picker">
+                <template v-for="p in (['board','staff','committee','member'] as const)" :key="p">
+                  <label class="chip-picker__item">
+                    <input
+                      type="checkbox"
+                      :checked="((selectedBlock.props as MembersSearchProps).positions ?? []).includes(p)"
+                      @change="(e) => {
+                        const current = (selectedBlock!.props as MembersSearchProps).positions ?? [];
+                        const checked = (e.target as HTMLInputElement).checked;
+                        (selectedBlock!.props as MembersSearchProps).positions = checked
+                          ? [...current, p]
+                          : current.filter((x) => x !== p);
+                      }"
+                    />
+                    <span>{{ p[0]!.toUpperCase() + p.slice(1) }}</span>
+                  </label>
+                </template>
+              </div>
+            </div>
+            <label class="switch-row">
+              <div>
+                <div class="switch-row__label">Show filter chips</div>
+                <div class="switch-row__hint">Public visitors can filter by position. Turn off for a static curated block.</div>
+              </div>
+              <button
+                type="button"
+                class="switch"
+                :class="{ 'is-on': (selectedBlock.props as MembersSearchProps).showFilterChips !== false }"
+                @click="(selectedBlock.props as MembersSearchProps).showFilterChips = !((selectedBlock.props as MembersSearchProps).showFilterChips !== false)"
+              ><span class="switch__knob" /></button>
+            </label>
+            <label class="switch-row">
+              <div>
+                <div class="switch-row__label">Show search input</div>
+                <div class="switch-row__hint">Visitors can search by name or title.</div>
+              </div>
+              <button
+                type="button"
+                class="switch"
+                :class="{ 'is-on': (selectedBlock.props as MembersSearchProps).showSearch !== false }"
+                @click="(selectedBlock.props as MembersSearchProps).showSearch = !((selectedBlock.props as MembersSearchProps).showSearch !== false)"
+              ><span class="switch__knob" /></button>
+            </label>
+            <label class="field">
+              <span class="field__label">Page size</span>
+              <input v-model.number="(selectedBlock.props as MembersSearchProps).pageSize" type="number" min="4" max="100" step="4" />
+              <span class="field__hint">How many cards to load per fetch. 24 fits neatly on wide screens.</span>
             </label>
           </template>
 
@@ -2437,6 +2522,10 @@ const lastSavedLabel = computed(() => {
 .field__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); }
 
 .field__group { padding: 12px 14px; background: var(--color-surface); border-radius: 10px; display: flex; flex-direction: column; gap: 10px; }
+.chip-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-picker__item { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-graphite); cursor: pointer; }
+.chip-picker__item:has(input:checked) { background: var(--color-ink); color: #fff; border-color: var(--color-ink); font-weight: 600; }
+.chip-picker__item input { appearance: none; margin: 0; }
 .field__group-title { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
 
 .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }

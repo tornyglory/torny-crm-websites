@@ -51,6 +51,7 @@ const TAGS_BY_TYPE: Record<BlockType, Tag[]> = {
   eventsCalendar: ['data', 'layout'],
   honourBoard:    ['data'],
   honourBoardSearch: ['data'],
+  membersSearch: ['data'],
   gallery:        ['media'],
   contactForm:    ['forms'],
   membershipCta:  ['cta'],
@@ -232,6 +233,32 @@ const BlockPreview = defineComponent({
           rect(66, 32, 118, 74, { fill: graphite, opacity: 0.05, rx: 3 }),
           rect(70, 38, 30, 3, { fill: ink }),
           ...[52, 64, 76, 88, 100].map((y) => rect(70, y, 100, 3, { fill: graphite, opacity: 0.5 })),
+        ])
+
+      case 'membersSearch':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          // Heading
+          rect(14, 10, 80, 6, { fill: ink }),
+          // Filter chips
+          rect(14, 22, 20, 5, { fill: ink, opacity: 0.85, rx: 2 }),
+          rect(38, 22, 22, 5, { fill: graphite, opacity: 0.35, rx: 2 }),
+          rect(64, 22, 22, 5, { fill: graphite, opacity: 0.35, rx: 2 }),
+          // Member cards — 4 across
+          ...[
+            { x: 14, from: '#F5A623' },
+            { x: 62, from: '#0EA5E9' },
+            { x: 110, from: '#7C3AED' },
+            { x: 158, from: '#10B981' },
+          ].flatMap((c) => [
+            rect(c.x, 34, 44, 72, { fill: '#fff', stroke: graphite, opacity: 0.15, rx: 3 }),
+            rect(c.x, 34, 44, 2, { fill: c.from }),
+            // Round avatar
+            rect(c.x + 14, 44, 16, 16, { fill: c.from, rx: 8 }),
+            rect(c.x + 6, 66, 32, 4, { fill: ink }),
+            rect(c.x + 10, 74, 24, 3, { fill: graphite, opacity: 0.5 }),
+            rect(c.x + 10, 96, 20, 4, { fill: c.from, opacity: 0.35, rx: 2 }),
+          ]),
         ])
 
       case 'gallery':

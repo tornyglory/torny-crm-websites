@@ -7,7 +7,7 @@
 // the `members[]` array is unaffected either way.
 
 import { CRM_BASE } from '../config'
-import { authedFetch } from '../http'
+import { authedFetch, publicFetch } from '../http'
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -391,4 +391,145 @@ export function formatMembershipFee(m: RosterMembership | null | undefined): str
   if (!m || m.fee == null) return ''
   const suffix = m.cadence ? CADENCE_SUFFIX[m.cadence] : ''
   return suffix ? `$${m.fee} ${suffix}` : `$${m.fee}`
+}
+
+// ── Public — meet-the-club directory + player profile (brief 35) ──
+
+/** Position group for the public directory — separate from `MemberRole`. */
+export type PositionGroup = 'board' | 'staff' | 'committee' | 'member'
+
+export interface PublicMember {
+  user_id: number
+  full_name: string
+  avatar_url: string | null
+  position_group: PositionGroup
+  title: string | null
+  joined_year: number | null
+  trophies_count: number
+  initials: string
+}
+
+export interface PublicMembersResponse {
+  members: PublicMember[]
+  total: number
+}
+
+export interface PublicListMembersParams {
+  /** Filter to one group. `committee` includes Board (subset). Omit for all. */
+  position?: PositionGroup
+  search?: string
+  limit?: number
+  offset?: number
+  /** `default` = Board → Staff → Committee → Member, alpha within each. */
+  sort?: 'default' | 'alpha'
+}
+
+export interface PublicPlayerProfile {
+  user_id: number
+  full_name: string
+  avatar_url: string | null
+  initials: string
+  position_group: PositionGroup
+  title: string | null
+  joined_year: number | null
+  bio: string | null
+  club: {
+    id: number
+    slug: string
+    name: string
+    logo_url: string | null
+  }
+  trophies: {
+    total: number
+    recent: Array<{
+      entry_id: number
+      year: number | null
+      category_slug: string
+      category_name: string
+      note: string | null
+    }>
+  }
+}
+
+/**
+ * GET /public/clubs/:slug/members — the meet-the-club directory.
+ * No auth. Cached 5min shared + 30min SWR by backend.
+ */
+export async function publicList(
+  slug: string,
+  params: PublicListMembersParams = {},
+  opts: { signal?: AbortSignal } = {},
+): Promise<PublicMembersResponse> {
+  const qs = new URLSearchParams()
+  if (params.position) qs.set('position', params.position)
+  if (params.search != null && params.search.length > 0) qs.set('search', params.search)
+  if (params.limit != null) qs.set('limit', String(params.limit))
+  if (params.offset != null) qs.set('offset', String(params.offset))
+  if (params.sort && params.sort !== 'default') qs.set('sort', params.sort)
+
+  const url = qs.toString().length
+    ? `${CRM_BASE}/public/clubs/${encodeURIComponent(slug)}/members?${qs.toString()}`
+    : `${CRM_BASE}/public/clubs/${encodeURIComponent(slug)}/members`
+
+  const res = await publicFetch<Envelope<PublicMembersResponse>>(url, {
+    method: 'GET',
+    signal: opts.signal,
+  })
+  return res.data
+}
+
+/** GET /public/clubs/:slug/players/:userId — single-player profile. No auth. */
+export async function publicPlayer(
+  slug: string,
+  userId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<PublicPlayerProfile> {
+  const res = await publicFetch<Envelope<PublicPlayerProfile>>(
+    `${CRM_BASE}/public/clubs/${encodeURIComponent(slug)}/players/${userId}`,
+    { method: 'GET', signal: opts.signal },
+  )
+  return res.data
+}
+
+// ── PATCH extensions (brief 35 §3) ─────────────────────────────────
+
+/** Extended PATCH body — adds position_group / public_visible / bio. */
+export interface UpdateMemberPatch {
+  role?: MemberRole
+  title?: string | null
+  notes?: string | null
+  membership_type_id?: number | null
+  position_group?: PositionGroup
+  public_visible?: boolean
+  bio?: string | null
+}
+
+export interface UpdateMemberResponse {
+  club_id: number
+  user_id: number
+  role: MemberRole
+  title: string | null
+  position_group: PositionGroup
+  public_visible: boolean
+  bio: string | null
+  updated_at: string
+  membership: RosterMembership | null
+}
+
+/** PATCH /clubs/:clubId/members/:userId — partial update. */
+export async function patchMember(
+  clubId: number,
+  userId: number,
+  patch: UpdateMemberPatch,
+  opts: { signal?: AbortSignal } = {},
+): Promise<UpdateMemberResponse> {
+  const res = await authedFetch<Envelope<UpdateMemberResponse>>(
+    `${CRM_BASE}/clubs/${clubId}/members/${userId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+      signal: opts.signal,
+    },
+  )
+  return res.data
 }

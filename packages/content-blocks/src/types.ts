@@ -5,6 +5,7 @@ export type BlockType =
   | 'eventsCalendar'
   | 'honourBoard'
   | 'honourBoardSearch'
+  | 'membersSearch'
   | 'gallery'
   | 'contactForm'
   | 'membershipCta'
@@ -93,6 +94,25 @@ export interface HonourBoardSearchProps {
   heading?: string
   description?: string
   /** Rows per page fetch. Defaults to 50 on server-side. */
+  pageSize?: number
+}
+
+/** Position group used by the public members directory (brief 35). */
+export type MemberPositionGroup = 'board' | 'staff' | 'committee' | 'member'
+
+/** "Meet the club" block — reads from brief 35's public members endpoint.
+ *  Doubles as a curated staff / board block when `positions` is set. */
+export interface MembersSearchProps {
+  eyebrow?: string
+  heading?: string
+  description?: string
+  /** Restrict to a subset of position groups. Empty/undefined = all. */
+  positions?: MemberPositionGroup[]
+  /** Preselect a chip within the allowed positions. Defaults to `all`. */
+  defaultPosition?: 'all' | MemberPositionGroup
+  showFilterChips?: boolean
+  showSearch?: boolean
+  /** Rows per fetch page. Defaults to 24. */
   pageSize?: number
 }
 
@@ -239,6 +259,7 @@ export type Block =
   | BlockBase<'eventsCalendar', EventsCalendarProps>
   | BlockBase<'honourBoard', HonourBoardProps>
   | BlockBase<'honourBoardSearch', HonourBoardSearchProps>
+  | BlockBase<'membersSearch', MembersSearchProps>
   | BlockBase<'gallery', GalleryProps>
   | BlockBase<'contactForm', ContactFormProps>
   | BlockBase<'membershipCta', MembershipCtaProps>

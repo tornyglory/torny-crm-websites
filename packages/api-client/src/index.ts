@@ -29,6 +29,13 @@ export type {
   MembersSummary,
   SummaryTopTier,
   MembershipTierListItem,
+  PositionGroup,
+  PublicMember,
+  PublicMembersResponse,
+  PublicListMembersParams,
+  PublicPlayerProfile,
+  UpdateMemberPatch,
+  UpdateMemberResponse,
 } from './resources/members'
 export * as events from './resources/events'
 export type {

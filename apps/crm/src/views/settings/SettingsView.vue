@@ -59,10 +59,10 @@ const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
 const active = ref<SectionKey>('club')
 
 // ── Membership tiers (brief 36 — real CRUD, no onboarding blob) ─────
-// Reads / writes via useMembershipTiersStore. Cadence + first-year
-// discount toggles auto-save on change via the store's updateSettings
-// call. Tier edits (name / description / price) auto-save via PATCH on
-// blur — see `commitTierField` below.
+// Reads / writes via useMembershipTiersStore. Field edits (tier name /
+// description / price, cadence, first-year discount) are buffered in
+// local drafts and only PATCHed when the user clicks Save. Add / delete
+// / make-default remain one-shot actions.
 
 const CADENCE_UNIT: Record<'annual' | 'monthly' | 'season', string> = {
   annual: 'per year', monthly: 'per month', season: 'per season',
@@ -177,42 +177,103 @@ async function promoteDefault(tier: MembershipTierListItem) {
   }
 }
 
-/** Debounced per-tier field autosave — one PATCH per tier per idle burst. */
-const tierPatchTimers: Record<number, ReturnType<typeof setTimeout>> = {}
-function commitTierField(
+// ── Buffered draft state — writes only fire on Save ────────────────
+// Each tier's pending edits live in `tierDrafts[tierId]`. `settingsDraft`
+// holds pending cadence + first-year-discount overrides. Template reads
+// go through the `draftedX()` helpers so unsaved input stays reflected
+// even after the store refetches.
+
+type TierDraft = Partial<Pick<MembershipTierListItem, 'type_name' | 'description' | 'fee'>>
+const tierDrafts = reactive<Record<number, TierDraft>>({})
+const settingsDraft = reactive<{
+  cadence?: 'annual' | 'monthly' | 'season' | null
+  first_year_discount?: boolean
+}>({})
+const membershipSaving = ref(false)
+
+function membershipDirty(): boolean {
+  if (Object.keys(settingsDraft).length > 0) return true
+  return Object.values(tierDrafts).some((d) => Object.keys(d).length > 0)
+}
+const isMembershipDirty = computed(membershipDirty)
+
+function draftedTierField<K extends keyof TierDraft>(
   tier: MembershipTierListItem,
-  field: 'type_name' | 'description' | 'fee',
-  value: string | number | null,
-) {
-  const cid = clubStore.current?.id
-  if (typeof cid !== 'number') return
-  if (tierPatchTimers[tier.id]) clearTimeout(tierPatchTimers[tier.id])
-  tierPatchTimers[tier.id] = setTimeout(async () => {
-    try {
-      await tiersStore.update(cid, tier.id, { [field]: value })
-    } catch (err) {
-      toast.error(tierErrorMessage(err))
-    }
-  }, 500)
+  field: K,
+): TierDraft[K] {
+  const d = tierDrafts[tier.id]
+  if (d && field in d) return d[field]
+  return tier[field] as TierDraft[K]
 }
 
-async function setCadence(next: 'annual' | 'monthly' | 'season') {
-  const cid = clubStore.current?.id
-  if (typeof cid !== 'number' || tiersStore.settings.cadence === next) return
-  try {
-    await tiersStore.updateSettings(cid, { cadence: next })
-  } catch (err) {
-    toast.error(tierErrorMessage(err))
+function stageTierField(
+  tier: MembershipTierListItem,
+  field: keyof TierDraft,
+  value: string | number | null,
+) {
+  const stored = tier[field] ?? (field === 'fee' ? 0 : null)
+  const next = value === '' ? null : value
+  const draft = tierDrafts[tier.id] ?? (tierDrafts[tier.id] = {})
+  if (next === stored) {
+    delete draft[field]
+    if (Object.keys(draft).length === 0) delete tierDrafts[tier.id]
+    return
   }
+  ;(draft as Record<string, unknown>)[field] = next
 }
-async function toggleFirstYearDiscount() {
+
+const draftedCadence = computed<'annual' | 'monthly' | 'season'>(
+  () => (settingsDraft.cadence ?? tiersStore.settings.cadence ?? 'annual'),
+)
+const draftedFirstYearDiscount = computed<boolean>(
+  () => settingsDraft.first_year_discount ?? tiersStore.settings.first_year_discount,
+)
+
+function stageCadence(next: 'annual' | 'monthly' | 'season') {
+  if (tiersStore.settings.cadence === next) {
+    delete settingsDraft.cadence
+    return
+  }
+  settingsDraft.cadence = next
+}
+function stageFirstYearDiscount() {
+  const next = !draftedFirstYearDiscount.value
+  if (next === tiersStore.settings.first_year_discount) {
+    delete settingsDraft.first_year_discount
+    return
+  }
+  settingsDraft.first_year_discount = next
+}
+
+function clearMembershipDrafts() {
+  for (const key of Object.keys(tierDrafts)) delete tierDrafts[Number(key)]
+  delete settingsDraft.cadence
+  delete settingsDraft.first_year_discount
+}
+
+async function saveMembershipChanges() {
   const cid = clubStore.current?.id
   if (typeof cid !== 'number') return
-  const next = !tiersStore.settings.first_year_discount
+  if (!membershipDirty() || membershipSaving.value) return
+  membershipSaving.value = true
   try {
-    await tiersStore.updateSettings(cid, { first_year_discount: next })
+    const tierIds = Object.keys(tierDrafts).map(Number)
+    const tierWrites = tierIds.map((id) => tiersStore.update(cid, id, tierDrafts[id]!))
+    const settingsPatch: { cadence?: 'annual' | 'monthly' | 'season' | null; first_year_discount?: boolean } = {}
+    if ('cadence' in settingsDraft) settingsPatch.cadence = settingsDraft.cadence
+    if ('first_year_discount' in settingsDraft) settingsPatch.first_year_discount = settingsDraft.first_year_discount!
+    const settingsWrite = Object.keys(settingsPatch).length > 0
+      ? [tiersStore.updateSettings(cid, settingsPatch)]
+      : []
+    const results = await Promise.allSettled([...tierWrites, ...settingsWrite])
+    const firstFailure = results.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined
+    if (firstFailure) throw firstFailure.reason
+    clearMembershipDrafts()
+    toast.success('Membership types saved.')
   } catch (err) {
     toast.error(tierErrorMessage(err))
+  } finally {
+    membershipSaving.value = false
   }
 }
 
@@ -589,7 +650,8 @@ function sendInvite() {
                 <div class="card__eyebrow">Membership types</div>
                 <h2 class="card__title">Tiers &amp; pricing</h2>
               </div>
-              <span v-if="tiersStore.saving" class="tier__saving">Saving…</span>
+              <span v-if="membershipSaving" class="tier__saving">Saving…</span>
+              <span v-else-if="isMembershipDirty" class="tier__saving tier__saving--pending">Unsaved changes</span>
             </div>
             <p class="card__sub">Tiers your members pay to join. Prices show on the public /membership page and drive the application flow.</p>
 
@@ -597,15 +659,15 @@ function sendInvite() {
               <div>
                 <div class="field__label">Billing cadence</div>
                 <div class="segmented">
-                  <button type="button" :class="{ 'is-on': tiersStore.settings.cadence === 'annual' }" @click="setCadence('annual')">Annual</button>
-                  <button type="button" :class="{ 'is-on': tiersStore.settings.cadence === 'monthly' }" @click="setCadence('monthly')">Monthly</button>
-                  <button type="button" :class="{ 'is-on': tiersStore.settings.cadence === 'season' }" @click="setCadence('season')">Season</button>
+                  <button type="button" :class="{ 'is-on': draftedCadence === 'annual' }" @click="stageCadence('annual')">Annual</button>
+                  <button type="button" :class="{ 'is-on': draftedCadence === 'monthly' }" @click="stageCadence('monthly')">Monthly</button>
+                  <button type="button" :class="{ 'is-on': draftedCadence === 'season' }" @click="stageCadence('season')">Season</button>
                 </div>
               </div>
               <div class="discount">
                 <span class="discount__dot" />
                 <span class="discount__label"><b>First year 20% off</b> — new joiners only</span>
-                <button type="button" class="switch" :class="{ 'is-on': tiersStore.settings.first_year_discount }" @click="toggleFirstYearDiscount"><span class="switch__knob" /></button>
+                <button type="button" class="switch" :class="{ 'is-on': draftedFirstYearDiscount }" @click="stageFirstYearDiscount"><span class="switch__knob" /></button>
               </div>
             </div>
 
@@ -620,29 +682,29 @@ function sendInvite() {
                 <div class="tier__body">
                   <div class="tier__row">
                     <input
-                      :value="tier.type_name"
+                      :value="draftedTierField(tier, 'type_name')"
                       class="tier__name"
-                      @input="commitTierField(tier, 'type_name', ($event.target as HTMLInputElement).value)"
+                      @input="stageTierField(tier, 'type_name', ($event.target as HTMLInputElement).value)"
                     />
                     <span v-if="tier.is_default" class="tier__flag">Default</span>
                     <button v-else type="button" class="tier__make-default" @click="promoteDefault(tier)">Make default</button>
                   </div>
                   <input
-                    :value="tier.description ?? ''"
+                    :value="draftedTierField(tier, 'description') ?? ''"
                     class="tier__desc"
                     placeholder="What this membership includes."
-                    @input="commitTierField(tier, 'description', ($event.target as HTMLInputElement).value || null)"
+                    @input="stageTierField(tier, 'description', ($event.target as HTMLInputElement).value || null)"
                   />
                 </div>
                 <div class="tier__price">
                   <span class="tier__price-sign">$</span>
                   <input
-                    :value="tier.fee ?? 0"
+                    :value="draftedTierField(tier, 'fee') ?? 0"
                     type="number"
                     min="0"
                     step="5"
                     class="tier__price-input"
-                    @input="commitTierField(tier, 'fee', Number(($event.target as HTMLInputElement).value) || 0)"
+                    @input="stageTierField(tier, 'fee', Number(($event.target as HTMLInputElement).value) || 0)"
                   />
                   <span class="tier__price-unit">{{ cadenceLabel }}</span>
                 </div>
@@ -652,6 +714,21 @@ function sendInvite() {
               </li>
               <button type="button" class="add-tier" @click="addTier">+ Add membership type</button>
             </ul>
+
+            <div class="tier__actions">
+              <button
+                type="button"
+                class="ghost-btn"
+                :disabled="!isMembershipDirty || membershipSaving"
+                @click="clearMembershipDrafts"
+              >Discard</button>
+              <button
+                type="button"
+                class="primary-btn"
+                :disabled="!isMembershipDirty || membershipSaving"
+                @click="saveMembershipChanges"
+              >{{ membershipSaving ? 'Saving…' : 'Save changes' }}</button>
+            </div>
           </div>
         </template>
 
@@ -963,6 +1040,15 @@ function sendInvite() {
 .tier__remove:hover { background: var(--color-danger); border-color: var(--color-danger); color: #fff; }
 .add-tier { padding: 12px; background: transparent; border: 1px dashed var(--color-hairline); border-radius: 12px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-accent); cursor: pointer; }
 .add-tier:hover { background: var(--color-accent-soft); }
+
+.tier__saving--pending { color: var(--color-accent-strong); }
+.tier__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.primary-btn { padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; background: var(--color-ink); color: #fff; }
+.primary-btn:hover:not(:disabled) { background: var(--color-graphite); }
+.primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.ghost-btn { padding: 9px 14px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--color-hairline); background: transparent; color: var(--color-ink); }
+.ghost-btn:hover:not(:disabled) { background: var(--color-surface); border-color: var(--color-ink); }
+.ghost-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Opening hours ───────────────────────────────────────────── */
 .hours-grid { display: flex; flex-direction: column; margin-top: 16px; }

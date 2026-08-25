@@ -98,24 +98,58 @@ function tierErrorMessage(err: unknown): string {
     case 'bad_cadence': return 'Cadence must be Annual, Monthly, or Season.'
     case 'bad_fee': return 'Price has to be a non-negative number.'
     case 'bad_description': return 'Description must be under 500 characters.'
+    case 'slug_conflict': return 'A tier with a similar name already exists — pick something more specific.'
     default: return err.message
   }
+}
+
+function isSlugConflict(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false
+  const body = (err.body ?? {}) as { code?: string }
+  return body.code === 'slug_conflict'
+}
+
+function uniqueTierName(base = 'New tier'): string {
+  const existing = new Set(
+    tiersStore.tiers.map((t) => t.type_name.trim().toLowerCase()),
+  )
+  if (!existing.has(base.toLowerCase())) return base
+  for (let n = 2; n < 1000; n++) {
+    const candidate = `${base} ${n}`
+    if (!existing.has(candidate.toLowerCase())) return candidate
+  }
+  return `${base} ${Date.now()}`
 }
 
 async function addTier() {
   const cid = clubStore.current?.id
   if (typeof cid !== 'number') return
   const nextTone = TIER_TONES[tiersStore.tiers.length % TIER_TONES.length]!.key
-  try {
-    await tiersStore.create(cid, {
-      type_name: 'New tier',
-      description: 'What this membership includes.',
-      fee: 0,
-      tone: nextTone,
-    })
-    toast.success('Tier added.')
-  } catch (err) {
-    toast.error(tierErrorMessage(err))
+  // Retry-on-collision: the backend can return `slug_conflict` even when
+  // no visible tier has the same name — e.g. a previously renamed tier
+  // whose stored slug is still `new-tier`. Bump the suffix and try again
+  // until we run out of retries.
+  let attempt = 0
+  let name = uniqueTierName()
+  while (true) {
+    try {
+      await tiersStore.create(cid, {
+        type_name: name,
+        description: 'What this membership includes.',
+        fee: 0,
+        tone: nextTone,
+      })
+      toast.success('Tier added.')
+      return
+    } catch (err) {
+      if (isSlugConflict(err) && attempt < 20) {
+        attempt++
+        name = uniqueTierName(`New tier ${Date.now().toString(36).slice(-4)}`)
+        continue
+      }
+      toast.error(tierErrorMessage(err))
+      return
+    }
   }
 }
 

@@ -4,6 +4,7 @@ import {
   authedFetch,
   CRM_BASE,
   type Club,
+  type ClubColorScheme,
   type ClubFonts,
   type ClubStyle,
   type ClubNavigation,
@@ -93,6 +94,7 @@ export const useClubStore = defineStore('club', () => {
         faviconUrl: full.faviconUrl ?? c.faviconUrl ?? null,
         fonts: full.fonts ?? c.fonts,
         style: full.style ?? c.style,
+        colorScheme: full.colorScheme ?? c.colorScheme,
         navigation: full.navigation ?? c.navigation,
       })
     } catch {
@@ -119,6 +121,17 @@ export const useClubStore = defineStore('club', () => {
     const c = current.value
     if (!c) return
     setCurrent({ ...c, style })
+  }
+
+  /**
+   * Merge in an updated colour scheme. Persisted alongside fonts + style;
+   * the CRM Website preview reads `current.colorScheme` to render the
+   * chosen palette.
+   */
+  function setColorScheme(colorScheme: ClubColorScheme | undefined) {
+    const c = current.value
+    if (!c) return
+    setCurrent({ ...c, colorScheme })
   }
 
   /**
@@ -152,6 +165,7 @@ export const useClubStore = defineStore('club', () => {
     setCurrent,
     setFonts,
     setStyle,
+    setColorScheme,
     setBrandAssets,
     setNavigation,
     clear,

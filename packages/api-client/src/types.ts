@@ -68,6 +68,38 @@ export interface ClubStyle {
 }
 
 /**
+ * The seven surface + type tokens a curated palette drives. See brief 37.
+ * Values are hex strings — the theme layer writes them straight onto
+ * `:root` as `--color-ground`, `--color-surface`, and so on.
+ */
+export interface ColorSchemeTokens {
+  ground: string
+  surface: string
+  hairline: string
+  ink: string
+  graphite: string
+  fog: string
+  mute: string
+}
+
+/** A single curated palette returned from `GET /color-schemes`. */
+export interface ColorScheme {
+  slug: string
+  name: string
+  description: string
+  tokens: ColorSchemeTokens
+}
+
+/**
+ * Resolved colour scheme for a club, always populated. `slug` falls back
+ * to the platform default (`clean-white`) when the club hasn't picked one.
+ */
+export interface ClubColorScheme {
+  slug: string
+  tokens: ColorSchemeTokens
+}
+
+/**
  * A single navigation entry. Leaves must have `href`; parents may omit
  * `href` if they exist only to group `children`. One level of nesting.
  */
@@ -105,6 +137,8 @@ export interface Club {
   fonts?: ClubFonts
   /** Present on `/site` payloads and any full club load; absent on stubs. */
   style?: ClubStyle
+  /** Present on `/site` payloads and any full club load; absent on stubs. */
+  colorScheme?: ClubColorScheme
   /** Present on `/site` payloads; header + footer link trees. */
   navigation?: ClubNavigation
 }

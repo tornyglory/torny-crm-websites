@@ -14,6 +14,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import FontPicker from '@/components/FontPicker.vue'
 import StylePicker from '@/components/StylePicker.vue'
+import ColorSchemePicker from '@/components/ColorSchemePicker.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
 import { ApiError, clubs, navigation as navigationApi, type NavItem } from '@torny/api-client'
 import { useToast } from '@/composables/useToast'
@@ -36,11 +37,15 @@ const clubStore = useClubStore()
 // Reactive so refresh + hydrateFull both light up the correct card.
 const fontSlug = computed<string | null>(() => clubStore.current?.fonts?.slug ?? null)
 const styleSlug = computed<string | null>(() => clubStore.current?.style?.slug ?? null)
+const colorSchemeSlug = computed<string | null>(() => clubStore.current?.colorScheme?.slug ?? null)
 
 function onFontSlugChange(_slug: string | null) {
   void clubStore.hydrateFull()
 }
 function onStyleSlugChange(_slug: string | null) {
+  void clubStore.hydrateFull()
+}
+function onColorSchemeSlugChange(_slug: string | null) {
   void clubStore.hydrateFull()
 }
 
@@ -364,6 +369,14 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
           :club-id="clubStore.current?.id ?? null"
           :current-slug="styleSlug"
           @update:slug="onStyleSlugChange"
+        />
+      </div>
+      <div class="ws-card">
+        <div class="ws-card__eyebrow">Colour palette</div>
+        <ColorSchemePicker
+          :club-id="clubStore.current?.id ?? null"
+          :current-slug="colorSchemeSlug"
+          @update:slug="onColorSchemeSlugChange"
         />
       </div>
     </template>

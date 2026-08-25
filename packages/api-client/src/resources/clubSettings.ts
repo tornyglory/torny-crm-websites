@@ -9,7 +9,7 @@
 
 import { CRM_BASE } from '../config'
 import { authedFetch } from '../http'
-import type { ClubFonts, ClubStyle, NavItem } from '../types'
+import type { ClubFonts, ClubStyle, ColorSchemeTokens, NavItem } from '../types'
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -64,6 +64,12 @@ export interface SettingsMembership {
   tiers: SettingsMembershipTier[]
 }
 
+export interface SettingsBrandColorSchemeResolved {
+  slug: string
+  name: string
+  tokens: ColorSchemeTokens
+}
+
 export interface SettingsBrand {
   logo_url: string | null
   favicon_url: string | null
@@ -73,6 +79,8 @@ export interface SettingsBrand {
   font_pair_resolved: ClubFonts
   style_preset: string | null
   style_preset_resolved: ClubStyle
+  color_scheme: string | null
+  color_scheme_resolved: SettingsBrandColorSchemeResolved
 }
 
 export interface SettingsNavigation {

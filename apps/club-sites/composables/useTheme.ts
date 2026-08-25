@@ -6,7 +6,7 @@
 // and `fonts` + `style` from the richer `/site` payload. Awaits `useSite()`
 // so the head is populated before Nuxt serializes the SSR document.
 
-import type { SiteFonts, SiteStyle } from '~/server/utils/tornyApi'
+import type { SiteColorScheme, SiteFonts, SiteStyle } from '~/server/utils/tornyApi'
 
 function googleFontsHref(fonts: SiteFonts): string {
   const seen = new Set<string>()
@@ -43,6 +43,12 @@ function styleDeclarations(style: SiteStyle): string[] {
   ]
 }
 
+function colorSchemeDeclarations(scheme: SiteColorScheme): string[] {
+  return Object.entries(scheme.tokens).map(
+    ([key, value]) => `--color-${key}: ${value} !important;`,
+  )
+}
+
 export async function useTheme() {
   const club = useClub()
   // Awaiting `useSite()` here guarantees `site.value` is populated by the
@@ -52,6 +58,7 @@ export async function useTheme() {
 
   const fonts = computed<SiteFonts | undefined>(() => site.value?.club?.fonts)
   const style = computed<SiteStyle | undefined>(() => site.value?.club?.style)
+  const colorScheme = computed<SiteColorScheme | undefined>(() => site.value?.club?.color_scheme)
 
   const favicon = computed<string | null>(() => site.value?.club?.favicon_url ?? null)
 
@@ -77,6 +84,9 @@ export async function useTheme() {
 
       const s = style.value
       if (s) declarations.push(...styleDeclarations(s))
+
+      const cs = colorScheme.value
+      if (cs) declarations.push(...colorSchemeDeclarations(cs))
 
       if (declarations.length === 0) return []
       return [{ innerHTML: `:root { ${declarations.join(' ')} }` }]

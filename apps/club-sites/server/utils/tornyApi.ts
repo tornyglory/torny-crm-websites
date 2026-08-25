@@ -51,6 +51,21 @@ export interface SiteStyle {
   buttons: SiteStyleButtons
 }
 
+export interface SiteColorSchemeTokens {
+  ground: string
+  surface: string
+  hairline: string
+  ink: string
+  graphite: string
+  fog: string
+  mute: string
+}
+
+export interface SiteColorScheme {
+  slug: string
+  tokens: SiteColorSchemeTokens
+}
+
 export interface SiteNavItem {
   label: string
   href?: string
@@ -80,6 +95,7 @@ export interface SiteClub {
   onboarded_at: string | null
   fonts?: SiteFonts
   style?: SiteStyle
+  color_scheme?: SiteColorScheme
   navigation?: SiteNavigation
 }
 

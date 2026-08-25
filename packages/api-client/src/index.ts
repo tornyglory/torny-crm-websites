@@ -176,6 +176,16 @@ export type {
   StylePresetsResponse,
   UpdateStylePresetResponse,
 } from './resources/stylePresets'
+export * as colorSchemes from './resources/colorSchemes'
+export type {
+  ColorSchemesResponse,
+  UpdateColorSchemeResponse,
+} from './resources/colorSchemes'
+export type {
+  ColorScheme,
+  ColorSchemeTokens,
+  ClubColorScheme,
+} from './types'
 export * as navigation from './resources/navigation'
 export type {
   UpdateNavigationInput,

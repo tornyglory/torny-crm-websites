@@ -358,13 +358,13 @@ async function toggleArchive() {
 <style scoped>
 .page { max-width: 1280px; display: flex; flex-direction: column; gap: 32px; }
 
-/* Header */
-.page__head { display: flex; flex-direction: column; gap: 12px; }
-.back { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-fog); text-decoration: none; width: fit-content; }
+/* Header — matches the list page style so nav feels consistent. */
+.page__head { display: flex; flex-direction: column; gap: 0; }
+.back { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-fog); text-decoration: none; width: fit-content; }
 .back:hover { color: var(--color-ink); }
-.back--emphasis { color: var(--color-accent); margin-top: 16px; font-weight: 600; }
-.page__title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.page__title { font-family: var(--font-display); font-size: clamp(28px, 3vw, 40px); font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; line-height: 1.05; }
+.back--emphasis { color: var(--color-accent); margin-top: 16px; font-weight: 600; letter-spacing: normal; text-transform: none; font-size: 13px; }
+.page__title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 6px; }
+.page__title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; line-height: 1.05; }
 .page__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-fog); margin: 0; }
 
 /* Empty */

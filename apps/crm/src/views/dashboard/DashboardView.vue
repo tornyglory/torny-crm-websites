@@ -1,8 +1,35 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+/**
+ * Dashboard — wired to real data from every endpoint we have.
+ *
+ * KPIs read from members / applications / enquiries / honour-board.
+ * Upcoming events pulls a 30-day window from events.list().
+ * Attention strip derives from the same counts.
+ * Recent activity is the notifications feed (brief 40).
+ *
+ * Team selections have no backend yet — the section renders a
+ * "coming soon" state instead of the old mock.
+ */
+import { computed, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useClubStore } from '@/stores/club'
+import { useNotificationsStore } from '@/stores/notifications'
+import { useHonourCategoriesStore } from '@/stores/honourCategories'
+import {
+  members as membersApi,
+  applications as applicationsApi,
+  enquiries as enquiriesApi,
+  events as eventsApi,
+  type Event as CrmEvent,
+  type ApplicationRow,
+  type NotificationKind,
+  type Notification,
+} from '@torny/api-client'
 
 const auth = useAuthStore()
+const clubStore = useClubStore()
+const notificationsStore = useNotificationsStore()
+const honourCategoriesStore = useHonourCategoriesStore()
 
 const now = new Date()
 const greeting = computed(() => {
@@ -23,6 +50,52 @@ const dateLabelMobile = computed(() => {
   return `${day} · ${dm}`
 })
 
+// ── Reactive data sources ─────────────────────────────────────
+const memberCounts = ref({ total: 0, active: 0, pending: 0, lapsed: 0 })
+const applicationCounts = ref({ pending: 0, approved: 0, rejected: 0 })
+const enquiryCounts = ref({ new: 0, read: 0, replied: 0, archived: 0 })
+const pendingApps = ref<ApplicationRow[]>([])
+const upcomingRaw = ref<CrmEvent[]>([])
+const loading = ref(true)
+
+async function loadAll() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  loading.value = true
+  try {
+    // Fire everything in parallel — dashboard shouldn't wait on the slowest.
+    const [roster, appsRes, enquiriesRes, pendingList, eventList] = await Promise.allSettled([
+      membersApi.listRoster(cid, { limit: 1, include_invites: false }),
+      applicationsApi.list(cid, { status: 'pending', limit: 1 }),
+      enquiriesApi.list(cid, { status: 'new', limit: 1 }),
+      applicationsApi.list(cid, { status: 'pending', limit: 5, sort: 'oldest' }),
+      loadEvents(cid),
+    ])
+    if (roster.status === 'fulfilled') memberCounts.value = roster.value.counts
+    if (appsRes.status === 'fulfilled') applicationCounts.value = appsRes.value.counts
+    if (enquiriesRes.status === 'fulfilled') enquiryCounts.value = enquiriesRes.value.counts
+    if (pendingList.status === 'fulfilled') pendingApps.value = pendingList.value.applications
+    if (eventList.status === 'fulfilled') upcomingRaw.value = eventList.value
+    // Notifications + honour categories are already fetched by the shell —
+    // just make sure they've loaded at least once.
+    if (!notificationsStore.loadedClubId) void notificationsStore.fetchList(cid).catch(() => {})
+    if (honourCategoriesStore.loadedClubId !== cid) void honourCategoriesStore.fetch(cid).catch(() => {})
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadEvents(clubId: number): Promise<CrmEvent[]> {
+  const from = new Date().toISOString().slice(0, 10)
+  const to = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)
+  const list = await eventsApi.list(clubId, { from, to })
+  return list.filter((e) => new Date(e.start_datetime).getTime() >= Date.now())
+}
+
+onMounted(loadAll)
+watch(() => clubStore.current?.id, loadAll)
+
+// ── KPI cards ─────────────────────────────────────────────────
 interface KpiCard {
   label: string
   value: string
@@ -30,71 +103,80 @@ interface KpiCard {
   metaTone: 'good' | 'warn' | 'neutral'
   footer: string
   footerTone?: 'danger' | 'muted'
-  ctaLabel: string
   ctaHref: string
-  icon: 'members' | 'applications' | 'enquiries' | 'dues'
-  accent: string
+  icon: 'members' | 'applications' | 'enquiries' | 'honour'
   iconBg: string
   iconColor: string
 }
 
-const kpis: KpiCard[] = [
-  {
-    label: 'Membership',
-    value: '142',
-    meta: '+4 this month',
-    metaTone: 'good',
-    footer: '138 active · 4 pending',
-    ctaLabel: 'Chase',
-    ctaHref: '/crm/members',
-    icon: 'members',
-    accent: 'var(--color-feature-mint)',
-    iconBg: '#DCFCE7',
-    iconColor: 'var(--color-feature-mint)',
-  },
-  {
-    label: 'Applications',
-    value: '5',
-    meta: '2 urgent',
-    metaTone: 'warn',
-    footer: 'Rachel Beale waiting 5 days',
-    footerTone: 'danger',
-    ctaLabel: 'Review',
-    ctaHref: '/crm/applications',
-    icon: 'applications',
-    accent: 'var(--color-accent)',
-    iconBg: 'var(--color-accent-soft)',
-    iconColor: 'var(--color-accent)',
-  },
-  {
-    label: 'Dues',
-    value: '$360',
-    meta: 'outstanding',
-    metaTone: 'warn',
-    footer: '8 members overdue · 94% collected',
-    footerTone: 'danger',
-    ctaLabel: 'Chase',
-    ctaHref: '/crm/members',
-    icon: 'dues',
-    accent: '#F59E0B',
-    iconBg: '#FEF3C7',
-    iconColor: '#92400E',
-  },
-  {
-    label: 'Enquiries',
-    value: '2',
-    meta: 'green hire, function',
-    metaTone: 'neutral',
-    footer: 'Awaiting first reply',
-    ctaLabel: 'Open',
-    ctaHref: '/crm/enquiries',
-    icon: 'enquiries',
-    accent: 'var(--color-feature-tangerine)',
-    iconBg: '#FFF1E7',
-    iconColor: 'var(--color-feature-tangerine)',
-  },
-]
+const kpis = computed<KpiCard[]>(() => {
+  const { total, active, pending: pendingMembers } = memberCounts.value
+  const { pending: pendingApps } = applicationCounts.value
+  const { new: newEnq } = enquiryCounts.value
+  const cats = honourCategoriesStore.count
 
+  return [
+    {
+      label: 'Membership',
+      value: total > 0 ? String(total) : '—',
+      meta: pendingMembers > 0 ? `${pendingMembers} pending` : 'all active',
+      metaTone: pendingMembers > 0 ? 'warn' : 'good',
+      footer: total > 0 ? `${active} active · ${pendingMembers} pending` : 'No members yet',
+      ctaHref: '/crm/members',
+      icon: 'members',
+      iconBg: '#DCFCE7',
+      iconColor: 'var(--color-feature-mint)',
+    },
+    {
+      label: 'Applications',
+      value: String(pendingApps),
+      meta: pendingApps > 0 ? 'need review' : 'inbox zero',
+      metaTone: pendingApps > 0 ? 'warn' : 'good',
+      footer: pendingApps > 0
+        ? oldestPendingLabel()
+        : 'Nothing waiting',
+      footerTone: pendingApps > 0 ? 'danger' : undefined,
+      ctaHref: '/crm/applications',
+      icon: 'applications',
+      iconBg: 'var(--color-accent-soft)',
+      iconColor: 'var(--color-accent)',
+    },
+    {
+      label: 'Enquiries',
+      value: String(newEnq),
+      meta: newEnq > 0 ? 'awaiting reply' : 'inbox zero',
+      metaTone: newEnq > 0 ? 'warn' : 'good',
+      footer: newEnq > 0 ? 'New messages from the site' : 'All caught up',
+      ctaHref: '/crm/enquiries',
+      icon: 'enquiries',
+      iconBg: '#FFF1E7',
+      iconColor: 'var(--color-feature-tangerine)',
+    },
+    {
+      label: 'Honour board',
+      value: cats > 0 ? String(cats) : '—',
+      meta: cats > 0 ? 'categories' : 'not set up',
+      metaTone: cats > 0 ? 'good' : 'neutral',
+      footer: cats > 0 ? 'Trophies + rolls of honour' : 'Add your first category',
+      ctaHref: '/crm/honour-board',
+      icon: 'honour',
+      iconBg: '#EDE9FE',
+      iconColor: 'var(--color-feature-violet)',
+    },
+  ]
+})
+
+function oldestPendingLabel(): string {
+  const oldest = pendingApps.value[0]
+  if (!oldest) return 'Waiting'
+  const days = Math.floor((Date.now() - new Date(oldest.received_at).getTime()) / 86_400_000)
+  const name = oldest.preferred_name ?? oldest.full_name.split(' ')[0]!
+  if (days === 0) return `${name} applied today`
+  if (days === 1) return `${name} waiting 1 day`
+  return `${name} waiting ${days} days`
+}
+
+// ── Attention chips — derived signals ─────────────────────────
 interface AttentionItem {
   id: string
   label: string
@@ -103,14 +185,54 @@ interface AttentionItem {
   tone: 'danger' | 'warn' | 'accent'
 }
 
-const attentionItems: AttentionItem[] = [
-  { id: 'a1', label: '2 applications',   detail: 'waiting > 5 days', href: '/crm/applications', tone: 'danger' },
-  { id: 'a2', label: '8 dues overdue',   detail: '$360 outstanding',  href: '/crm/members',      tone: 'warn' },
-  { id: 'a3', label: 'Twilight Triples', detail: 'draft — 3 days out', href: '/crm/events',     tone: 'accent' },
-]
+const attentionItems = computed<AttentionItem[]>(() => {
+  const items: AttentionItem[] = []
+  const urgentApps = pendingApps.value.filter((a) => {
+    const days = Math.floor((Date.now() - new Date(a.received_at).getTime()) / 86_400_000)
+    return days >= 5
+  }).length
+  if (urgentApps > 0) {
+    items.push({
+      id: 'apps-urgent',
+      label: `${urgentApps} application${urgentApps === 1 ? '' : 's'}`,
+      detail: 'waiting > 5 days',
+      href: '/crm/applications',
+      tone: 'danger',
+    })
+  }
+  if (enquiryCounts.value.new > 0) {
+    items.push({
+      id: 'enq-new',
+      label: `${enquiryCounts.value.new} new enquir${enquiryCounts.value.new === 1 ? 'y' : 'ies'}`,
+      detail: 'awaiting first reply',
+      href: '/crm/enquiries',
+      tone: 'warn',
+    })
+  }
+  const draftEvents = upcomingRaw.value.filter((e) => e.is_published === 0).length
+  if (draftEvents > 0) {
+    items.push({
+      id: 'events-draft',
+      label: `${draftEvents} draft event${draftEvents === 1 ? '' : 's'}`,
+      detail: 'not published yet',
+      href: '/crm/events',
+      tone: 'accent',
+    })
+  }
+  return items
+})
 
+const attentionSummary = computed(() => {
+  const parts: string[] = []
+  if (applicationCounts.value.pending > 0) parts.push(`${applicationCounts.value.pending} application${applicationCounts.value.pending === 1 ? '' : 's'}`)
+  if (enquiryCounts.value.new > 0) parts.push(`${enquiryCounts.value.new} enquir${enquiryCounts.value.new === 1 ? 'y' : 'ies'}`)
+  if (parts.length === 0) return "You're all caught up today."
+  return `${parts.join(' and ')} need${parts.length === 1 && !parts[0]!.endsWith('s') ? 's' : ''} your attention today.`
+})
+
+// ── Upcoming events formatting ───────────────────────────────
 interface UpcomingEvent {
-  id: string
+  id: number
   weekday: string
   day: number
   title: string
@@ -119,52 +241,74 @@ interface UpcomingEvent {
   status: 'published' | 'draft'
 }
 
-const upcomingEvents: UpcomingEvent[] = [
-  { id: 'u1', weekday: 'Fri', day: 15, title: 'Twilight roll-up', time: '5:30 PM', location: 'Social', status: 'published' },
-  { id: 'u2', weekday: 'Sat', day: 16, title: 'Club Championship — Rd 2', time: '1:00 PM', location: 'Petone BC', status: 'published' },
-  { id: 'u3', weekday: 'Wed', day: 20, title: 'Pennant vs Miramar', time: '1:30 PM', location: 'Home', status: 'draft' },
-  { id: 'u4', weekday: 'Thu', day: 21, title: 'Coaching clinic — beginners', time: '5:30 PM', location: 'Green 2', status: 'published' },
-]
+const upcomingEvents = computed<UpcomingEvent[]>(() =>
+  upcomingRaw.value.slice(0, 5).map((e) => {
+    const start = new Date(e.start_datetime)
+    return {
+      id: e.event_id,
+      weekday: start.toLocaleDateString('en-NZ', { weekday: 'short' }),
+      day: start.getDate(),
+      title: e.title,
+      time: e.all_day === 1 ? 'All day' : start.toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }),
+      location: e.location ?? '—',
+      status: e.is_published === 1 ? 'published' : 'draft',
+    }
+  }),
+)
 
-interface TeamRow { position: string; name: string }
-
-const latestSelection = {
-  title: 'Saturday Pennant',
-  when: 'Sat 16 Aug',
-  meta: 'Team A · Fours · Meet 12:15 PM',
-  publishedAt: 'Thu 14 Aug · 2:10 PM',
-  rowsDesktop: [
-    { position: 'Skip', name: 'Karen Watson' },
-    { position: 'Third', name: 'Nevaeh Rodda' },
-    { position: 'Second', name: 'Sam Ah Wong' },
-    { position: 'Lead', name: 'Jo Kirk' },
-  ] as TeamRow[],
-  inlineMobile: 'Skip · K. Watson · Third · N. Rodda · Second · S. Ah Wong · Lead · J. Kirk',
-}
-
+// ── Recent activity — feeds from notifications ────────────────
+type SignalIcon = 'application' | 'enquiry' | 'rsvp' | 'team' | 'publish' | 'payment' | 'milestone'
 interface Signal {
-  id: string
-  icon: 'email' | 'application' | 'team' | 'enquiry' | 'website'
+  id: number
+  icon: SignalIcon
   title: string
   meta: string
   titleMobile: string
   time: string
+  href?: string
 }
 
-const signals: Signal[] = [
-  { id: 's1', icon: 'email', title: 'Bulk email "Championship reminder" sent to 84 members', titleMobile: 'Bulk email sent · 84 members', meta: 'Sent by Grace Whittaker', time: '2h' },
-  { id: 's2', icon: 'application', title: 'Application Sarah Chen approved — full member', titleMobile: 'Sarah Chen approved · Full member', meta: 'Approved by you', time: '5h' },
-  { id: 's3', icon: 'team', title: 'Team selection "Saturday Pennant · Sat 16 Aug" published', titleMobile: 'Team selection published', meta: 'Published to site', time: '18h' },
-  { id: 's4', icon: 'enquiry', title: 'New enquiry from Wellington Rotary — function venue', titleMobile: 'New enquiry · Wellington Rotary', meta: 'Preferred date Sat 20 Sep', time: '2d' },
-  { id: 's5', icon: 'website', title: 'Website page "About the club" edited', titleMobile: 'Website page "About the club" edited', meta: 'Edited by Grace Whittaker', time: '2d' },
-]
+/** Map brief 40 notification kinds to the dashboard's icon set (unified). */
+function iconFor(kind: NotificationKind): SignalIcon {
+  return kind === 'member_milestone' ? 'milestone' : kind
+}
 
-const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
-  email: { bg: 'var(--color-accent-soft)', fg: 'var(--color-accent)' },
-  application: { bg: '#DCFCE7', fg: 'var(--color-feature-mint)' },
-  team: { bg: 'var(--color-accent-soft)', fg: 'var(--color-accent)' },
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return ''
+  const diff = Date.now() - then
+  const min = Math.floor(diff / 60_000)
+  if (min < 1) return 'now'
+  if (min < 60) return `${min}m`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h`
+  const day = Math.floor(hr / 24)
+  if (day < 7) return `${day}d`
+  const wk = Math.floor(day / 7)
+  return `${wk}w`
+}
+
+const signals = computed<Signal[]>(() => {
+  const notifs = notificationsStore.rows.slice(0, 6)
+  return notifs.map((n: Notification) => ({
+    id: n.id,
+    icon: iconFor(n.kind),
+    title: n.title,
+    meta: n.body ?? '',
+    titleMobile: n.title,
+    time: timeAgo(n.created_at),
+    href: n.target?.destination_href,
+  }))
+})
+
+const iconTone: Record<SignalIcon, { bg: string; fg: string }> = {
+  application: { bg: 'var(--color-accent-soft)', fg: 'var(--color-accent)' },
   enquiry: { bg: '#FFF1E7', fg: 'var(--color-feature-tangerine)' },
-  website: { bg: 'var(--color-surface)', fg: 'var(--color-graphite)' },
+  rsvp: { bg: '#DCFCE7', fg: 'var(--color-feature-mint)' },
+  team: { bg: 'var(--color-accent-soft)', fg: 'var(--color-accent)' },
+  publish: { bg: '#EDE9FE', fg: 'var(--color-feature-violet)' },
+  payment: { bg: '#DCFCE7', fg: 'var(--color-feature-mint)' },
+  milestone: { bg: 'var(--color-surface)', fg: 'var(--color-graphite)' },
 }
 </script>
 
@@ -179,8 +323,7 @@ const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
           <span class="dash__heading--desktop">{{ greeting }}, {{ auth.user?.firstName ?? 'friend' }}.</span>
           <span class="dash__heading--mobile">{{ greeting }}.</span>
         </h1>
-        <p class="dash__sub dash__sub--desktop">Three applications and two enquiries need your attention today.</p>
-        <p class="dash__sub dash__sub--mobile">3 applications · 2 enquiries need attention.</p>
+        <p class="dash__sub">{{ attentionSummary }}</p>
       </div>
       <div class="dash__actions">
         <button class="btn btn--ghost">
@@ -219,11 +362,11 @@ const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
           <svg v-else-if="k.icon === 'applications'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" />
           </svg>
-          <svg v-else-if="k.icon === 'dues'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
-            <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+          <svg v-else-if="k.icon === 'enquiries'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
           <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <path d="M6 4h12v3a6 6 0 0 1-12 0V4z" /><path d="M2 4h2v3a4 4 0 0 0 4 4M22 4h-2v3a4 4 0 0 1-4 4M12 15v4M8 19h8" />
           </svg>
         </div>
         <div class="kpi__body">
@@ -246,8 +389,8 @@ const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
     <section class="upcoming">
       <div class="upcoming__head">
         <div>
-          <div class="section__eyebrow">Next 7 days</div>
-          <h2 class="section__heading section__heading--desktop">Next 7 days · {{ upcomingEvents.length }}</h2>
+          <div class="section__eyebrow">Upcoming events</div>
+          <h2 class="section__heading section__heading--desktop">Next {{ upcomingEvents.length }} · 30 days</h2>
         </div>
         <RouterLink to="/crm/events" class="section__link section__link--desktop">
           Open calendar
@@ -255,7 +398,11 @@ const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
         </RouterLink>
         <div class="section__meta section__meta--mobile">{{ upcomingEvents.length }} events</div>
       </div>
-      <ul class="events">
+      <div v-if="upcomingEvents.length === 0" class="empty">
+        <div class="empty__title">Nothing on the calendar</div>
+        <div class="empty__hint">Add an event from the Events tab to get things moving.</div>
+      </div>
+      <ul v-else class="events">
         <li v-for="e in upcomingEvents" :key="e.id" class="event">
           <div class="event__date">
             <div class="event__weekday">{{ e.weekday }}</div>
@@ -271,35 +418,16 @@ const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
       </ul>
     </section>
 
-    <!-- Latest team selection -->
-    <section class="team-card">
+    <!-- Latest team selection — placeholder until the endpoint ships -->
+    <section class="team-card team-card--empty">
       <div class="team-card__head">
         <div>
-          <div class="section__eyebrow">Latest team selection</div>
-          <h2 class="section__heading">{{ latestSelection.title }} · {{ latestSelection.when }}</h2>
-          <div class="team-card__meta team-card__meta--mobile">{{ latestSelection.meta }}</div>
+          <div class="section__eyebrow">Team selection</div>
+          <h2 class="section__heading">Coming soon</h2>
+          <p class="team-card__meta">The team-selection backend is next — this card will show the most recent published selection with the four positions.</p>
         </div>
-        <span class="pill pill--published">Published</span>
-      </div>
-      <table class="team team--desktop">
-        <thead>
-          <tr>
-            <th>Position</th>
-            <th>Player</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in latestSelection.rowsDesktop" :key="row.position">
-            <td class="team__pos">{{ row.position }}</td>
-            <td>{{ row.name }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="team-card__inline team-card__inline--mobile">{{ latestSelection.inlineMobile }}</div>
-      <div class="team-card__foot team-card__foot--desktop">
-        <span class="team-card__foot-meta">Published {{ latestSelection.publishedAt }}</span>
         <RouterLink to="/crm/teams" class="section__link">
-          Open selection
+          Open teams
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
         </RouterLink>
       </div>
@@ -318,22 +446,48 @@ const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
         </RouterLink>
         <div class="section__meta section__meta--mobile">Last 5</div>
       </div>
-      <ul class="signals">
-        <li v-for="s in signals" :key="s.id" class="signal">
+      <div v-if="signals.length === 0" class="empty">
+        <div class="empty__title">Nothing to show yet</div>
+        <div class="empty__hint">Activity appears here as members apply, RSVP, and enquire.</div>
+      </div>
+      <ul v-else class="signals">
+        <component
+          :is="s.href ? 'RouterLink' : 'li'"
+          v-for="s in signals"
+          :key="s.id"
+          :to="s.href"
+          class="signal"
+        >
           <div class="signal__icon" :style="{ background: iconTone[s.icon].bg, color: iconTone[s.icon].fg }">
-            <svg v-if="s.icon === 'email'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M4 4h16v16H4z" /><path d="M22 6l-10 7L2 6" /></svg>
-            <svg v-else-if="s.icon === 'application'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M20 6 9 17l-5-5" /></svg>
-            <svg v-else-if="s.icon === 'team'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
-            <svg v-else-if="s.icon === 'enquiry'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /></svg>
+            <svg v-if="s.icon === 'application'" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="6" r="3" /><path d="M2.5 17c0-3 2.5-5 5.5-5s5.5 2 5.5 5" /><path d="M15 8v4M13 10h4" />
+            </svg>
+            <svg v-else-if="s.icon === 'enquiry'" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 4.5C3 3.7 3.7 3 4.5 3h11c.8 0 1.5.7 1.5 1.5v8c0 .8-.7 1.5-1.5 1.5H8L4 17v-2.5C3.4 14.5 3 14 3 13.5v-9z" />
+            </svg>
+            <svg v-else-if="s.icon === 'rsvp'" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="5" width="14" height="12" rx="1.5" /><path d="M3 8h14M7 3v4M13 3v4" /><path d="M7 12.5l2 2 4-4" />
+            </svg>
+            <svg v-else-if="s.icon === 'team'" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="7" cy="7" r="2.5" /><circle cx="13.5" cy="8.5" r="2" /><path d="M2.5 16c0-2.2 2-4 4.5-4s4.5 1.8 4.5 4" /><path d="M12 15.5c0-1.6 1.2-3 2.8-3.4" />
+            </svg>
+            <svg v-else-if="s.icon === 'publish'" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2c-4 0-8 4-8 8l4 4c4 0 8-4 8-8l-4-4z" /><circle cx="12" cy="8" r="1.5" /><path d="M6 14l-2 4 4-2M6 10l-2 2M10 14l-2 2" />
+            </svg>
+            <svg v-else-if="s.icon === 'payment'" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2.5" y="5" width="15" height="10" rx="1.5" /><path d="M2.5 9h15M6 13h3" />
+            </svg>
+            <svg v-else viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 4h8v3a4 4 0 0 1-8 0V4z" /><path d="M4 4H2v2a2 2 0 0 0 2 2M16 4h2v2a2 2 0 0 1-2 2M10 11v4M7 15h6" />
+            </svg>
           </div>
           <div class="signal__body">
             <div class="signal__title signal__title--desktop">{{ s.title }}</div>
             <div class="signal__title signal__title--mobile">{{ s.titleMobile }}</div>
-            <div class="signal__meta signal__meta--desktop">{{ s.meta }}</div>
+            <div v-if="s.meta" class="signal__meta signal__meta--desktop">{{ s.meta }}</div>
           </div>
           <div class="signal__time">{{ s.time }}</div>
-        </li>
+        </component>
       </ul>
     </section>
   </div>
@@ -433,8 +587,15 @@ const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
 .event__dot--draft { background: transparent; border: 1.5px solid var(--color-hairline); }
 .event__dot--mobile { display: none; }
 
+/* ==================== Empty state ==================== */
+.empty { padding: 40px 24px; text-align: center; background: #fff; border: 1px dashed var(--color-hairline); border-radius: 14px; font-family: var(--font-body); }
+.empty__title { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--color-ink); }
+.empty__hint { font-size: 13px; color: var(--color-fog); margin-top: 4px; }
+
 /* ==================== Team card ==================== */
 .team-card { background: #fff; border: 1px solid var(--color-hairline); border-radius: 16px; padding: 20px 24px; }
+.team-card--empty { border-style: dashed; }
+.team-card--empty .team-card__meta { max-width: 620px; margin-top: 8px; line-height: 1.5; }
 .team-card__head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .team-card__meta { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 4px; }
 .team-card__meta--mobile { display: none; }
@@ -452,7 +613,9 @@ const iconTone: Record<Signal['icon'], { bg: string; fg: string }> = {
 /* ==================== Activity ==================== */
 .activity__head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; }
 .signals { list-style: none; padding: 0; margin: 0; }
-.signal { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-hairline); }
+.signal { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-hairline); text-decoration: none; color: inherit; }
+.signal[href] { cursor: pointer; }
+.signal[href]:hover { background: var(--color-surface); }
 .signal:last-child { border-bottom: none; }
 .signal__icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .signal__body { flex: 1; min-width: 0; }

@@ -60,6 +60,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'applications', name: 'applications', component: () => import('@/views/applications/ApplicationsView.vue') },
       { path: 'applications/:id', name: 'application-detail', component: () => import('@/views/applications/ApplicationDetailView.vue') },
       { path: 'enquiries', name: 'enquiries', component: () => import('@/views/enquiries/EnquiriesView.vue') },
+      { path: 'enquiries/:id', name: 'enquiry-detail', component: () => import('@/views/enquiries/EnquiryDetailView.vue') },
       { path: 'events', name: 'events', component: () => import('@/views/events/EventsView.vue') },
       { path: 'teams', name: 'teams', component: () => import('@/views/teams/TeamsView.vue') },
       { path: 'teams/:id', name: 'team-editor', component: () => import('@/views/teams/TeamEditorView.vue') },

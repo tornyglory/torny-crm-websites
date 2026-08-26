@@ -135,6 +135,8 @@ async function submit(evt: Event) {
       message: form.value.message.trim(),
       consent_reply: form.value.consent,
     }
+    // Server returns enquiry_id: 0 when it silently drops a honeypot hit —
+    // we still show success so bots don't learn anything from the response.
     await enquiries.create(clubSlug.value, payload)
     status.value = 'sent'
   } catch (e) {

@@ -7,6 +7,7 @@ import { useClubSettingsStore } from '@/stores/clubSettings'
 import {
   members as membersApi,
   applications as applicationsApi,
+  enquiries as enquiriesApi,
   events as eventsApi,
 } from '@torny/api-client'
 import { useHonourCategoriesStore } from '@/stores/honourCategories'
@@ -245,6 +246,37 @@ watch(
 )
 onBeforeUnmount(() => notificationsStore.stopPolling())
 
+// ── Enquiries new count (brief 41) ────────────────────────────
+// Cheap counts-only fetch — status='new' with limit=1 keeps the payload
+// tiny. Broadcasts from EnquiriesView keep it live after mutations.
+const enquiriesNewCount = ref<number | null>(null)
+async function loadEnquiriesCount(clubId: number) {
+  try {
+    const res = await enquiriesApi.list(clubId, { status: 'new', limit: 1 })
+    enquiriesNewCount.value = res.counts.new
+  } catch {
+    enquiriesNewCount.value = null
+  }
+}
+
+watch(
+  () => club.current?.id,
+  (id) => {
+    if (id != null && typeof id === 'number') void loadEnquiriesCount(id)
+    else enquiriesNewCount.value = null
+  },
+  { immediate: true },
+)
+
+function onEnquiriesCountUpdate(e: Event) {
+  const detail = (e as CustomEvent).detail
+  if (typeof detail === 'number') enquiriesNewCount.value = detail
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('torny:enquiries-count', onEnquiriesCountUpdate)
+  onBeforeUnmount(() => window.removeEventListener('torny:enquiries-count', onEnquiriesCountUpdate))
+}
+
 // ── Events upcoming count ─────────────────────────────────────
 // One rolling year forward. EventsView dispatches torny:events-count after
 // its own fetch so the sidebar doesn't refetch when the user is on Events.
@@ -290,7 +322,14 @@ const manageNav = computed<NavItem[]>(() => [
       ? { count: applicationsPendingCount.value, countTone: applicationsPendingCount.value > 0 ? 'accent' as const : 'neutral' as const }
       : {}),
   },
-  { to: '/crm/enquiries', label: 'Enquiries', icon: 'enquiries', count: 2, countTone: 'accent' },
+  {
+    to: '/crm/enquiries',
+    label: 'Enquiries',
+    icon: 'enquiries',
+    ...(enquiriesNewCount.value != null
+      ? { count: enquiriesNewCount.value, countTone: enquiriesNewCount.value > 0 ? 'accent' as const : 'neutral' as const }
+      : {}),
+  },
 ])
 const contentNav = computed<NavItem[]>(() => [
   { to: '/crm/website', label: 'Website', icon: 'website' },
@@ -327,7 +366,7 @@ const bottomTabs = computed<TabItem[]>(() => [
   { to: '/crm/dashboard', label: 'Home', icon: 'home' },
   { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? undefined },
   { to: '/crm/applications', label: 'Apps', count: applicationsPendingCount.value ?? undefined, icon: 'apps' },
-  { to: '/crm/enquiries', label: 'Enquiries', count: 2, icon: 'enquiries' },
+  { to: '/crm/enquiries', label: 'Enquiries', count: enquiriesNewCount.value ?? undefined, icon: 'enquiries' },
 ])
 </script>
 

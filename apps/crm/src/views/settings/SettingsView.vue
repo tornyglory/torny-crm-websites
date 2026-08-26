@@ -8,7 +8,16 @@ import { useClubStore } from '@/stores/club'
 import { useClubSettingsStore } from '@/stores/clubSettings'
 import { useMembershipTiersStore } from '@/stores/membershipTiers'
 import { useNotificationsStore } from '@/stores/notifications'
-import { ApiError, clubs, type EmailDigest, type MembershipTierListItem, type NotificationKind } from '@torny/api-client'
+import {
+  ApiError,
+  clubs,
+  enquiries as enquiriesApi,
+  type EmailDigest,
+  type EnquirySettings,
+  type EnquiryTopic,
+  type MembershipTierListItem,
+  type NotificationKind,
+} from '@torny/api-client'
 
 const toast = useToast()
 const onboarding = useOnboardingStore()
@@ -45,6 +54,7 @@ type SectionKey =
   | 'team'
   | 'security'
   | 'notifications'
+  | 'enquiries'
   | 'integrations'
   | 'danger'
 
@@ -56,6 +66,7 @@ const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
   { key: 'team', label: 'Team access', hint: 'Who else can manage the CRM.' },
   { key: 'security', label: 'Security', hint: 'Sign-in, sessions, 2FA.' },
   { key: 'notifications', label: 'Notifications', hint: 'Which kinds ping you in-app + by email.' },
+  { key: 'enquiries', label: 'Enquiries', hint: 'Contact-form intake, notify email, auto-reply.' },
   { key: 'integrations', label: 'Integrations', hint: 'Stripe, Google Calendar, mail.' },
   { key: 'danger', label: 'Danger zone', hint: 'Archive or transfer the club.' },
 ]
@@ -397,6 +408,124 @@ async function saveNotificationSettings() {
     else toast.error(err instanceof ApiError ? err.message : 'Could not save notification settings.')
   } finally {
     notificationSaving.value = false
+  }
+}
+
+// ── Enquiries settings (brief 41) ─────────────────────────────
+// Owner knobs for the public contact-form: intake toggle, notify
+// email, auto-reply body, and topics allowlist. Buffered like the
+// tiers form so a stray click doesn't fire a PATCH.
+const ENQUIRY_TOPICS: Array<{ key: EnquiryTopic; label: string }> = [
+  { key: 'membership', label: 'Membership' },
+  { key: 'events', label: 'Events & roll-ups' },
+  { key: 'facilities', label: 'Facilities hire' },
+  { key: 'general', label: 'General enquiry' },
+  { key: 'media', label: 'Media' },
+]
+const enquirySettings = ref<EnquirySettings | null>(null)
+const enquirySettingsLoading = ref(false)
+const enquirySettingsSaving = ref(false)
+const enquiryDraft = reactive<{
+  enquiries_open?: boolean
+  enquiry_notification_email?: string | null
+  auto_reply_body?: string | null
+  topics_enabled?: EnquiryTopic[]
+}>({})
+
+async function loadEnquirySettings() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  enquirySettingsLoading.value = true
+  try {
+    // Reads via GET /clubs/:id/settings.enquiries — but the api-client
+    // doesn't have a dedicated getter for that yet, so we PATCH with an
+    // empty body which server returns the merged settings.
+    enquirySettings.value = await enquiriesApi.updateSettings(cid, {})
+  } catch (err) {
+    toast.error(err instanceof ApiError ? err.message : 'Could not load enquiry settings.')
+  } finally {
+    enquirySettingsLoading.value = false
+  }
+}
+onMounted(loadEnquirySettings)
+watch(() => clubStore.current?.id, loadEnquirySettings)
+
+function draftedEnquiriesOpen(): boolean {
+  return enquiryDraft.enquiries_open ?? enquirySettings.value?.enquiries_open ?? true
+}
+const draftedEnquiriesOpenVal = computed(draftedEnquiriesOpen)
+function stageEnquiriesOpen() {
+  const stored = enquirySettings.value?.enquiries_open ?? true
+  const next = !draftedEnquiriesOpen()
+  if (next === stored) { delete enquiryDraft.enquiries_open; return }
+  enquiryDraft.enquiries_open = next
+}
+const draftedNotifyEmail = computed<string>({
+  get: () => (enquiryDraft.enquiry_notification_email
+    ?? enquirySettings.value?.enquiry_notification_email
+    ?? ''),
+  set: (v) => {
+    const stored = enquirySettings.value?.enquiry_notification_email ?? ''
+    const next = v.trim()
+    if (next === stored) delete enquiryDraft.enquiry_notification_email
+    else enquiryDraft.enquiry_notification_email = next || null
+  },
+})
+const draftedAutoReply = computed<string>({
+  get: () => (enquiryDraft.auto_reply_body
+    ?? enquirySettings.value?.auto_reply_body
+    ?? ''),
+  set: (v) => {
+    const stored = enquirySettings.value?.auto_reply_body ?? ''
+    if (v === stored) delete enquiryDraft.auto_reply_body
+    else enquiryDraft.auto_reply_body = v || null
+  },
+})
+function draftedTopics(): EnquiryTopic[] {
+  return enquiryDraft.topics_enabled ?? enquirySettings.value?.topics_enabled ?? []
+}
+function isTopicEnabled(t: EnquiryTopic): boolean {
+  const list = draftedTopics()
+  // Empty list = all allowed.
+  return list.length === 0 || list.includes(t)
+}
+function toggleTopic(t: EnquiryTopic) {
+  const current = draftedTopics()
+  // If the current state is "all enabled" (empty list), moving to a
+  // subset means initialising with every topic except the toggled one.
+  const base = current.length === 0 ? ENQUIRY_TOPICS.map((x) => x.key) : [...current]
+  const idx = base.indexOf(t)
+  if (idx >= 0) base.splice(idx, 1)
+  else base.push(t)
+  // If the user has re-enabled every topic, collapse back to "all".
+  const isFullSet = base.length === ENQUIRY_TOPICS.length
+  const stored = enquirySettings.value?.topics_enabled ?? []
+  const nextArr = isFullSet ? [] : base
+  const isSame = nextArr.length === stored.length && nextArr.every((x) => stored.includes(x))
+  if (isSame) delete enquiryDraft.topics_enabled
+  else enquiryDraft.topics_enabled = nextArr
+}
+const isEnquiryDirty = computed(() => Object.keys(enquiryDraft).length > 0)
+function clearEnquiryDraft() {
+  delete enquiryDraft.enquiries_open
+  delete enquiryDraft.enquiry_notification_email
+  delete enquiryDraft.auto_reply_body
+  delete enquiryDraft.topics_enabled
+}
+async function saveEnquirySettings() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number' || !isEnquiryDirty.value) return
+  enquirySettingsSaving.value = true
+  try {
+    enquirySettings.value = await enquiriesApi.updateSettings(cid, enquiryDraft)
+    clearEnquiryDraft()
+    toast.success('Enquiry settings saved.')
+  } catch (err) {
+    const body = err instanceof ApiError ? ((err.body ?? {}) as { code?: string }) : {}
+    if (body.code === 'bad_topics') toast.error('One of the topic slugs looks wrong.')
+    else toast.error(err instanceof ApiError ? err.message : 'Could not save enquiry settings.')
+  } finally {
+    enquirySettingsSaving.value = false
   }
 }
 
@@ -1031,6 +1160,81 @@ function sendInvite() {
               </div>
               <p class="card__sub" style="margin-top: 8px;">Bundles anything you opted into email for above into one send. Immediate emails still fire regardless when Off is picked.</p>
             </div>
+          </div>
+        </template>
+
+        <!-- Enquiries -->
+        <template v-else-if="active === 'enquiries'">
+          <div class="card">
+            <div class="card__head">
+              <div>
+                <div class="card__eyebrow">Contact form</div>
+                <h2 class="card__title">Enquiry intake</h2>
+              </div>
+              <div class="tier__head-actions">
+                <span v-if="isEnquiryDirty && !enquirySettingsSaving" class="tier__saving tier__saving--pending">Unsaved changes</span>
+                <button
+                  type="button"
+                  class="ghost-btn"
+                  :disabled="!isEnquiryDirty || enquirySettingsSaving"
+                  @click="clearEnquiryDraft"
+                >Discard</button>
+                <button
+                  type="button"
+                  class="primary-btn"
+                  :disabled="!isEnquiryDirty || enquirySettingsSaving"
+                  @click="saveEnquirySettings"
+                >{{ enquirySettingsSaving ? 'Saving…' : 'Save changes' }}</button>
+              </div>
+            </div>
+            <p class="card__sub">Controls the public /contact form on your site and where new enquiries land.</p>
+
+            <div v-if="enquirySettingsLoading && !enquirySettings" class="tier__loading">
+              Loading enquiry settings…
+            </div>
+            <template v-else>
+              <label class="switch-row">
+                <div>
+                  <div class="switch-row__label">Accept new enquiries</div>
+                  <div class="switch-row__hint">Off = the public contact form shows a "not accepting enquiries" message.</div>
+                </div>
+                <button
+                  type="button"
+                  class="switch"
+                  :class="{ 'is-on': draftedEnquiriesOpenVal }"
+                  @click="stageEnquiriesOpen"
+                ><span class="switch__knob" /></button>
+              </label>
+
+              <label class="field">
+                <span class="field__label">Notify email</span>
+                <input v-model="draftedNotifyEmail" type="email" placeholder="inbox@yourclub.co.nz" />
+                <span class="field__hint">Alert lands here on every new enquiry. Empty = uses your club's contact email.</span>
+              </label>
+
+              <label class="field">
+                <span class="field__label">Auto-reply body</span>
+                <textarea v-model="draftedAutoReply" rows="5" placeholder="Thanks for your message! We'll be in touch within a day or two." />
+                <span class="field__hint">Sent to the enquirer straight after they submit. Empty = uses the platform default.</span>
+              </label>
+
+              <div class="field__group">
+                <div class="field__group-title">Topics accepted</div>
+                <p class="field__hint" style="margin: 4px 0 8px;">Uncheck any topic your club doesn't want to receive enquiries about. All checked = accept everything.</p>
+                <div class="chip-picker">
+                  <template v-for="t in ENQUIRY_TOPICS" :key="t.key">
+                    <label class="chip-picker__item">
+                      <input
+                        type="checkbox"
+                        :checked="isTopicEnabled(t.key)"
+                        @change="toggleTopic(t.key)"
+                      />
+                      <span>{{ t.label }}</span>
+                    </label>
+                  </template>
+                </div>
+              </div>
+            </template>
           </div>
         </template>
 

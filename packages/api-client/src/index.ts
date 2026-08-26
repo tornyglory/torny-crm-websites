@@ -106,9 +106,24 @@ export type {
 } from './resources/notifications'
 export * as enquiries from './resources/enquiries'
 export type {
+  EnquiryStatus,
   EnquiryTopic,
+  EnquiryArchiveReason,
+  EnquiryRow,
+  EnquiryReply,
+  EnquiryNote,
+  EnquiryDetail,
+  EnquiriesListResponse,
+  ListEnquiriesParams,
   CreateEnquiryInput,
   CreateEnquiryResult,
+  ReplyEnquiryInput,
+  ReplyEnquiryResult,
+  ArchiveEnquiryInput,
+  ArchiveEnquiryResult,
+  MarkReadResult,
+  EnquirySettings,
+  EnquirySettingsPatch,
   EnquiryErrorCode,
 } from './resources/enquiries'
 export * as applications from './resources/applications'

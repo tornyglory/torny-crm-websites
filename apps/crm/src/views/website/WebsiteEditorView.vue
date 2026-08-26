@@ -450,8 +450,21 @@ const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
       defaults: (): HeroProps => heroDefault('Contact', 'Say hello. We\'ll get back to you.', ['Directions', '#directions']) },
     { type: 'richText', label: 'Rich text', hint: 'Address, hours, notes', icon: '¶',
       defaults: (): RichTextProps => ({ html: '<p>You\'ll find us at the club most afternoons. Drop a note below or email direct.</p>' }) },
-    { type: 'contactForm', label: 'Contact form', hint: 'A simple message form', icon: '✉',
-      defaults: (): ContactFormProps => ({ heading: 'Drop us a note', submitLabel: 'Send', successMessage: 'Thanks — we\'ll be in touch.' }) },
+    { type: 'contactForm', label: 'Contact form', hint: 'Full-page contact block with rail + form', icon: '✉',
+      defaults: (): ContactFormProps => ({
+        eyebrow: 'CONTACT',
+        heading: 'Say hi.',
+        description: 'The clubhouse is on the green Tuesdays & Fridays — otherwise a note here reaches the committee within a day or two.',
+        formHeading: 'Send us a note.',
+        formHint: 'Usually back within a day. Never share your details.',
+        submitLabel: 'Send message',
+        successMessage: "Thanks — we'll be in touch shortly.",
+        showContactRail: true,
+        showHours: true,
+        topics: ['Membership', 'Events & roll-ups', 'Facilities hire', 'General enquiry', 'Media'],
+        messageMaxLength: 500,
+        privacyHref: '',
+      }) },
     { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
       defaults: (): CtaBannerProps => ({ heading: 'Prefer to call?', ctaLabel: 'Give us a ring', ctaHref: 'tel:+', tone: 'ink' }) },
   ],
@@ -517,7 +530,20 @@ const SEEDS: Record<SystemPageSlug, () => Block[]> = {
   'honour-board': () => seed(),
   contact: () => seed(
     { type: 'hero', props: heroDefault('Contact', 'Say hello. We\'ll get back to you.', ['Directions', '#directions']) },
-    { type: 'contactForm', props: { heading: 'Drop us a note', submitLabel: 'Send', successMessage: 'Thanks — we\'ll be in touch.' } satisfies ContactFormProps },
+    { type: 'contactForm', props: {
+      eyebrow: 'CONTACT',
+      heading: 'Say hi.',
+      description: 'The clubhouse is on the green Tuesdays & Fridays — otherwise a note here reaches the committee within a day or two.',
+      formHeading: 'Send us a note.',
+      formHint: 'Usually back within a day. Never share your details.',
+      submitLabel: 'Send message',
+      successMessage: "Thanks — we'll be in touch shortly.",
+      showContactRail: true,
+      showHours: true,
+      topics: ['Membership', 'Events & roll-ups', 'Facilities hire', 'General enquiry', 'Media'],
+      messageMaxLength: 500,
+      privacyHref: '',
+    } satisfies ContactFormProps },
   ),
 }
 
@@ -1674,16 +1700,66 @@ const lastSavedLabel = computed(() => {
           <!-- Contact form -->
           <template v-else-if="selectedBlock.type === 'contactForm'">
             <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as ContactFormProps).eyebrow" type="text" placeholder="CONTACT" />
+            </label>
+            <label class="field">
               <span class="field__label">Heading</span>
-              <input v-model="(selectedBlock.props as ContactFormProps).heading" type="text" />
+              <input v-model="(selectedBlock.props as ContactFormProps).heading" type="text" placeholder="Say hi." />
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as ContactFormProps).description" rows="3" placeholder="Reassuring copy under the hero." />
+            </label>
+            <label class="field">
+              <span class="field__label">Form card heading</span>
+              <input v-model="(selectedBlock.props as ContactFormProps).formHeading" type="text" placeholder="Send us a note." />
+            </label>
+            <label class="field">
+              <span class="field__label">Form card hint</span>
+              <input v-model="(selectedBlock.props as ContactFormProps).formHint" type="text" placeholder="Usually back within a day." />
             </label>
             <label class="field">
               <span class="field__label">Submit button label</span>
-              <input v-model="(selectedBlock.props as ContactFormProps).submitLabel" type="text" placeholder="Send" />
+              <input v-model="(selectedBlock.props as ContactFormProps).submitLabel" type="text" placeholder="Send message" />
             </label>
             <label class="field">
               <span class="field__label">Success message</span>
               <textarea v-model="(selectedBlock.props as ContactFormProps).successMessage" rows="2" placeholder="Thanks — we'll be in touch." />
+            </label>
+            <label class="field">
+              <span class="field__label">Privacy policy URL</span>
+              <input v-model="(selectedBlock.props as ContactFormProps).privacyHref" type="text" placeholder="/legal/privacy" />
+              <span class="field__hint">Empty = the consent line renders without a link.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Message max length</span>
+              <input v-model.number="(selectedBlock.props as ContactFormProps).messageMaxLength" type="number" min="0" max="5000" step="50" />
+              <span class="field__hint">0 = no character counter shown.</span>
+            </label>
+            <label class="switch-row">
+              <div>
+                <div class="switch-row__label">Show contact rail</div>
+                <div class="switch-row__hint">Reach us / Find us / Hours cards on the left. Off = full-width form only.</div>
+              </div>
+              <button
+                type="button"
+                class="switch"
+                :class="{ 'is-on': (selectedBlock.props as ContactFormProps).showContactRail !== false }"
+                @click="(selectedBlock.props as ContactFormProps).showContactRail = !((selectedBlock.props as ContactFormProps).showContactRail !== false)"
+              ><span class="switch__knob" /></button>
+            </label>
+            <label class="switch-row">
+              <div>
+                <div class="switch-row__label">Show hours card</div>
+                <div class="switch-row__hint">Uses your Settings → Opening hours data.</div>
+              </div>
+              <button
+                type="button"
+                class="switch"
+                :class="{ 'is-on': (selectedBlock.props as ContactFormProps).showHours !== false }"
+                @click="(selectedBlock.props as ContactFormProps).showHours = !((selectedBlock.props as ContactFormProps).showHours !== false)"
+              ><span class="switch__knob" /></button>
             </label>
           </template>
 

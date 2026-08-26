@@ -104,6 +104,13 @@ export type {
   NotificationSettingsPatch,
   NotificationErrorCode,
 } from './resources/notifications'
+export * as enquiries from './resources/enquiries'
+export type {
+  EnquiryTopic,
+  CreateEnquiryInput,
+  CreateEnquiryResult,
+  EnquiryErrorCode,
+} from './resources/enquiries'
 export * as applications from './resources/applications'
 export type {
   ApplicationStatus,

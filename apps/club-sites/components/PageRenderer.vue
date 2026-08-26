@@ -39,6 +39,8 @@ provide(BLOCK_CONTEXT_KEY, computed<BlockContext>(() => ({
   membershipTiers: site.value?.membership_tiers ?? [],
   cadence: site.value?.cadence ?? null,
   firstYearDiscount: site.value?.first_year_discount ?? false,
+  contact: site.value?.contact ?? undefined,
+  hours: site.value?.hours ?? [],
 })))
 </script>
 

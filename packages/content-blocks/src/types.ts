@@ -146,9 +146,24 @@ export interface MembershipJoinFormProps {
 }
 
 export interface ContactFormProps {
+  eyebrow?: string
   heading?: string
+  description?: string
+  /** Rail-column copy above the "Send us a note" card. Falls back to a generic reassurance. */
+  formHeading?: string
+  formHint?: string
   submitLabel?: string
   successMessage?: string
+  /** Show the Reach us / Find us / Hours rail. Off = full-width form only. */
+  showContactRail?: boolean
+  /** Show the seven-day hours card. */
+  showHours?: boolean
+  /** Override the topic chip labels. Empty array = no chip picker. Default: 5 topics. */
+  topics?: string[]
+  /** Message textarea max length — 0 = no counter shown. Default 500. */
+  messageMaxLength?: number
+  /** URL of the privacy document. Empty = no link rendered next to the consent copy. */
+  privacyHref?: string
 }
 
 export interface MembershipCtaProps {
@@ -338,6 +353,20 @@ export interface BlockContext {
   cadence?: 'annual' | 'monthly' | 'season' | null
   /** First-year discount flag from the tiers settings. Drives the "20% off first year" chip. */
   firstYearDiscount?: boolean
+  /** Club contact block — reads from /site.contact so the ContactFormBlock rail renders real details. */
+  contact?: {
+    email?: string | null
+    phone?: string | null
+    address?: string | null
+    google_maps_url?: string | null
+  }
+  /** Weekly opening hours — one row per day, keeps day order. */
+  hours?: Array<{
+    day: 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+    is_open: boolean
+    open: string | null
+    close: string | null
+  }>
   honourEntries?: Array<{
     category_slug: string
     category_name: string

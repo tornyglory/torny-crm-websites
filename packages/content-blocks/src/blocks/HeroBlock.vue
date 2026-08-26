@@ -6,6 +6,28 @@ const props = defineProps<HeroProps>()
 
 const bodyText = computed(() => props.description || props.subheading || '')
 const showStats = computed(() => (props.stats?.length ?? 0) > 0)
+
+const TONE_GRADIENTS: Record<NonNullable<HeroProps['cardTone']>, string> = {
+  accent:    'linear-gradient(160deg, #DBEAFE, #2563EB 60%, #1E40AF)',
+  ink:       'linear-gradient(160deg, #4B5563, #1f2b36 60%, #0A0A0B)',
+  mint:      'linear-gradient(160deg, #DCFCE7, #22C55E 60%, #14532D)',
+  tangerine: 'linear-gradient(160deg, #FED7AA, #F97316 60%, #C2410C)',
+  violet:    'linear-gradient(160deg, #EDE9FE, #7C3AED 60%, #4C1D95)',
+  sky:       'linear-gradient(160deg, #B0E0E6 0%, #87CEEB 40%, #4A90A4 100%)',
+}
+const mediaStyle = computed<Record<string, string>>(() => {
+  const out: Record<string, string> = {}
+  if (!props.imageUrl) out.background = TONE_GRADIENTS[props.cardTone ?? 'sky']
+  return out
+})
+
+function initialsFor(name: string, initials?: string): string {
+  if (initials) return initials.toUpperCase()
+  const parts = (name ?? '').trim().split(/\s+/)
+  const a = parts[0]?.[0] ?? ''
+  const b = parts.length > 1 ? parts[parts.length - 1]![0] : ''
+  return `${a}${b}`.toUpperCase() || '?'
+}
 </script>
 
 <template>
@@ -42,11 +64,33 @@ const showStats = computed(() => (props.stats?.length ?? 0) > 0)
         </div>
       </div>
 
-      <div class="hero__col hero__col--media" :class="{ 'hero__col--media-empty': !imageUrl }">
+      <div
+        class="hero__col hero__col--media"
+        :class="{ 'hero__col--media-empty': !imageUrl }"
+        :style="mediaStyle"
+      >
         <img v-if="imageUrl" :src="imageUrl" alt="" class="hero__media-image" />
-        <div v-if="mediaCaption" class="hero__media-pill">
-          <span class="hero__media-pill-dot" />
-          <span>{{ mediaCaption }}</span>
+
+        <div class="hero__card-head">
+          <div v-if="mediaCaption" class="hero__card-eyebrow">
+            <span class="hero__card-eyebrow-dot" />
+            <span>{{ mediaCaption }}</span>
+          </div>
+          <span v-if="cardBadge" class="hero__card-badge">{{ cardBadge }}</span>
+        </div>
+
+        <div v-if="testimonial && testimonial.quote" class="hero__quote">
+          <p class="hero__quote-body">"{{ testimonial.quote }}"</p>
+          <div class="hero__quote-foot">
+            <div class="hero__quote-avatar">
+              <img v-if="testimonial.authorAvatarUrl" :src="testimonial.authorAvatarUrl" :alt="testimonial.authorName" />
+              <span v-else>{{ initialsFor(testimonial.authorName, testimonial.authorInitials) }}</span>
+            </div>
+            <div class="hero__quote-meta">
+              <div class="hero__quote-author">{{ testimonial.authorName }}</div>
+              <div v-if="testimonial.authorRole" class="hero__quote-role">{{ testimonial.authorRole }}</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -216,10 +260,12 @@ const showStats = computed(() => (props.stats?.length ?? 0) > 0)
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: stretch;
   padding: 32px;
-  background-image: linear-gradient(160deg, #B0E0E6 0%, #87CEEB 40%, #4A90A4 100%);
   overflow: hidden;
+  /* Gradient is inline via mediaStyle when no imageUrl — falls back to the
+     old sky gradient when no cardTone is supplied. */
 }
 .hero__col--media-empty { }
 .hero__media-image {
@@ -230,15 +276,24 @@ const showStats = computed(() => (props.stats?.length ?? 0) > 0)
   object-fit: cover;
   z-index: 0;
 }
-.hero__media-pill {
+
+/* Head — eyebrow chip left, badge pill right. */
+.hero__card-head {
   position: relative;
   z-index: 1;
-  align-self: flex-start;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.hero__card-eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
-  background: rgba(10, 10, 11, 0.7);
+  padding: 6px 14px;
+  background: rgba(10, 10, 11, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-pill);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -249,12 +304,72 @@ const showStats = computed(() => (props.stats?.length ?? 0) > 0)
   color: #fff;
   backdrop-filter: blur(4px);
 }
-.hero__media-pill-dot {
+.hero__card-eyebrow-dot {
   width: 6px;
   height: 6px;
   border-radius: var(--radius-pill);
-  background: #fff;
+  background: var(--color-accent, #2563EB);
   flex-shrink: 0;
+}
+.hero__card-badge {
+  padding: 6px 14px;
+  background: #fff;
+  color: var(--color-ink);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: var(--track-label);
+  line-height: 14px;
+  text-transform: uppercase;
+}
+
+/* Testimonial overlay — dark blur card in the bottom-right. */
+.hero__quote {
+  position: relative;
+  z-index: 1;
+  align-self: flex-end;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 22px;
+  background: rgba(10, 10, 11, 0.72);
+  backdrop-filter: blur(8px);
+  border-radius: 14px;
+}
+.hero__quote-body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 155%;
+  color: #fff;
+}
+.hero__quote-foot { display: flex; align-items: center; gap: 12px; }
+.hero__quote-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent, #2563EB);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.hero__quote-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.hero__quote-meta { display: flex; flex-direction: column; gap: 2px; }
+.hero__quote-author { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: #fff; }
+.hero__quote-role {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--track-label);
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
 }
 
 /* Large tablet: keep split, reduce padding. */

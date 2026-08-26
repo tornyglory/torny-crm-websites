@@ -177,6 +177,9 @@ interface HeroDefaultExtras {
   description?: string
   mediaCaption?: string
   stats?: Array<{ value: string; label: string }>
+  cardBadge?: string
+  cardTone?: HeroProps['cardTone']
+  testimonial?: HeroProps['testimonial']
 }
 const heroDefault = (
   heading: string,
@@ -193,17 +196,27 @@ const heroDefault = (
   stats: extras.stats,
   primaryCta: { label: cta1[0], href: cta1[1] },
   ...(cta2 ? { secondaryCta: { label: cta2[0], href: cta2[1] } } : {}),
+  cardBadge: extras.cardBadge,
+  cardTone: extras.cardTone,
+  testimonial: extras.testimonial,
 })
 
 const homeHeroExtras: HeroDefaultExtras = {
   eyebrow: 'Est. 1953 · Hutt Valley',
   description: 'Naenae Bowling Club has been playing on the same green in the Hutt Valley since 1953. Mixed-membership, open twilights every Friday from October to March, and bowls until you find a set you like.',
-  mediaCaption: 'Green A · Friday twilight',
+  mediaCaption: 'GREEN A · FRIDAY TWILIGHT',
   stats: [
     { value: '142', label: 'Members' },
     { value: '4', label: 'Events this week' },
     { value: '3', label: 'Greens on site' },
   ],
+  cardBadge: 'NEW · SPRING SEASON',
+  cardTone: 'sky',
+  testimonial: {
+    quote: 'First roll-up in ten years. Waved through the front door, sets in my hand within five minutes. Fantastic.',
+    authorName: 'Marcus T.',
+    authorRole: 'MEMBER · JOINED MAY 2026',
+  },
 }
 
 // ── Editorial-block default builders ─────────────────────────
@@ -1541,10 +1554,66 @@ const lastSavedLabel = computed(() => {
               />
             </div>
             <label class="field">
-              <span class="field__label">Media caption</span>
-              <input v-model="(selectedBlock!.props as HeroProps).mediaCaption" type="text" placeholder="Green A · Friday twilight" />
-              <span class="field__hint">Pill on the media panel. Leave empty to hide.</span>
+              <span class="field__label">Media eyebrow chip</span>
+              <input v-model="(selectedBlock!.props as HeroProps).mediaCaption" type="text" placeholder="GREEN A · FRIDAY TWILIGHT" />
+              <span class="field__hint">Dark-blur pill floated top-left of the media card. Leave empty to hide.</span>
             </label>
+            <label class="field">
+              <span class="field__label">Media badge</span>
+              <input v-model="(selectedBlock!.props as HeroProps).cardBadge" type="text" placeholder="NEW · SPRING SEASON" />
+              <span class="field__hint">Bright white pill floated top-right of the media card. Great for seasonal callouts.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Media tone (no image)</span>
+              <select v-model="(selectedBlock!.props as HeroProps).cardTone">
+                <option :value="undefined">Sky (default)</option>
+                <option value="sky">Sky</option>
+                <option value="tangerine">Tangerine</option>
+                <option value="mint">Mint</option>
+                <option value="accent">Accent (brand)</option>
+                <option value="violet">Violet</option>
+                <option value="ink">Ink</option>
+              </select>
+              <span class="field__hint">Ignored when a media image is set.</span>
+            </label>
+            <div class="field__group">
+              <div class="field__group-title">Testimonial overlay (optional)</div>
+              <label class="field">
+                <span class="field__label">Quote</span>
+                <textarea
+                  :value="(selectedBlock!.props as HeroProps).testimonial?.quote ?? ''"
+                  @input="e => (selectedBlock!.props as HeroProps).testimonial = { ...((selectedBlock!.props as HeroProps).testimonial ?? { authorName: '' }), quote: (e.target as HTMLTextAreaElement).value }"
+                  rows="3"
+                  placeholder="Short quote from a member or hirer"
+                />
+                <span class="field__hint">Rendered as a dark-blur card in the bottom-right of the media panel. Leave empty to hide.</span>
+              </label>
+              <label class="field">
+                <span class="field__label">Author name</span>
+                <input
+                  :value="(selectedBlock!.props as HeroProps).testimonial?.authorName ?? ''"
+                  @input="e => (selectedBlock!.props as HeroProps).testimonial = { ...((selectedBlock!.props as HeroProps).testimonial ?? { quote: '' }), authorName: (e.target as HTMLInputElement).value }"
+                  type="text" placeholder="Marcus T."
+                />
+              </label>
+              <label class="field">
+                <span class="field__label">Author role</span>
+                <input
+                  :value="(selectedBlock!.props as HeroProps).testimonial?.authorRole ?? ''"
+                  @input="e => (selectedBlock!.props as HeroProps).testimonial = { ...((selectedBlock!.props as HeroProps).testimonial ?? { quote: '', authorName: '' }), authorRole: (e.target as HTMLInputElement).value }"
+                  type="text" placeholder="MEMBER · JOINED MAY 2026"
+                />
+              </label>
+              <label class="field">
+                <span class="field__label">Initials (fallback)</span>
+                <input
+                  :value="(selectedBlock!.props as HeroProps).testimonial?.authorInitials ?? ''"
+                  @input="e => (selectedBlock!.props as HeroProps).testimonial = { ...((selectedBlock!.props as HeroProps).testimonial ?? { quote: '', authorName: '' }), authorInitials: (e.target as HTMLInputElement).value }"
+                  type="text" placeholder="MT"
+                />
+                <span class="field__hint">Auto-derived from the name when empty.</span>
+              </label>
+            </div>
             <div class="field__group">
               <div class="field__group-title">Primary CTA</div>
               <label class="field">

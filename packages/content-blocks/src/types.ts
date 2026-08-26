@@ -44,10 +44,24 @@ export interface HeroProps {
   imageUrl?: string
   /** Row id from the block-images API — needed for later DELETE/PATCH. */
   imageId?: number | null
+  /** Dark-blur eyebrow pill floated top-left of the media card. Same as the
+   *  venue-hire hero card eyebrow — brand-accent dot + mono uppercase text. */
   mediaCaption?: string
   primaryCta?: { label: string; href: string }
   secondaryCta?: { label: string; href: string }
   stats?: HeroStat[]
+  /** Bright white pill floated top-right of the media card — e.g. `"NEW · SPRING SEASON"`. */
+  cardBadge?: string
+  /** Gradient tone used when no `imageUrl` is supplied. Defaults to `sky`. */
+  cardTone?: 'accent' | 'ink' | 'mint' | 'tangerine' | 'violet' | 'sky'
+  /** Optional overlay quote card in the bottom-right of the media card. */
+  testimonial?: {
+    quote: string
+    authorName: string
+    authorRole?: string
+    authorInitials?: string
+    authorAvatarUrl?: string
+  }
 }
 
 export interface RichTextProps {

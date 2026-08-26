@@ -280,6 +280,11 @@ function formatDob(iso: string | null): string {
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 }
+function formatDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
 </script>
 
 <template>
@@ -402,56 +407,116 @@ function formatDob(iso: string | null): string {
             </div>
           </div>
 
-          <div class="detail__cols">
-            <section class="detail__section">
-              <div class="detail__section-title">Contact</div>
-              <dl class="dl">
-                <div class="dl__row"><dt>Email</dt><dd><a class="link" :href="`mailto:${detail.email}`">{{ detail.email }}</a></dd></div>
-                <div class="dl__row"><dt>Mobile</dt><dd><a class="link" :href="`tel:${detail.mobile.replace(/\s+/g, '')}`">{{ detail.mobile }}</a></dd></div>
-                <div class="dl__row"><dt>DOB</dt><dd>{{ formatDob(detail.dob) }}</dd></div>
-                <div class="dl__row"><dt>Address</dt><dd>{{ formatAddress(detail.address) }}</dd></div>
-              </dl>
-            </section>
+          <ol class="steps">
+            <li class="step">
+              <div class="step__num">01</div>
+              <div class="step__body">
+                <div class="step__head">
+                  <h4 class="step__title">Membership</h4>
+                  <p class="step__hint">The tier they picked and when they applied.</p>
+                </div>
+                <dl class="dl">
+                  <div class="dl__row"><dt>Tier</dt><dd>{{ detail.tier_name ?? 'No tier chosen' }}</dd></div>
+                  <div v-if="detail.preferred_name" class="dl__row"><dt>Prefers</dt><dd>{{ detail.preferred_name }}</dd></div>
+                  <div class="dl__row"><dt>Applied</dt><dd>{{ timeAgo(detail.received_at) }}<span class="dl__muted"> · {{ formatDateTime(detail.received_at) }}</span></dd></div>
+                </dl>
+              </div>
+            </li>
 
-            <section class="detail__section">
-              <div class="detail__section-title">Bowls</div>
-              <dl class="dl">
-                <div class="dl__row"><dt>Experience</dt><dd>{{ detail.bowls?.experience ?? '—' }}</dd></div>
-                <div class="dl__row"><dt>Position</dt><dd>{{ detail.bowls?.position ?? '—' }}</dd></div>
-                <div class="dl__row"><dt>Days available</dt><dd>{{ formatDays(detail.bowls?.playing_days) }}</dd></div>
-                <div class="dl__row"><dt>Bowls NZ</dt><dd>{{ detail.bowls?.bowls_number ?? '—' }}</dd></div>
-              </dl>
-            </section>
-          </div>
+            <li class="step">
+              <div class="step__num">02</div>
+              <div class="step__body">
+                <div class="step__head">
+                  <h4 class="step__title">About</h4>
+                  <p class="step__hint">Their contact details.</p>
+                </div>
+                <dl class="dl">
+                  <div class="dl__row"><dt>Full name</dt><dd>{{ detail.full_name }}</dd></div>
+                  <div class="dl__row"><dt>Date of birth</dt><dd>{{ formatDob(detail.dob) }}</dd></div>
+                  <div class="dl__row"><dt>Email</dt><dd><a class="link" :href="`mailto:${detail.email}`">{{ detail.email }}</a></dd></div>
+                  <div class="dl__row"><dt>Mobile</dt><dd><a class="link" :href="`tel:${detail.mobile.replace(/\s+/g, '')}`">{{ detail.mobile }}</a></dd></div>
+                </dl>
+              </div>
+            </li>
 
-          <div class="detail__cols">
-            <section class="detail__section">
-              <div class="detail__section-title">Emergency contact</div>
-              <dl class="dl">
-                <div class="dl__row"><dt>Name</dt><dd>{{ detail.emergency_contact?.name ?? '—' }}</dd></div>
-                <div class="dl__row"><dt>Phone</dt><dd>{{ detail.emergency_contact?.phone ?? '—' }}</dd></div>
-                <div class="dl__row"><dt>Relation</dt><dd>{{ detail.emergency_contact?.relationship ?? '—' }}</dd></div>
-              </dl>
-            </section>
-            <section class="detail__section">
-              <div class="detail__section-title">Extras</div>
-              <dl class="dl">
-                <div class="dl__row"><dt>Referrer</dt><dd>{{ detail.referrer ?? '—' }}</dd></div>
-                <div class="dl__row"><dt>Newsletter</dt><dd>{{ detail.consent?.newsletter ? 'Opted in' : 'No' }}</dd></div>
-                <div class="dl__row"><dt>Photos OK</dt><dd>{{ detail.consent?.photo ? 'Yes' : 'No' }}</dd></div>
-                <div class="dl__row"><dt>Terms</dt><dd>{{ detail.consent?.terms ? 'Accepted' : 'Not accepted' }}</dd></div>
-              </dl>
-            </section>
-          </div>
+            <li class="step">
+              <div class="step__num">03</div>
+              <div class="step__body">
+                <div class="step__head">
+                  <h4 class="step__title">Home address</h4>
+                  <p class="step__hint">Where the club handbook + AGM notices go.</p>
+                </div>
+                <dl class="dl">
+                  <div v-if="detail.address.street || detail.address._raw" class="dl__row"><dt>Street</dt><dd>{{ detail.address.street ?? detail.address._raw }}</dd></div>
+                  <div v-if="detail.address.suburb" class="dl__row"><dt>Suburb</dt><dd>{{ detail.address.suburb }}</dd></div>
+                  <div v-if="detail.address.postcode" class="dl__row"><dt>Postcode</dt><dd>{{ detail.address.postcode }}</dd></div>
+                  <div v-if="detail.address.country" class="dl__row"><dt>Country</dt><dd>{{ detail.address.country }}</dd></div>
+                  <div v-if="!detail.address.street && !detail.address._raw && !detail.address.suburb" class="dl__row"><dt>Address</dt><dd>—</dd></div>
+                </dl>
+              </div>
+            </li>
 
-          <section v-if="detail.note" class="detail__notes">
-            <div class="detail__section-title">From the applicant</div>
-            <p>{{ detail.note }}</p>
-          </section>
+            <li class="step">
+              <div class="step__num">04</div>
+              <div class="step__body">
+                <div class="step__head">
+                  <h4 class="step__title">Their bowls</h4>
+                  <p class="step__hint">Where the selectors and coaches will slot them.</p>
+                </div>
+                <dl class="dl">
+                  <div class="dl__row"><dt>Experience</dt><dd>{{ detail.bowls?.experience ?? '—' }}</dd></div>
+                  <div class="dl__row"><dt>Position</dt><dd>{{ detail.bowls?.position ?? '—' }}</dd></div>
+                  <div class="dl__row"><dt>Days available</dt><dd>{{ formatDays(detail.bowls?.playing_days) }}</dd></div>
+                  <div class="dl__row"><dt>Bowls NZ #</dt><dd>{{ detail.bowls?.bowls_number ?? '—' }}</dd></div>
+                </dl>
+              </div>
+            </li>
 
-          <!-- Internal notes -->
+            <li class="step">
+              <div class="step__num">05</div>
+              <div class="step__body">
+                <div class="step__head">
+                  <h4 class="step__title">Emergency contact</h4>
+                  <p class="step__hint">Who to call if there's an accident on the green.</p>
+                </div>
+                <dl class="dl">
+                  <div class="dl__row"><dt>Name</dt><dd>{{ detail.emergency_contact?.name ?? '—' }}</dd></div>
+                  <div class="dl__row"><dt>Phone</dt><dd v-if="detail.emergency_contact?.phone"><a class="link" :href="`tel:${detail.emergency_contact.phone.replace(/\s+/g, '')}`">{{ detail.emergency_contact.phone }}</a></dd><dd v-else>—</dd></div>
+                  <div class="dl__row"><dt>Relationship</dt><dd>{{ detail.emergency_contact?.relationship ?? '—' }}</dd></div>
+                </dl>
+              </div>
+            </li>
+
+            <li class="step">
+              <div class="step__num">06</div>
+              <div class="step__body">
+                <div class="step__head">
+                  <h4 class="step__title">Review &amp; agree</h4>
+                  <p class="step__hint">What they told us at the end of the form.</p>
+                </div>
+                <blockquote v-if="detail.note" class="step__note">{{ detail.note }}</blockquote>
+                <dl class="dl">
+                  <div class="dl__row"><dt>Referrer</dt><dd>{{ detail.referrer ?? '—' }}</dd></div>
+                  <div class="dl__row"><dt>Terms</dt><dd>
+                    <span class="agree-chip" :class="detail.consent?.terms ? 'agree-chip--yes' : 'agree-chip--no'">{{ detail.consent?.terms ? 'Accepted' : 'Not accepted' }}</span>
+                  </dd></div>
+                  <div class="dl__row"><dt>Newsletter</dt><dd>
+                    <span class="agree-chip" :class="detail.consent?.newsletter ? 'agree-chip--yes' : 'agree-chip--no'">{{ detail.consent?.newsletter ? 'Opted in' : 'No' }}</span>
+                  </dd></div>
+                  <div class="dl__row"><dt>Club photos</dt><dd>
+                    <span class="agree-chip" :class="detail.consent?.photo ? 'agree-chip--yes' : 'agree-chip--no'">{{ detail.consent?.photo ? 'Yes' : 'No' }}</span>
+                  </dd></div>
+                </dl>
+              </div>
+            </li>
+          </ol>
+
+          <!-- Internal notes — reviewer's audit log, separate from the applicant's answers. -->
           <section class="detail__notes-thread">
-            <div class="detail__section-title">Internal notes ({{ detail.notes.length }})</div>
+            <div class="detail__notes-head">
+              <h4 class="detail__notes-title">Internal notes</h4>
+              <span class="detail__notes-count">{{ detail.notes.length }}</span>
+            </div>
             <form class="note-form" @submit.prevent="submitNote">
               <textarea
                 v-model="noteBody"
@@ -648,23 +713,57 @@ function formatDob(iso: string | null): string {
 .detail__hero-meta { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
 .detail__hero-badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; max-width: 240px; }
 
-.detail__cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 4px 4px 0; }
-.detail__section-title { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); margin: 0 0 12px; }
+/* Numbered steps — mirrors the join-form structure so the reviewer
+   reads the same sections in the same order. */
+.steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 40px; padding: 8px 4px 0; }
+.step { display: grid; grid-template-columns: 40px 1fr; gap: 16px; align-items: flex-start; padding-top: 24px; border-top: 1px solid var(--color-hairline); }
+.step:first-child { padding-top: 0; border-top: 0; }
+.step__num { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; color: var(--color-mute); text-transform: uppercase; padding-top: 2px; }
+.step__body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.step__head { display: flex; flex-direction: column; gap: 4px; }
+.step__title { font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.01em; color: var(--color-ink); margin: 0; line-height: 1.2; }
+.step__hint { font-family: var(--font-body); font-size: 13px; color: var(--color-fog); margin: 0; line-height: 1.5; }
+.step__note {
+  padding: 14px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--color-ink);
+  margin: 0;
+  font-style: italic;
+}
 
 .dl { display: flex; flex-direction: column; margin: 0; }
-.dl__row { display: grid; grid-template-columns: 108px 1fr; gap: 12px; padding: 10px 0; border-top: 1px solid var(--color-hairline); align-items: baseline; }
+.dl__row { display: grid; grid-template-columns: 140px 1fr; gap: 16px; padding: 10px 0; border-top: 1px solid var(--color-hairline); align-items: baseline; }
 .dl__row:first-child { border-top: 0; padding-top: 0; }
 .dl__row:last-child { padding-bottom: 0; }
 .dl dt { font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-fog); margin: 0; }
-.dl dd { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); margin: 0; word-break: break-word; }
+.dl dd { font-family: var(--font-body); font-size: 14px; color: var(--color-ink); margin: 0; word-break: break-word; }
+.dl__muted { color: var(--color-fog); }
 .link { color: var(--color-accent); text-decoration: none; }
 .link:hover { text-decoration: underline; }
 
-.detail__notes { padding: 16px 18px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 12px; }
-.detail__notes p { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); line-height: 1.6; margin: 8px 0 0; font-style: italic; }
+.agree-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+}
+.agree-chip--yes { background: #DCFCE7; color: #14532D; }
+.agree-chip--no  { background: var(--color-surface); color: var(--color-fog); border: 1px solid var(--color-hairline); }
 
 /* Internal notes thread */
-.detail__notes-thread { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; border-top: 1px solid var(--color-hairline); }
+.detail__notes-thread { display: flex; flex-direction: column; gap: 12px; padding-top: 24px; margin-top: 8px; border-top: 1px solid var(--color-hairline); }
+.detail__notes-head { display: flex; align-items: baseline; gap: 10px; }
+.detail__notes-title { font-family: var(--font-display); font-size: 15px; font-weight: 700; letter-spacing: -0.01em; color: var(--color-ink); margin: 0; }
+.detail__notes-count { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--color-fog); padding: 2px 8px; border-radius: 999px; background: var(--color-surface); }
 .note-form { display: flex; gap: 8px; align-items: stretch; }
 .note-form textarea { flex: 1; padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; resize: vertical; min-height: 44px; }
 .note-form textarea:focus { outline: none; border-color: var(--color-ink); }
@@ -691,7 +790,9 @@ function formatDob(iso: string | null): string {
 .switch.is-on .switch__knob { transform: translateX(16px); }
 
 @media (max-width: 900px) {
-  .detail__cols { grid-template-columns: 1fr; gap: 20px; }
+  .steps { gap: 32px; }
+  .step { grid-template-columns: 32px 1fr; gap: 12px; padding-top: 20px; }
+  .dl__row { grid-template-columns: 1fr; gap: 4px; }
   .detail__hero { flex-wrap: wrap; }
   .detail__hero-badges { justify-content: flex-start; max-width: none; width: 100%; padding-left: 76px; }
 }

@@ -227,17 +227,17 @@ async function submitReject() {
 </script>
 
 <template>
-  <div class="page">
+  <div class="detail">
     <!-- Header + back link -->
-    <header class="page__head">
+    <header class="detail__head">
       <router-link to="/crm/applications" class="back">
         <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M12 5l-5 5 5 5" />
         </svg>
         <span>All applications</span>
       </router-link>
-      <div v-if="detail" class="page__title-row">
-        <h1 class="page__title">{{ detail.full_name }}</h1>
+      <div v-if="detail" class="detail__title-row">
+        <h1 class="detail__title">{{ detail.full_name }}</h1>
         <span class="pill" :class="`pill--${statusTone[detail.status]}`">{{ statusLabel[detail.status] }}</span>
         <button type="button" class="download-btn" @click="downloadPdf" aria-label="Download this application as PDF">
           <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -247,7 +247,7 @@ async function submitReject() {
           <span>Download PDF</span>
         </button>
       </div>
-      <p v-if="detail" class="page__sub">
+      <p v-if="detail" class="detail__sub">
         Applied {{ timeAgo(detail.received_at) }} · {{ formatDateTime(detail.received_at) }}
       </p>
     </header>
@@ -262,7 +262,7 @@ async function submitReject() {
       <router-link to="/crm/applications" class="back back--emphasis">Back to applications</router-link>
     </div>
 
-    <div v-else-if="detail" class="page__body">
+    <div v-else-if="detail" class="detail__body">
       <!-- Left: numbered steps mirroring the join-form order -->
       <ol class="steps">
         <li class="step">
@@ -487,16 +487,16 @@ async function submitReject() {
 </template>
 
 <style scoped>
-.page { max-width: 1280px; display: flex; flex-direction: column; gap: 32px; }
+.detail { max-width: 1280px; display: flex; flex-direction: column; gap: 32px; }
 
 /* Header — matches the list page style so nav feels consistent. */
-.page__head { display: flex; flex-direction: column; gap: 0; }
+.detail__head { display: flex; flex-direction: column; gap: 0; }
 .back { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-fog); text-decoration: none; width: fit-content; }
 .back:hover { color: var(--color-ink); }
 .back--emphasis { color: var(--color-accent); margin-top: 16px; font-weight: 600; letter-spacing: normal; text-transform: none; font-size: 13px; }
-.page__title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 6px; }
-.page__title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; line-height: 1.05; }
-.page__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-fog); margin: 0; }
+.detail__title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 6px; }
+.detail__title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; line-height: 1.05; }
+.detail__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-fog); margin: 0; }
 
 /* Empty */
 .empty { padding: 96px 40px; text-align: center; font-family: var(--font-body); background: #fff; border: 1px dashed var(--color-hairline); border-radius: 14px; }
@@ -504,7 +504,7 @@ async function submitReject() {
 .empty__hint { font-family: var(--font-body); font-size: 14px; color: var(--color-fog); margin-top: 6px; }
 
 /* Body layout */
-.page__body { display: grid; grid-template-columns: 1fr 340px; gap: 48px; align-items: flex-start; }
+.detail__body { display: grid; grid-template-columns: 1fr 340px; gap: 48px; align-items: flex-start; }
 
 /* Left column — numbered steps. Number sits inside the card as a mono
    eyebrow so the card left-edge aligns with the page header. */
@@ -632,11 +632,11 @@ async function submitReject() {
 @media print {
   /* Reset the CRM shell padding — the print sheet is the whole thing. */
   :deep(.shell), :deep(.main), :deep(.topbar), :deep(.mobile-top), :deep(.sidebar), :deep(.bottom-tabs) { display: none !important; }
-  .back, .rail, .download-btn, .page__title-row .pill { display: none !important; }
-  .page { padding: 24px; max-width: none; gap: 24px; }
-  .page__body { display: block; }
-  .page__title { font-size: 32px; }
-  .page__sub { font-size: 12px; }
+  .back, .rail, .download-btn, .detail__title-row .pill { display: none !important; }
+  .detail { padding: 24px; max-width: none; gap: 24px; }
+  .detail__body { display: block; }
+  .detail__title { font-size: 32px; }
+  .detail__sub { font-size: 12px; }
   .steps { gap: 16px; }
   .step { page-break-inside: avoid; }
   .step__body { border: 1px solid #E5E5E5; box-shadow: none; padding: 16px 20px; }
@@ -657,7 +657,7 @@ async function submitReject() {
 
 /* Responsive */
 @media (max-width: 1023px) {
-  .page__body { grid-template-columns: 1fr; gap: 32px; }
+  .detail__body { grid-template-columns: 1fr; gap: 32px; }
   .rail { position: static; }
 }
 @media (max-width: 767px) {

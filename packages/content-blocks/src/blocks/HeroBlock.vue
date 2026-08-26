@@ -112,11 +112,14 @@ function initialsFor(name: string, initials?: string): string {
 
 .hero__split {
   display: flex;
-  min-height: 640px;
+  align-items: stretch;
+  gap: 48px;
+  min-height: 480px;
   /* Same padding formula as the site nav / footer / blocks so hero
      content aligns with everything else. Outer .hero still spans 100vw
-     for the full-bleed background. */
-  padding-inline: max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+     for the full-bleed background. Vertical padding shrinks the visual
+     height in step with the media card. */
+  padding: 72px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
   box-sizing: border-box;
 }
 
@@ -129,11 +132,11 @@ function initialsFor(name: string, initials?: string): string {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 32px;
-  /* No left padding — text sits flush with the site content edge (aligned
-     with nav "Nae Nae Bowling Club" wordmark). Right padding gives the
-     media column a bit of breathing room. */
-  padding: 96px 96px 96px 0;
+  gap: 24px;
+  /* Text sits flush with the site content edge (aligned with nav wordmark).
+     The grid gap above handles horizontal breathing room from the media
+     card, so no per-column padding is needed here. */
+  padding: 0;
 }
 
 .hero__eyebrow {
@@ -263,6 +266,8 @@ function initialsFor(name: string, initials?: string): string {
   justify-content: space-between;
   align-items: stretch;
   padding: 32px;
+  min-height: 480px;
+  border-radius: 20px;
   overflow: hidden;
   /* Gradient is inline via mediaStyle when no imageUrl — falls back to the
      old sky gradient when no cardTone is supplied. */
@@ -372,33 +377,31 @@ function initialsFor(name: string, initials?: string): string {
   text-transform: uppercase;
 }
 
-/* Large tablet: keep split, reduce padding. */
+/* Large tablet: keep split, tighten gap + shrink heading. */
 @media (max-width: 1279px) {
-  .hero__col--text { padding: 80px 56px; gap: 28px; }
+  .hero__split { gap: 32px; }
   .hero__heading { font-size: 64px; }
 }
 
 /* Below 1024px: stack. Text is unreadable in a half-column with a big heading. */
 @media (max-width: 1023px) {
-  .hero__split { flex-direction: column; min-height: 0; }
+  .hero__split { flex-direction: column; min-height: 0; gap: 32px; padding: 48px 40px; }
   .hero__col { flex: 1 1 auto; }
   .hero__col--media {
     order: -1;
     min-height: 320px;
-    padding: 32px;
+    padding: 24px;
+    border-radius: 20px;
   }
-  .hero__col--text {
-    padding: 64px 40px;
-    gap: 28px;
-  }
-  .hero__heading { font-size: 64px; max-width: none; }
+  .hero__heading { font-size: 56px; max-width: none; }
   .hero__body { font-size: 18px; max-width: 640px; }
 }
 
 /* Mobile: tighter padding + smaller display heading. */
 @media (max-width: 639px) {
-  .hero__col--media { min-height: 240px; padding: 20px; }
-  .hero__col--text { padding: 40px 20px 48px; gap: 20px; }
+  .hero__split { padding: 32px 20px; gap: 20px; }
+  .hero__col--media { min-height: 240px; padding: 20px; border-radius: 20px; }
+  .hero__col--text { gap: 20px; }
   .hero__heading { font-size: 40px; }
   .hero__body { font-size: 16px; }
   .hero__ctas { gap: 12px; }

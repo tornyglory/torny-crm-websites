@@ -649,13 +649,15 @@ function joinFormErrorMessage(err: unknown): string {
 /* Chip rows (position + days) */
 .jf__chips { display: flex; flex-direction: row; gap: 8px; flex-wrap: wrap; }
 .jf__chip { position: relative; padding: 8px 14px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-graphite); cursor: pointer; transition: background 120ms, color 120ms, border-color 120ms; }
-.jf__chip:hover { border-color: var(--color-ink); color: var(--color-ink); }
+.jf__chip:not(.jf__chip--on):hover { border-color: var(--color-ink); color: var(--color-ink); }
 .jf__chip--on { background: var(--color-ink); color: #fff; border-color: var(--color-ink); font-weight: 600; }
+.jf__chip--on:hover { background: var(--color-graphite); }
 
 .jf__days { display: flex; flex-direction: row; gap: 8px; flex-wrap: wrap; }
 .jf__day { padding: 10px 16px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.08em; color: var(--color-fog); text-transform: uppercase; cursor: pointer; transition: background 120ms, color 120ms, border-color 120ms; }
-.jf__day:hover { border-color: var(--color-ink); color: var(--color-ink); }
+.jf__day:not(.jf__day--on):hover { border-color: var(--color-ink); color: var(--color-ink); }
 .jf__day--on { background: var(--color-ink); color: #fff; border-color: var(--color-ink); }
+.jf__day--on:hover { background: var(--color-graphite); }
 
 /* Consent block */
 .jf__consent { display: flex; flex-direction: column; gap: 14px; padding: 20px; background: var(--color-surface); border-radius: 14px; }

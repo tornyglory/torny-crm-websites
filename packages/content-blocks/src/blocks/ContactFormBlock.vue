@@ -449,8 +449,9 @@ function enquiryErrorMessage(err: unknown): string {
   cursor: pointer;
   transition: background 120ms, color 120ms, border-color 120ms;
 }
-.cf__chip:hover { border-color: var(--color-ink); color: var(--color-ink); }
+.cf__chip:not(.cf__chip--on):hover { border-color: var(--color-ink); color: var(--color-ink); }
 .cf__chip--on { background: var(--color-ink); color: #fff; border-color: var(--color-ink); font-weight: 600; }
+.cf__chip--on:hover { background: var(--color-graphite); }
 
 /* Consent */
 .cf__consent { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px; background: var(--color-surface); border-radius: 12px; cursor: pointer; }

@@ -89,6 +89,29 @@ export type { DirectoryClub, ClubSearchParams, ClubSearchResult } from './resour
 export * as auth from './resources/auth'
 export { AuthError } from './resources/auth'
 export type { AuthUser, LoginResponse, RegisterInput, Role, UserClub } from './resources/auth'
+export * as applications from './resources/applications'
+export type {
+  ApplicationStatus,
+  RejectReason,
+  Resolution,
+  ResolvedResult,
+  ApplicationRow,
+  ApplicationDetail,
+  ApplicationNote,
+  ApplicationAddress,
+  ApplicationBowls,
+  ApplicationEmergencyContact,
+  ApplicationConsent,
+  ApplicationsListResponse,
+  ListApplicationsParams,
+  ApproveInput,
+  ApproveResult,
+  RejectInput,
+  RejectResult,
+  ApplicationErrorCode,
+  CreateApplicationInput,
+  CreateApplicationResult,
+} from './resources/applications'
 export * as claims from './resources/claims'
 export type {
   ClaimStatus,

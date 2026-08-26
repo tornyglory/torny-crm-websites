@@ -10,7 +10,8 @@
  * Designed in Paper — mirrors the "Join · Full page (Desktop)" artboard.
  */
 import { computed, inject, isRef, ref, type Ref } from 'vue'
-import { CRM_BASE, publicFetch } from '@torny/api-client'
+import { applications, ApiError } from '@torny/api-client'
+import type { CreateApplicationInput } from '@torny/api-client'
 import {
   BLOCK_CONTEXT_KEY,
   type BlockContext,
@@ -174,8 +175,8 @@ async function onSubmit(evt: Event) {
   }
   submitting.value = true
   try {
-    const payload = {
-      tier_id: typeof selectedTier.value?.id === 'number' ? selectedTier.value.id : undefined,
+    const payload: CreateApplicationInput = {
+      tier_id: typeof selectedTier.value?.id === 'number' ? selectedTier.value.id : null,
       full_name: form.value.fullName.trim(),
       preferred_name: form.value.preferredName.trim() || null,
       dob: form.value.dob,
@@ -206,18 +207,29 @@ async function onSubmit(evt: Event) {
         photo: form.value.consentPhoto,
       },
     }
-    await publicFetch(`${CRM_BASE}/public/clubs/${encodeURIComponent(clubSlug.value)}/applications`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
+    await applications.create(clubSlug.value, payload)
     submitted.value = true
     if (props.successHref) window.location.href = props.successHref
   } catch (e) {
-    const status = (e as { status?: number }).status
-    if (status === 404) submitError.value = 'Applications aren\'t open yet — the club is still setting things up. Email membership@ for now.'
-    else submitError.value = 'We couldn\'t submit your application. Please try again in a moment.'
+    submitError.value = joinFormErrorMessage(e)
   } finally {
     submitting.value = false
+  }
+}
+
+function joinFormErrorMessage(err: unknown): string {
+  if (!(err instanceof ApiError)) return 'We couldn\'t submit your application. Please try again in a moment.'
+  const body = (err.body ?? {}) as { code?: string }
+  switch (body.code) {
+    case 'applications_closed': return 'The club isn\'t accepting new applications right now. Please check back later or email the membership secretary.'
+    case 'rate_limited': return 'Too many attempts from this address. Please wait an hour and try again.'
+    case 'consent_required': return 'Please tick the code-of-conduct + privacy agreement before submitting.'
+    case 'bad_email': return 'That email address doesn\'t look right. Double-check and try again.'
+    case 'bad_dob': return 'Please enter a valid date of birth.'
+    case 'missing_required': return 'One or more required fields are empty. Fill them in and try again.'
+    case 'unknown_tier': return 'The tier you picked isn\'t available — choose a different one.'
+    case 'unknown_club': return 'We couldn\'t reach this club\'s inbox. Please refresh and try again.'
+    default: return err.message || 'We couldn\'t submit your application. Please try again in a moment.'
   }
 }
 </script>

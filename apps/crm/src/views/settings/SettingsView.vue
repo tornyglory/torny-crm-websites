@@ -188,6 +188,8 @@ const tierDrafts = reactive<Record<number, TierDraft>>({})
 const settingsDraft = reactive<{
   cadence?: 'annual' | 'monthly' | 'season' | null
   first_year_discount?: boolean
+  applications_open?: boolean
+  application_notification_email?: string | null
 }>({})
 const membershipSaving = ref(false)
 
@@ -228,6 +230,20 @@ const draftedCadence = computed<'annual' | 'monthly' | 'season'>(
 const draftedFirstYearDiscount = computed<boolean>(
   () => settingsDraft.first_year_discount ?? tiersStore.settings.first_year_discount,
 )
+const draftedApplicationsOpen = computed<boolean>(
+  () => settingsDraft.applications_open ?? tiersStore.settings.applications_open ?? true,
+)
+const draftedNotificationEmail = computed<string>({
+  get: () => settingsDraft.application_notification_email
+    ?? tiersStore.settings.application_notification_email
+    ?? '',
+  set: (value) => {
+    const stored = tiersStore.settings.application_notification_email ?? ''
+    const next = value.trim()
+    if (next === stored) delete settingsDraft.application_notification_email
+    else settingsDraft.application_notification_email = next || null
+  },
+})
 
 function stageCadence(next: 'annual' | 'monthly' | 'season') {
   if (tiersStore.settings.cadence === next) {
@@ -244,11 +260,22 @@ function stageFirstYearDiscount() {
   }
   settingsDraft.first_year_discount = next
 }
+function stageApplicationsOpen() {
+  const stored = tiersStore.settings.applications_open ?? true
+  const next = !draftedApplicationsOpen.value
+  if (next === stored) {
+    delete settingsDraft.applications_open
+    return
+  }
+  settingsDraft.applications_open = next
+}
 
 function clearMembershipDrafts() {
   for (const key of Object.keys(tierDrafts)) delete tierDrafts[Number(key)]
   delete settingsDraft.cadence
   delete settingsDraft.first_year_discount
+  delete settingsDraft.applications_open
+  delete settingsDraft.application_notification_email
 }
 
 async function saveMembershipChanges() {
@@ -259,9 +286,16 @@ async function saveMembershipChanges() {
   try {
     const tierIds = Object.keys(tierDrafts).map(Number)
     const tierWrites = tierIds.map((id) => tiersStore.update(cid, id, tierDrafts[id]!))
-    const settingsPatch: { cadence?: 'annual' | 'monthly' | 'season' | null; first_year_discount?: boolean } = {}
+    const settingsPatch: {
+      cadence?: 'annual' | 'monthly' | 'season' | null
+      first_year_discount?: boolean
+      applications_open?: boolean
+      application_notification_email?: string | null
+    } = {}
     if ('cadence' in settingsDraft) settingsPatch.cadence = settingsDraft.cadence
     if ('first_year_discount' in settingsDraft) settingsPatch.first_year_discount = settingsDraft.first_year_discount!
+    if ('applications_open' in settingsDraft) settingsPatch.applications_open = settingsDraft.applications_open!
+    if ('application_notification_email' in settingsDraft) settingsPatch.application_notification_email = settingsDraft.application_notification_email!
     const settingsWrite = Object.keys(settingsPatch).length > 0
       ? [tiersStore.updateSettings(cid, settingsPatch)]
       : []
@@ -668,6 +702,27 @@ function sendInvite() {
             </div>
             <p class="card__sub">Tiers your members pay to join. Prices show on the public /membership page and drive the application flow.</p>
 
+            <div class="applications-controls">
+              <div class="applications-controls__row">
+                <div>
+                  <div class="applications-controls__title">Accept new applications</div>
+                  <div class="applications-controls__hint">Off = the public join form returns "applications closed". Existing tiers still show.</div>
+                </div>
+                <button type="button" class="switch" :class="{ 'is-on': draftedApplicationsOpen }" @click="stageApplicationsOpen"><span class="switch__knob" /></button>
+              </div>
+              <div class="applications-controls__row applications-controls__row--input">
+                <label class="applications-controls__label">
+                  <span>Notify email</span>
+                  <input
+                    v-model="draftedNotificationEmail"
+                    type="email"
+                    placeholder="inbox@yourclub.co.nz"
+                  />
+                </label>
+                <div class="applications-controls__hint applications-controls__hint--right">Address that gets the "new application" alert. Leave empty to send to the owner.</div>
+              </div>
+            </div>
+
             <div class="member-controls">
               <div>
                 <div class="field__label">Billing cadence</div>
@@ -1003,6 +1058,17 @@ function sendInvite() {
 .modal-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 
 /* ── Membership types ────────────────────────────────────────── */
+.applications-controls { display: flex; flex-direction: column; gap: 12px; padding: 16px; margin: 16px 0; background: var(--color-surface); border-radius: 12px; }
+.applications-controls__row { display: flex; align-items: center; gap: 16px; }
+.applications-controls__row > div:first-child { flex: 1; }
+.applications-controls__title { font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--color-ink); }
+.applications-controls__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; line-height: 145%; }
+.applications-controls__hint--right { flex: 1; max-width: 320px; margin-top: 0; }
+.applications-controls__row--input { padding-top: 12px; border-top: 1px solid var(--color-hairline); }
+.applications-controls__label { display: flex; flex-direction: column; gap: 6px; width: 320px; flex-shrink: 0; }
+.applications-controls__label span { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.applications-controls__label input { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; }
+.applications-controls__label input:focus { outline: none; border-color: var(--color-ink); }
 .member-controls { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin: 16px 0 20px; }
 .field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); display: block; }
 .member-controls .field__label { margin-bottom: 8px; }

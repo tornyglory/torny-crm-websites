@@ -217,10 +217,15 @@ export interface MembershipTierListItem {
   is_default: boolean
 }
 
-/** Club-level membership settings — cadence default + first-year discount toggle. */
+/** Club-level membership settings — cadence default + first-year discount toggle
+ *  + applications intake controls (brief 38). */
 export interface MembershipSettings {
   cadence: MembershipCadence | null
   first_year_discount: boolean
+  /** When false the public join-form POST returns 503 `applications_closed`. */
+  applications_open?: boolean
+  /** Address that gets the "new application" notification email. Null = fall back to owner. */
+  application_notification_email?: string | null
 }
 
 /** Envelope for GET /membership-tiers — brief 36 extended shape. */

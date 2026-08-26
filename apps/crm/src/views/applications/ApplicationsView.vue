@@ -1,136 +1,280 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+/**
+ * Membership applications — the CRM inbox for triaging join-form
+ * submissions. Wired to brief 38's endpoints via the api-client
+ * applications resource. List + detail + approve + reject + notes.
+ */
+import { computed, onMounted, ref, watch } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import { useToast } from '@/composables/useToast'
+import { useClubStore } from '@/stores/club'
+import {
+  applications as applicationsApi,
+  ApiError,
+  type ApplicationDetail,
+  type ApplicationRow,
+  type ApplicationStatus,
+  type RejectReason,
+  type Resolution,
+} from '@torny/api-client'
 
 const toast = useToast()
+const clubStore = useClubStore()
 
-type Status = 'pending' | 'approved' | 'declined'
-type MembershipType = 'Playing member' | 'Social' | 'Junior' | 'Life member'
-
-interface Application {
-  id: string
-  firstName: string
-  lastName: string
-  email: string
-  phone: string
-  membershipType: MembershipType
-  submittedAt: string
-  waitingDays: number
-  status: Status
-  notes?: string
-  referredBy?: string
-  interestedIn?: 'coaching' | 'volunteering' | 'committee'
-  dob?: string
-  isJunior?: boolean
-  decidedAt?: string
-  decidedBy?: string
-}
-
-const applications = ref<Application[]>([
-  { id: 'a1', firstName: 'Aroha', lastName: 'Ngata', email: 'aroha@example.com', phone: '021 555 0101', membershipType: 'Playing member', submittedAt: '2 hours ago', waitingDays: 0, status: 'pending', notes: 'Really keen to play in the Tuesday night ladder.', referredBy: 'Marcus Tuilagi', dob: '14 Mar 1992' },
-  { id: 'a2', firstName: 'Sam', lastName: 'Harding', email: 'sam.h@example.com', phone: '022 555 0202', membershipType: 'Playing member', submittedAt: 'Yesterday', waitingDays: 1, status: 'pending', dob: '30 Jul 1985' },
-  { id: 'a3', firstName: 'Priya', lastName: 'Kaur', email: 'priya.kaur@example.com', phone: '027 555 0303', membershipType: 'Social', submittedAt: '2 days ago', waitingDays: 2, status: 'pending', notes: 'Would love to help with junior coaching if there\'s room.', interestedIn: 'coaching', dob: '8 Dec 1988' },
-  { id: 'a4', firstName: 'Ollie', lastName: 'Fraser', email: 'ollie.f@example.com', phone: '021 555 0999', membershipType: 'Junior', submittedAt: '3 days ago', waitingDays: 3, status: 'pending', notes: 'Parent contact: Kate Fraser (021 555 0900). Under-14 pathway.', dob: '3 Aug 2012', isJunior: true },
-  { id: 'a5', firstName: 'Rachel', lastName: 'Beale', email: 'rachel.b@example.com', phone: '022 555 0707', membershipType: 'Social', submittedAt: '5 days ago', waitingDays: 5, status: 'pending', notes: 'New to Wellington from Auckland — has played bowls socially for 3 years.', dob: '22 Sep 1978' },
-  { id: 'a6', firstName: 'Jack', lastName: 'O\'Connor', email: 'jack@example.com', phone: '021 555 0404', membershipType: 'Playing member', submittedAt: 'Last week', waitingDays: 7, status: 'approved', decidedAt: '3 days ago', decidedBy: 'Grace Whittaker', referredBy: 'Denise Peters', dob: '11 Jan 1990' },
-  { id: 'a7', firstName: 'Meredith', lastName: 'Cole', email: 'meredith@example.com', phone: '022 555 0505', membershipType: 'Social', submittedAt: '2 weeks ago', waitingDays: 14, status: 'declined', decidedAt: '1 week ago', decidedBy: 'Grace Whittaker', notes: 'Declined — currently a member at another Wellington club. Advised they can re-apply if they leave.', dob: '5 Nov 1972' },
-  { id: 'a8', firstName: 'Toby', lastName: 'Vercoe', email: 'toby.v@example.com', phone: '027 555 0808', membershipType: 'Playing member', submittedAt: '3 weeks ago', waitingDays: 21, status: 'approved', decidedAt: '2 weeks ago', decidedBy: 'Grace Whittaker', dob: '17 May 1994' },
-])
-
+// ── List state ────────────────────────────────────────────────
+const rows = ref<ApplicationRow[]>([])
+const counts = ref({ pending: 0, approved: 0, rejected: 0 })
+const total = ref(0)
+const loading = ref(true)
 const search = ref('')
-const statusFilter = ref<'all' | Status>('pending')
+const debouncedSearch = ref('')
+const statusFilter = ref<'all' | ApplicationStatus>('pending')
+let searchDebounce: ReturnType<typeof setTimeout> | null = null
+let listAbort: AbortController | null = null
 
-const counts = computed(() => ({
-  all: applications.value.length,
-  pending: applications.value.filter((a) => a.status === 'pending').length,
-  approved: applications.value.filter((a) => a.status === 'approved').length,
-  declined: applications.value.filter((a) => a.status === 'declined').length,
-}))
-
-const filtered = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  return applications.value.filter((a) => {
-    if (statusFilter.value !== 'all' && a.status !== statusFilter.value) return false
-    if (!q) return true
-    return (
-      a.firstName.toLowerCase().includes(q) ||
-      a.lastName.toLowerCase().includes(q) ||
-      a.email.toLowerCase().includes(q) ||
-      a.phone.toLowerCase().includes(q) ||
-      a.membershipType.toLowerCase().includes(q) ||
-      (a.notes ?? '').toLowerCase().includes(q) ||
-      (a.referredBy ?? '').toLowerCase().includes(q)
-    )
-  })
+watch(search, (q) => {
+  if (searchDebounce) clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(() => { debouncedSearch.value = q.trim() }, 250)
 })
 
-function initials(a: Application) {
-  return `${a.firstName[0]}${a.lastName[0]}`.toUpperCase()
+async function loadList() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') { rows.value = []; loading.value = false; return }
+  if (listAbort) listAbort.abort()
+  listAbort = new AbortController()
+  loading.value = true
+  try {
+    const res = await applicationsApi.list(cid, {
+      status: statusFilter.value,
+      search: debouncedSearch.value || undefined,
+      limit: 50,
+    }, { signal: listAbort.signal })
+    rows.value = res.applications
+    counts.value = res.counts
+    total.value = res.pagination.total
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return
+    toast.error(err instanceof ApiError ? err.message : 'Could not load applications.')
+    rows.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
-function fullName(a: Application) {
-  return `${a.firstName} ${a.lastName}`
-}
+onMounted(() => { void loadList() })
+watch(() => clubStore.current?.id, () => { void loadList() })
+watch([statusFilter, debouncedSearch], () => { void loadList() })
 
-function waitingLabel(a: Application) {
-  if (a.status !== 'pending') return null
-  if (a.waitingDays === 0) return 'today'
-  if (a.waitingDays === 1) return '1 day'
-  if (a.waitingDays >= 7) return `${a.waitingDays} days · waiting`
-  return `${a.waitingDays} days`
-}
-
-function isUrgent(a: Application) {
-  return a.status === 'pending' && a.waitingDays >= 5
-}
-
-const statusTone: Record<Status, string> = {
+// ── Derived display helpers ───────────────────────────────────
+const statusTone: Record<ApplicationStatus, 'ok' | 'warn' | 'danger'> = {
   pending: 'warn',
   approved: 'ok',
-  declined: 'danger',
+  rejected: 'danger',
 }
-
-const statusLabel: Record<Status, string> = {
+const statusLabel: Record<ApplicationStatus, string> = {
   pending: 'Pending',
   approved: 'Approved',
-  declined: 'Declined',
+  rejected: 'Rejected',
 }
-
-// ── Detail modal ─────────────────────────────────────────────
-const detailOpen = ref(false)
-const activeApp = ref<Application | null>(null)
-
-function openDetail(a: Application) {
-  activeApp.value = a
-  detailOpen.value = true
+function initials(r: { full_name: string }) {
+  const parts = r.full_name.trim().split(/\s+/)
+  const a = parts[0]?.[0] ?? ''
+  const b = parts.length > 1 ? parts[parts.length - 1]![0] : ''
+  return `${a}${b}`.toUpperCase()
 }
-function closeDetail() {
-  detailOpen.value = false
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return iso
+  const diff = Date.now() - then
+  const min = Math.floor(diff / 60_000)
+  if (min < 1) return 'just now'
+  if (min < 60) return `${min} min ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`
+  const day = Math.floor(hr / 24)
+  if (day < 7) return `${day} day${day === 1 ? '' : 's'} ago`
+  if (day < 28) { const wk = Math.floor(day / 7); return `${wk} week${wk === 1 ? '' : 's'} ago` }
+  return new Date(iso).toLocaleDateString()
 }
-
-function updateStatus(a: Application, next: Status) {
-  a.status = next
-  a.decidedAt = 'just now'
-  a.decidedBy = 'You'
-  const verb = next === 'approved' ? 'Approved' : next === 'declined' ? 'Declined' : 'Reopened'
-  toast.success(`${verb} ${fullName(a)}`)
-  if (activeApp.value?.id === a.id) closeDetail()
+function waitingLabel(r: ApplicationRow): string | null {
+  if (r.status !== 'pending') return null
+  const diff = Date.now() - new Date(r.received_at).getTime()
+  const days = Math.floor(diff / 86_400_000)
+  if (days === 0) return 'today'
+  if (days === 1) return '1 day waiting'
+  return `${days} days waiting`
 }
-
-function exportCsv() {
-  toast.info(`Exporting ${applications.value.length} applications — check your email in a minute.`)
+function isUrgent(r: ApplicationRow): boolean {
+  if (r.status !== 'pending') return false
+  const days = Math.floor((Date.now() - new Date(r.received_at).getTime()) / 86_400_000)
+  return days >= 5
 }
 
 const emptyMessage = computed(() => {
-  if (search.value.trim()) return { title: 'No matches', hint: 'Try a different name or clear the search.' }
+  if (debouncedSearch.value) return { title: 'No matches', hint: 'Try a different search.' }
   switch (statusFilter.value) {
     case 'pending':  return { title: 'Inbox zero', hint: 'No applications waiting for review.' }
     case 'approved': return { title: 'No approvals yet', hint: 'Approved applications land here.' }
-    case 'declined': return { title: 'No declines', hint: 'Declined applications live here for audit.' }
+    case 'rejected': return { title: 'No rejections', hint: 'Rejected applications live here for audit.' }
     default:         return { title: 'Nothing yet', hint: 'When people apply, they\'ll appear here.' }
   }
 })
+
+// ── Detail modal ──────────────────────────────────────────────
+const detailOpen = ref(false)
+const detailLoading = ref(false)
+const detail = ref<ApplicationDetail | null>(null)
+const noteBody = ref('')
+const addingNote = ref(false)
+
+async function openDetail(row: ApplicationRow) {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  detailOpen.value = true
+  detailLoading.value = true
+  detail.value = null
+  noteBody.value = ''
+  try {
+    detail.value = await applicationsApi.get(cid, row.id)
+  } catch (err) {
+    toast.error(err instanceof ApiError ? err.message : 'Could not load application.')
+    detailOpen.value = false
+  } finally {
+    detailLoading.value = false
+  }
+}
+function closeDetail() {
+  detailOpen.value = false
+  detail.value = null
+}
+
+async function submitNote() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number' || !detail.value) return
+  const body = noteBody.value.trim()
+  if (!body) return
+  addingNote.value = true
+  try {
+    const note = await applicationsApi.addNote(cid, detail.value.id, body)
+    detail.value.notes = [note, ...detail.value.notes]
+    noteBody.value = ''
+    toast.success('Note added.')
+  } catch (err) {
+    toast.error(err instanceof ApiError ? err.message : 'Could not add note.')
+  } finally {
+    addingNote.value = false
+  }
+}
+
+// ── Approve modal ─────────────────────────────────────────────
+const approveOpen = ref(false)
+const approveSubmitting = ref(false)
+const approveForm = ref<{ resolution: Resolution; assigned_number: string; send_welcome_email: boolean }>({
+  resolution: 'auto',
+  assigned_number: '',
+  send_welcome_email: true,
+})
+
+function openApprove() {
+  if (!detail.value) return
+  approveForm.value = { resolution: 'auto', assigned_number: '', send_welcome_email: true }
+  approveOpen.value = true
+}
+async function submitApprove() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number' || !detail.value) return
+  approveSubmitting.value = true
+  try {
+    const num = approveForm.value.assigned_number.trim()
+    const parsedNum = num ? Number(num) : null
+    if (num && (parsedNum == null || Number.isNaN(parsedNum))) {
+      toast.error('Membership number needs to be a number, or leave it blank.')
+      return
+    }
+    await applicationsApi.approve(cid, detail.value.id, {
+      resolution: approveForm.value.resolution,
+      assigned_number: parsedNum ?? null,
+      send_welcome_email: approveForm.value.send_welcome_email,
+    })
+    toast.success(`Approved ${detail.value.full_name}.`)
+    approveOpen.value = false
+    closeDetail()
+    await loadList()
+  } catch (err) {
+    toast.error(approveErrorMessage(err))
+  } finally {
+    approveSubmitting.value = false
+  }
+}
+function approveErrorMessage(err: unknown): string {
+  if (!(err instanceof ApiError)) return 'Could not approve — try again.'
+  const body = (err.body ?? {}) as { code?: string }
+  switch (body.code) {
+    case 'already_approved': return 'This application has already been approved.'
+    case 'already_rejected': return 'This application was rejected earlier — reopen it first.'
+    case 'email_exists': return 'That email is already a member — try linking rather than creating a stub.'
+    case 'bad_link': return 'Choose a user to link this application to.'
+    default: return err.message || 'Could not approve.'
+  }
+}
+
+// ── Reject modal ──────────────────────────────────────────────
+const rejectOpen = ref(false)
+const rejectSubmitting = ref(false)
+const rejectForm = ref<{ reason: RejectReason; message: string }>({ reason: 'unable_to_verify', message: '' })
+const REJECT_REASONS: Array<{ value: RejectReason; label: string }> = [
+  { value: 'unable_to_verify', label: "Couldn't verify details" },
+  { value: 'duplicate', label: 'Duplicate application' },
+  { value: 'spam', label: 'Spam' },
+  { value: 'other', label: 'Other' },
+]
+
+function openReject() {
+  if (!detail.value) return
+  rejectForm.value = { reason: 'unable_to_verify', message: '' }
+  rejectOpen.value = true
+}
+async function submitReject() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number' || !detail.value) return
+  rejectSubmitting.value = true
+  try {
+    await applicationsApi.reject(cid, detail.value.id, {
+      reason: rejectForm.value.reason,
+      message: rejectForm.value.message.trim() || undefined,
+    })
+    const emailNote = rejectForm.value.message.trim() ? ' — email sent' : ' — no email sent'
+    toast.success(`Rejected ${detail.value.full_name}${emailNote}.`)
+    rejectOpen.value = false
+    closeDetail()
+    await loadList()
+  } catch (err) {
+    const body = err instanceof ApiError ? ((err.body ?? {}) as { code?: string }) : {}
+    if (body.code === 'already_approved') toast.error('This application was already approved.')
+    else if (body.code === 'already_rejected') toast.error('This application has already been rejected.')
+    else toast.error(err instanceof ApiError ? err.message : 'Could not reject.')
+  } finally {
+    rejectSubmitting.value = false
+  }
+}
+
+// ── Formatting helpers for the detail modal ───────────────────
+const DAY_LABELS: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' }
+function formatDays(days: string[] | null | undefined): string {
+  if (!days || days.length === 0) return '—'
+  return days.map((d) => DAY_LABELS[d] ?? d).join(', ')
+}
+function formatAddress(a: ApplicationDetail['address']): string {
+  if (a._raw) return a._raw
+  const parts = [a.street, a.suburb, a.postcode, a.country].filter(Boolean)
+  return parts.length ? parts.join(', ') : '—'
+}
+function formatDob(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+}
 </script>
 
 <template>
@@ -139,27 +283,24 @@ const emptyMessage = computed(() => {
       <div>
         <div class="apps__eyebrow">New arrivals</div>
         <h1 class="apps__heading">Applications</h1>
-        <p class="apps__sub">{{ counts.pending }} pending · {{ counts.all }} all-time</p>
+        <p class="apps__sub">{{ counts.pending }} pending · {{ counts.pending + counts.approved + counts.rejected }} all-time</p>
       </div>
       <div class="apps__actions">
         <div class="search">
           <svg class="search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
+            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
           </svg>
-          <input v-model="search" placeholder="Search name, email, referrer…" class="search__input" />
+          <input v-model="search" placeholder="Search name, email, phone…" class="search__input" />
           <button v-if="search" class="search__clear" aria-label="Clear search" @click="search = ''">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
-        <button class="apps__btn" @click="exportCsv">Export CSV</button>
       </div>
     </header>
 
     <div class="search search--mobile">
       <svg class="search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="11" cy="11" r="8" />
-        <path d="m21 21-4.35-4.35" />
+        <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
       </svg>
       <input v-model="search" placeholder="Search applications…" class="search__input" />
     </div>
@@ -167,55 +308,57 @@ const emptyMessage = computed(() => {
     <div class="filters">
       <div class="chips">
         <button
-          v-for="tab in (['all', 'pending', 'approved', 'declined'] as const)"
+          v-for="tab in (['pending', 'approved', 'rejected', 'all'] as const)"
           :key="tab"
           class="chip"
           :class="{ 'is-active': statusFilter === tab }"
           @click="statusFilter = tab"
         >
           <span class="chip__label">{{ tab === 'all' ? 'All' : statusLabel[tab] }}</span>
-          <span class="chip__count">{{ counts[tab] }}</span>
+          <span class="chip__count">{{ tab === 'all' ? (counts.pending + counts.approved + counts.rejected) : counts[tab] }}</span>
         </button>
       </div>
-      <div v-if="search || statusFilter !== 'pending'" class="filters__result">
-        {{ filtered.length }} of {{ counts.all }}
+      <div v-if="debouncedSearch || statusFilter !== 'pending'" class="filters__result">
+        {{ rows.length }} shown
       </div>
     </div>
 
-    <ul v-if="filtered.length" class="list">
-      <li v-for="a in filtered" :key="a.id" class="row" :class="{ 'row--urgent': isUrgent(a) }" tabindex="0" @click="openDetail(a)" @keydown.enter="openDetail(a)">
+    <div v-if="loading && rows.length === 0" class="empty">
+      <div class="empty__title">Loading…</div>
+    </div>
+
+    <ul v-else-if="rows.length" class="list">
+      <li
+        v-for="a in rows"
+        :key="a.id"
+        class="row"
+        :class="{ 'row--urgent': isUrgent(a) }"
+        tabindex="0"
+        @click="openDetail(a)"
+        @keydown.enter="openDetail(a)"
+      >
         <div class="row__avatar">{{ initials(a) }}</div>
         <div class="row__body">
           <div class="row__name-row">
-            <div class="row__name">{{ fullName(a) }}</div>
+            <div class="row__name">{{ a.full_name }}</div>
             <div class="row__badges">
               <span v-if="isUrgent(a)" class="badge badge--warn">Waiting</span>
-              <span v-if="a.isJunior" class="badge badge--sky">Junior</span>
-              <span v-if="a.referredBy" class="badge badge--mute">Referred</span>
-              <span v-if="a.interestedIn === 'coaching'" class="badge badge--tangerine">Coach</span>
-              <span v-if="a.interestedIn === 'volunteering'" class="badge badge--mute">Volunteer</span>
+              <span v-if="a.tier_name" class="badge badge--mute">{{ a.tier_name }}</span>
+              <span v-if="a.referrer" class="badge badge--mute">Referred</span>
             </div>
           </div>
           <div class="row__meta">
-            <span>{{ a.membershipType }}</span>
-            <span class="row__sep">·</span>
             <span>{{ a.email }}</span>
+            <span class="row__sep">·</span>
+            <span>{{ a.mobile }}</span>
           </div>
-          <div v-if="a.notes" class="row__notes">{{ a.notes }}</div>
         </div>
         <div class="row__time">
-          <div class="row__time-main">{{ a.submittedAt }}</div>
+          <div class="row__time-main">{{ timeAgo(a.received_at) }}</div>
           <div v-if="waitingLabel(a)" class="row__time-sub">{{ waitingLabel(a) }}</div>
         </div>
-        <div class="row__actions" @click.stop>
-          <template v-if="a.status === 'pending'">
-            <button class="btn btn--decline" @click="updateStatus(a, 'declined')">Decline</button>
-            <button class="btn btn--approve" @click="updateStatus(a, 'approved')">Approve</button>
-          </template>
-          <template v-else>
-            <span class="pill" :class="`pill--${statusTone[a.status]}`">{{ statusLabel[a.status] }}</span>
-            <button class="btn btn--ghost" @click="updateStatus(a, 'pending')">Reopen</button>
-          </template>
+        <div class="row__actions">
+          <span class="pill" :class="`pill--${statusTone[a.status]}`">{{ statusLabel[a.status] }}</span>
         </div>
         <div class="row__chev" aria-hidden="true">›</div>
       </li>
@@ -229,23 +372,28 @@ const emptyMessage = computed(() => {
     <CrmModal
       :open="detailOpen"
       eyebrow="Application"
-      :title="activeApp ? fullName(activeApp) : ''"
+      :title="detail?.full_name ?? 'Loading…'"
       width="lg"
       @close="closeDetail"
     >
-      <template v-if="activeApp">
+      <div v-if="detailLoading" class="empty">
+        <div class="empty__title">Loading…</div>
+      </div>
+
+      <template v-else-if="detail">
         <div class="detail">
-          <div class="detail__hero" :class="`detail__hero--${statusTone[activeApp.status]}`">
-            <div class="detail__avatar">{{ initials(activeApp) }}</div>
+          <div class="detail__hero" :class="`detail__hero--${statusTone[detail.status]}`">
+            <div class="detail__avatar">{{ initials(detail) }}</div>
             <div class="detail__hero-body">
-              <div class="detail__hero-line">{{ activeApp.membershipType }}</div>
-              <div class="detail__hero-meta">Applied {{ activeApp.submittedAt }} · {{ activeApp.status === 'pending' ? `waiting ${activeApp.waitingDays}d` : `decided ${activeApp.decidedAt}` }}</div>
+              <div class="detail__hero-line">{{ detail.tier_name ?? 'No tier chosen' }}</div>
+              <div class="detail__hero-meta">
+                Applied {{ timeAgo(detail.received_at) }}
+                <template v-if="detail.status !== 'pending' && detail.reviewed_at">· decided {{ timeAgo(detail.reviewed_at) }}</template>
+              </div>
             </div>
             <div class="detail__hero-badges">
-              <span class="pill" :class="`pill--${statusTone[activeApp.status]}`">{{ statusLabel[activeApp.status] }}</span>
-              <span v-if="activeApp.isJunior" class="badge badge--sky">Junior</span>
-              <span v-if="activeApp.referredBy" class="badge badge--mute">Referred</span>
-              <span v-if="activeApp.interestedIn === 'coaching'" class="badge badge--tangerine">Coach</span>
+              <span class="pill" :class="`pill--${statusTone[detail.status]}`">{{ statusLabel[detail.status] }}</span>
+              <span v-if="detail.preferred_name" class="badge badge--mute">Prefers "{{ detail.preferred_name }}"</span>
             </div>
           </div>
 
@@ -253,39 +401,160 @@ const emptyMessage = computed(() => {
             <section class="detail__section">
               <div class="detail__section-title">Contact</div>
               <dl class="dl">
-                <div class="dl__row"><dt>Email</dt><dd><a class="link" :href="`mailto:${activeApp.email}`">{{ activeApp.email }}</a></dd></div>
-                <div class="dl__row"><dt>Phone</dt><dd><a class="link" :href="`tel:${activeApp.phone.replace(/\s+/g, '')}`">{{ activeApp.phone }}</a></dd></div>
-                <div class="dl__row"><dt>Date of birth</dt><dd>{{ activeApp.dob ?? '—' }}</dd></div>
+                <div class="dl__row"><dt>Email</dt><dd><a class="link" :href="`mailto:${detail.email}`">{{ detail.email }}</a></dd></div>
+                <div class="dl__row"><dt>Mobile</dt><dd><a class="link" :href="`tel:${detail.mobile.replace(/\s+/g, '')}`">{{ detail.mobile }}</a></dd></div>
+                <div class="dl__row"><dt>DOB</dt><dd>{{ formatDob(detail.dob) }}</dd></div>
+                <div class="dl__row"><dt>Address</dt><dd>{{ formatAddress(detail.address) }}</dd></div>
               </dl>
             </section>
 
             <section class="detail__section">
-              <div class="detail__section-title">Application</div>
+              <div class="detail__section-title">Bowls</div>
               <dl class="dl">
-                <div class="dl__row"><dt>Membership</dt><dd>{{ activeApp.membershipType }}</dd></div>
-                <div class="dl__row"><dt>Submitted</dt><dd>{{ activeApp.submittedAt }}</dd></div>
-                <div class="dl__row"><dt>Referred by</dt><dd>{{ activeApp.referredBy ?? '—' }}</dd></div>
-                <div v-if="activeApp.status !== 'pending'" class="dl__row"><dt>Decided</dt><dd>{{ activeApp.decidedAt }} · {{ activeApp.decidedBy }}</dd></div>
+                <div class="dl__row"><dt>Experience</dt><dd>{{ detail.bowls?.experience ?? '—' }}</dd></div>
+                <div class="dl__row"><dt>Position</dt><dd>{{ detail.bowls?.position ?? '—' }}</dd></div>
+                <div class="dl__row"><dt>Days available</dt><dd>{{ formatDays(detail.bowls?.playing_days) }}</dd></div>
+                <div class="dl__row"><dt>Bowls NZ</dt><dd>{{ detail.bowls?.bowls_number ?? '—' }}</dd></div>
               </dl>
             </section>
           </div>
 
-          <section v-if="activeApp.notes" class="detail__notes">
-            <div class="detail__section-title">Notes from applicant</div>
-            <p>{{ activeApp.notes }}</p>
+          <div class="detail__cols">
+            <section class="detail__section">
+              <div class="detail__section-title">Emergency contact</div>
+              <dl class="dl">
+                <div class="dl__row"><dt>Name</dt><dd>{{ detail.emergency_contact?.name ?? '—' }}</dd></div>
+                <div class="dl__row"><dt>Phone</dt><dd>{{ detail.emergency_contact?.phone ?? '—' }}</dd></div>
+                <div class="dl__row"><dt>Relation</dt><dd>{{ detail.emergency_contact?.relationship ?? '—' }}</dd></div>
+              </dl>
+            </section>
+            <section class="detail__section">
+              <div class="detail__section-title">Extras</div>
+              <dl class="dl">
+                <div class="dl__row"><dt>Referrer</dt><dd>{{ detail.referrer ?? '—' }}</dd></div>
+                <div class="dl__row"><dt>Newsletter</dt><dd>{{ detail.consent?.newsletter ? 'Opted in' : 'No' }}</dd></div>
+                <div class="dl__row"><dt>Photos OK</dt><dd>{{ detail.consent?.photo ? 'Yes' : 'No' }}</dd></div>
+                <div class="dl__row"><dt>Terms</dt><dd>{{ detail.consent?.terms ? 'Accepted' : 'Not accepted' }}</dd></div>
+              </dl>
+            </section>
+          </div>
+
+          <section v-if="detail.note" class="detail__notes">
+            <div class="detail__section-title">From the applicant</div>
+            <p>{{ detail.note }}</p>
+          </section>
+
+          <!-- Internal notes -->
+          <section class="detail__notes-thread">
+            <div class="detail__section-title">Internal notes ({{ detail.notes.length }})</div>
+            <form class="note-form" @submit.prevent="submitNote">
+              <textarea
+                v-model="noteBody"
+                rows="2"
+                placeholder="Add an internal note — never emailed to the applicant."
+                :disabled="addingNote"
+              />
+              <button type="submit" class="btn btn--approve" :disabled="!noteBody.trim() || addingNote">
+                {{ addingNote ? 'Adding…' : 'Add note' }}
+              </button>
+            </form>
+            <ul class="notes">
+              <li v-for="n in detail.notes" :key="n.id" class="note">
+                <div class="note__head">
+                  <span class="note__author">{{ n.author_name ?? 'CRM' }}</span>
+                  <span class="note__time">{{ timeAgo(n.created_at) }}</span>
+                </div>
+                <div class="note__body">{{ n.body }}</div>
+              </li>
+            </ul>
           </section>
         </div>
       </template>
 
       <template #footer>
-        <template v-if="activeApp?.status === 'pending'">
-          <button type="button" class="btn btn--decline" @click="updateStatus(activeApp!, 'declined')">Decline</button>
-          <button type="button" class="btn btn--approve" @click="updateStatus(activeApp!, 'approved')">Approve</button>
+        <template v-if="detail?.status === 'pending'">
+          <button type="button" class="btn btn--decline" @click="openReject">Reject</button>
+          <button type="button" class="btn btn--approve" @click="openApprove">Approve</button>
         </template>
         <template v-else>
           <button type="button" class="btn btn--outline" @click="closeDetail">Close</button>
-          <button type="button" class="btn btn--ghost" @click="updateStatus(activeApp!, 'pending')">Reopen</button>
         </template>
+      </template>
+    </CrmModal>
+
+    <!-- Approve modal -->
+    <CrmModal
+      :open="approveOpen"
+      eyebrow="Approve application"
+      :title="detail ? `Approve ${detail.full_name}?` : 'Approve'"
+      width="sm"
+      @close="approveOpen = false"
+    >
+      <div v-if="detail" class="modal-form">
+        <p class="modal-hint">Creates a member record + membership row (if the applicant chose a tier). Same resolution path as the roster's add-member.</p>
+
+        <label class="field">
+          <span class="field__label">Resolution</span>
+          <select v-model="approveForm.resolution">
+            <option value="auto">Auto — link if email matches, otherwise invite</option>
+            <option value="invite">Invite by email</option>
+            <option value="stub">Create stub (no email match)</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Membership number (optional)</span>
+          <input v-model="approveForm.assigned_number" type="text" inputmode="numeric" placeholder="Leave blank to auto-assign" />
+        </label>
+
+        <label class="switch-row">
+          <div>
+            <div class="switch-row__label">Send welcome email</div>
+            <div class="switch-row__hint">Turn off for silent approval — you'll email them yourself.</div>
+          </div>
+          <button type="button" class="switch" :class="{ 'is-on': approveForm.send_welcome_email }" @click="approveForm.send_welcome_email = !approveForm.send_welcome_email">
+            <span class="switch__knob" />
+          </button>
+        </label>
+      </div>
+
+      <template #footer>
+        <button type="button" class="btn btn--outline" @click="approveOpen = false" :disabled="approveSubmitting">Cancel</button>
+        <button type="button" class="btn btn--approve" @click="submitApprove" :disabled="approveSubmitting">
+          {{ approveSubmitting ? 'Approving…' : 'Approve' }}
+        </button>
+      </template>
+    </CrmModal>
+
+    <!-- Reject modal -->
+    <CrmModal
+      :open="rejectOpen"
+      eyebrow="Reject application"
+      :title="detail ? `Reject ${detail.full_name}?` : 'Reject'"
+      width="sm"
+      @close="rejectOpen = false"
+    >
+      <div class="modal-form">
+        <p class="modal-hint">The reason is stored for audit. Only the message (if you write one) is emailed to the applicant.</p>
+
+        <label class="field">
+          <span class="field__label">Reason</span>
+          <select v-model="rejectForm.reason">
+            <option v-for="r in REJECT_REASONS" :key="r.value" :value="r.value">{{ r.label }}</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Message to applicant (optional)</span>
+          <textarea v-model="rejectForm.message" rows="4" placeholder="Leave empty to reject silently. Otherwise this is emailed as-is." />
+        </label>
+      </div>
+
+      <template #footer>
+        <button type="button" class="btn btn--outline" @click="rejectOpen = false" :disabled="rejectSubmitting">Cancel</button>
+        <button type="button" class="btn btn--decline" @click="submitReject" :disabled="rejectSubmitting">
+          {{ rejectSubmitting ? 'Rejecting…' : 'Reject' }}
+        </button>
       </template>
     </CrmModal>
   </div>
@@ -298,8 +567,6 @@ const emptyMessage = computed(() => {
 .apps__heading { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin: 4px 0 6px; color: var(--color-ink); }
 .apps__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-fog); margin: 0; }
 .apps__actions { display: flex; gap: 10px; align-items: center; }
-.apps__btn { padding: 9px 14px; background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; }
-.apps__btn:hover { background: var(--color-surface); }
 
 /* Search */
 .search { position: relative; display: flex; align-items: center; min-width: 300px; }
@@ -332,7 +599,6 @@ const emptyMessage = computed(() => {
 .row__badges { display: flex; gap: 4px; flex-wrap: wrap; }
 .row__meta { display: flex; gap: 8px; font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 4px; }
 .row__sep { opacity: 0.5; }
-.row__notes { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); margin-top: 8px; font-style: italic; }
 .row__time { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); white-space: nowrap; text-align: right; flex-shrink: 0; }
 .row__time-main { color: var(--color-ink); font-weight: 500; }
 .row__time-sub { font-size: 11px; color: var(--color-fog); margin-top: 2px; }
@@ -340,13 +606,13 @@ const emptyMessage = computed(() => {
 .row__chev { color: var(--color-mute); font-size: 20px; padding-left: 4px; flex-shrink: 0; }
 
 .btn { padding: 8px 14px; border: none; border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn--approve { background: var(--color-ink); color: #fff; }
-.btn--approve:hover { background: var(--color-graphite); }
-.btn--decline { background: transparent; color: var(--color-graphite); border: 1px solid var(--color-hairline); }
-.btn--decline:hover { background: var(--color-surface); }
-.btn--ghost { background: transparent; color: var(--color-accent); border: 1px solid var(--color-accent-soft); }
+.btn--approve:hover:not(:disabled) { background: var(--color-graphite); }
+.btn--decline { background: transparent; color: var(--color-danger); border: 1px solid var(--color-hairline); }
+.btn--decline:hover:not(:disabled) { background: color-mix(in oklab, var(--color-danger) 8%, #fff); border-color: var(--color-danger); }
 .btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
-.btn--outline:hover { background: var(--color-surface); }
+.btn--outline:hover:not(:disabled) { background: var(--color-surface); }
 
 /* Pills — status */
 .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; flex-shrink: 0; }
@@ -357,8 +623,6 @@ const emptyMessage = computed(() => {
 /* Badges */
 .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid transparent; }
 .badge--warn      { background: #FEF3C7; color: #92400E; }
-.badge--sky       { background: var(--color-sky-4); color: #0369A1; }
-.badge--tangerine { background: #FFEDD5; color: var(--color-feature-tangerine); }
 .badge--mute      { background: var(--color-surface); color: var(--color-graphite); border-color: var(--color-hairline); }
 
 /* Empty */
@@ -373,7 +637,6 @@ const emptyMessage = computed(() => {
 .detail__hero--ok::before { background: #16A34A; }
 .detail__hero--warn::before { background: var(--color-accent); }
 .detail__hero--danger::before { background: var(--color-danger); }
-
 .detail__avatar { width: 60px; height: 60px; border-radius: 999px; background: var(--color-ink); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 20px; font-weight: 700; flex-shrink: 0; }
 .detail__hero-body { flex: 1; min-width: 0; }
 .detail__hero-line { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--color-ink); }
@@ -384,7 +647,7 @@ const emptyMessage = computed(() => {
 .detail__section-title { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); margin: 0 0 12px; }
 
 .dl { display: flex; flex-direction: column; margin: 0; }
-.dl__row { display: grid; grid-template-columns: 96px 1fr; gap: 12px; padding: 10px 0; border-top: 1px solid var(--color-hairline); align-items: baseline; }
+.dl__row { display: grid; grid-template-columns: 108px 1fr; gap: 12px; padding: 10px 0; border-top: 1px solid var(--color-hairline); align-items: baseline; }
 .dl__row:first-child { border-top: 0; padding-top: 0; }
 .dl__row:last-child { padding-bottom: 0; }
 .dl dt { font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-fog); margin: 0; }
@@ -394,6 +657,33 @@ const emptyMessage = computed(() => {
 
 .detail__notes { padding: 16px 18px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 12px; }
 .detail__notes p { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); line-height: 1.6; margin: 8px 0 0; font-style: italic; }
+
+/* Internal notes thread */
+.detail__notes-thread { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; border-top: 1px solid var(--color-hairline); }
+.note-form { display: flex; gap: 8px; align-items: stretch; }
+.note-form textarea { flex: 1; padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; resize: vertical; min-height: 44px; }
+.note-form textarea:focus { outline: none; border-color: var(--color-ink); }
+.notes { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.note { padding: 12px 14px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; }
+.note__head { display: flex; gap: 8px; align-items: baseline; }
+.note__author { font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--color-ink); }
+.note__time { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); }
+.note__body { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); line-height: 1.5; margin-top: 6px; }
+
+/* Approve / Reject modal form */
+.modal-form { display: flex; flex-direction: column; gap: 14px; }
+.modal-hint { font-family: var(--font-body); font-size: 13px; color: var(--color-fog); margin: 0; line-height: 1.5; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.field input, .field select, .field textarea { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; resize: vertical; }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--color-ink); }
+.switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--color-hairline); }
+.switch-row__label { font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--color-ink); }
+.switch-row__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
+.switch { width: 40px; height: 24px; padding: 3px; border-radius: 999px; background: var(--color-hairline); border: 0; display: flex; cursor: pointer; flex-shrink: 0; }
+.switch.is-on { background: var(--color-ink); }
+.switch__knob { width: 18px; height: 18px; border-radius: 999px; background: #fff; transition: transform 0.15s ease; }
+.switch.is-on .switch__knob { transform: translateX(16px); }
 
 @media (max-width: 900px) {
   .detail__cols { grid-template-columns: 1fr; gap: 20px; }

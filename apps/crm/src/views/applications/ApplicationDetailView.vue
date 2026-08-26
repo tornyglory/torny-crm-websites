@@ -266,9 +266,9 @@ async function submitReject() {
       <!-- Left: numbered steps mirroring the join-form order -->
       <ol class="steps">
         <li class="step">
-          <div class="step__num">01</div>
           <div class="step__body">
             <div class="step__head">
+              <div class="step__eyebrow">STEP 01</div>
               <h2 class="step__title">Membership</h2>
               <p class="step__hint">The tier they chose and when they applied.</p>
             </div>
@@ -282,9 +282,9 @@ async function submitReject() {
         </li>
 
         <li class="step">
-          <div class="step__num">02</div>
           <div class="step__body">
             <div class="step__head">
+              <div class="step__eyebrow">STEP 02</div>
               <h2 class="step__title">About</h2>
               <p class="step__hint">Their contact details.</p>
             </div>
@@ -298,9 +298,9 @@ async function submitReject() {
         </li>
 
         <li class="step">
-          <div class="step__num">03</div>
           <div class="step__body">
             <div class="step__head">
+              <div class="step__eyebrow">STEP 03</div>
               <h2 class="step__title">Home address</h2>
               <p class="step__hint">Where the club handbook + AGM notices go.</p>
             </div>
@@ -315,9 +315,9 @@ async function submitReject() {
         </li>
 
         <li class="step">
-          <div class="step__num">04</div>
           <div class="step__body">
             <div class="step__head">
+              <div class="step__eyebrow">STEP 04</div>
               <h2 class="step__title">Their bowls</h2>
               <p class="step__hint">Where the selectors and coaches will slot them.</p>
             </div>
@@ -331,9 +331,9 @@ async function submitReject() {
         </li>
 
         <li class="step">
-          <div class="step__num">05</div>
           <div class="step__body">
             <div class="step__head">
+              <div class="step__eyebrow">STEP 05</div>
               <h2 class="step__title">Emergency contact</h2>
               <p class="step__hint">Who to call if there's an accident on the green.</p>
             </div>
@@ -346,9 +346,9 @@ async function submitReject() {
         </li>
 
         <li class="step">
-          <div class="step__num">06</div>
           <div class="step__body">
             <div class="step__head">
+              <div class="step__eyebrow">STEP 06</div>
               <h2 class="step__title">Review &amp; agree</h2>
               <p class="step__hint">What they told us at the end of the form.</p>
             </div>
@@ -506,13 +506,13 @@ async function submitReject() {
 /* Body layout */
 .page__body { display: grid; grid-template-columns: 1fr 340px; gap: 48px; align-items: flex-start; }
 
-/* Left column — numbered steps */
-.steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 48px; }
-.step { display: grid; grid-template-columns: 48px 1fr; gap: 20px; align-items: flex-start; padding-top: 32px; border-top: 1px solid var(--color-hairline); }
-.step:first-child { padding-top: 0; border-top: 0; }
-.step__num { font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.14em; color: var(--color-mute); text-transform: uppercase; padding-top: 4px; }
+/* Left column — numbered steps. Number sits inside the card as a mono
+   eyebrow so the card left-edge aligns with the page header. */
+.steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 20px; }
+.step { display: block; }
 .step__body { display: flex; flex-direction: column; gap: 16px; min-width: 0; background: #fff; padding: 24px 28px; border: 1px solid var(--color-hairline); border-radius: 14px; }
-.step__head { display: flex; flex-direction: column; gap: 4px; }
+.step__head { display: flex; flex-direction: column; gap: 6px; }
+.step__eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.14em; color: var(--color-mute); text-transform: uppercase; }
 .step__title { font-family: var(--font-display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: var(--color-ink); margin: 0; line-height: 1.15; }
 .step__hint { font-family: var(--font-body); font-size: 14px; color: var(--color-fog); margin: 0; line-height: 1.5; }
 .step__note {
@@ -636,9 +636,8 @@ async function submitReject() {
   .page__body { display: block; }
   .page__title { font-size: 32px; }
   .page__sub { font-size: 12px; }
-  .steps { gap: 24px; }
-  .step { border-top: 1px solid #E5E5E5; padding-top: 20px; grid-template-columns: 32px 1fr; gap: 12px; page-break-inside: avoid; }
-  .step:first-child { border-top: 0; padding-top: 0; }
+  .steps { gap: 16px; }
+  .step { page-break-inside: avoid; }
   .step__body { border: 1px solid #E5E5E5; box-shadow: none; padding: 16px 20px; }
   .step__title { font-size: 16px; }
   .step__hint { font-size: 12px; }
@@ -661,7 +660,6 @@ async function submitReject() {
   .rail { position: static; }
 }
 @media (max-width: 767px) {
-  .step { grid-template-columns: 32px 1fr; gap: 12px; padding-top: 24px; }
   .step__body { padding: 18px 20px; }
   .step__title { font-size: 18px; }
   .dl__row { grid-template-columns: 1fr; gap: 4px; padding: 10px 0; }

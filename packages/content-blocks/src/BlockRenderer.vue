@@ -8,6 +8,7 @@ import HonourBoardBlock from './blocks/HonourBoardBlock.vue'
 import HonourBoardSearchBlock from './blocks/HonourBoardSearchBlock.vue'
 import MembersSearchBlock from './blocks/MembersSearchBlock.vue'
 import MembershipJoinFormBlock from './blocks/MembershipJoinFormBlock.vue'
+import PeopleGridBlock from './blocks/PeopleGridBlock.vue'
 import GalleryBlock from './blocks/GalleryBlock.vue'
 import ContactFormBlock from './blocks/ContactFormBlock.vue'
 import MembershipCtaBlock from './blocks/MembershipCtaBlock.vue'
@@ -34,6 +35,7 @@ defineProps<{ block: Block }>()
   <HonourBoardSearchBlock v-else-if="block.type === 'honourBoardSearch'" v-bind="block.props" />
   <MembersSearchBlock v-else-if="block.type === 'membersSearch'" v-bind="block.props" />
   <MembershipJoinFormBlock v-else-if="block.type === 'membershipJoinForm'" v-bind="block.props" />
+  <PeopleGridBlock v-else-if="block.type === 'peopleGrid'" v-bind="block.props" />
   <GalleryBlock v-else-if="block.type === 'gallery'" v-bind="block.props" />
   <ContactFormBlock v-else-if="block.type === 'contactForm'" v-bind="block.props" />
   <MembershipCtaBlock v-else-if="block.type === 'membershipCta'" v-bind="block.props" />

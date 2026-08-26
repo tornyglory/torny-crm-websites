@@ -7,6 +7,7 @@ export type BlockType =
   | 'honourBoardSearch'
   | 'membersSearch'
   | 'membershipJoinForm'
+  | 'peopleGrid'
   | 'gallery'
   | 'contactForm'
   | 'membershipCta'
@@ -117,9 +118,55 @@ export interface MembersSearchProps {
   pageSize?: number
 }
 
-export interface GalleryProps {
+export type PeopleGridTone = 'accent' | 'ink' | 'mint' | 'tangerine' | 'violet' | 'sky'
+
+export interface PeopleGridPerson {
+  /** Full name — big display type on the card. */
+  name: string
+  /** Small mono line under the name — role, title, or committee post. */
+  role?: string
+  /** Body paragraph describing the person. Two–three sentences fits best. */
+  body?: string
+  /** Optional email rendered muted at the card foot. */
+  email?: string
+  /** Fallback initials shown when there's no avatar image. Auto-derived from name if omitted. */
+  initials?: string
+  /** Optional avatar image URL — takes precedence over initials. */
+  avatarUrl?: string
+  /** Circle avatar tint from the site palette. */
+  tone?: PeopleGridTone
+}
+
+export interface PeopleGridProps {
+  eyebrow?: string
   heading?: string
-  images: Array<{ url: string; alt?: string; caption?: string }>
+  /** Right-aligned intro copy on the header row. */
+  subheading?: string
+  people: PeopleGridPerson[]
+  /** Cards per row on desktop. Default 4. */
+  columns?: 2 | 3 | 4
+}
+
+export interface GalleryImage {
+  url: string
+  alt?: string
+  /** Small mono pill label rendered bottom-left of the tile. */
+  caption?: string
+  /** Colour swatch shown while the image loads / when no url is set — matches the Paper "coloured tile" preview. */
+  tone?: PeopleGridTone
+  /** Tile spans two grid columns. Use sparingly for feature shots. */
+  wide?: boolean
+  /** Tile spans two grid rows (taller aspect). */
+  tall?: boolean
+}
+
+export interface GalleryProps {
+  eyebrow?: string
+  heading?: string
+  /** Right-aligned link on the header row — e.g. "Open full gallery →". */
+  ctaLabel?: string
+  ctaHref?: string
+  images: GalleryImage[]
 }
 
 /**
@@ -300,6 +347,7 @@ export type Block =
   | BlockBase<'honourBoardSearch', HonourBoardSearchProps>
   | BlockBase<'membersSearch', MembersSearchProps>
   | BlockBase<'membershipJoinForm', MembershipJoinFormProps>
+  | BlockBase<'peopleGrid', PeopleGridProps>
   | BlockBase<'gallery', GalleryProps>
   | BlockBase<'contactForm', ContactFormProps>
   | BlockBase<'membershipCta', MembershipCtaProps>

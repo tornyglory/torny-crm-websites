@@ -53,7 +53,8 @@ const TAGS_BY_TYPE: Record<BlockType, Tag[]> = {
   honourBoardSearch: ['data'],
   membersSearch: ['data'],
   membershipJoinForm: ['forms', 'data'],
-  gallery:        ['media'],
+  peopleGrid:     ['layout', 'text'],
+  gallery:        ['media', 'layout'],
   contactForm:    ['forms'],
   membershipCta:  ['cta'],
   ctaBanner:      ['cta'],
@@ -291,10 +292,50 @@ const BlockPreview = defineComponent({
       case 'gallery':
         return shell([
           rect(0, 0, 200, 120, { fill: '#fff' }),
-          rect(16, 12, 60, 6, { fill: ink }),
-          rect(16, 30, 54, 70, { fill: '#B0E0E6' }),
-          rect(74, 30, 54, 70, { fill: '#DCFCE7' }),
-          rect(132, 30, 52, 70, { fill: '#FED7AA' }),
+          // Editorial head — big heading + CTA
+          rect(14, 8, 80, 6, { fill: ink }),
+          rect(150, 10, 30, 3, { fill: ink }),
+          // Photo tiles — mixed sizes with caption pills
+          rect(14, 22, 56, 40, { fill: '#87CEEB', rx: 2 }),
+          rect(18, 55, 22, 4, { fill: ink, rx: 1 }),
+          rect(74, 22, 56, 40, { fill: '#F97316', rx: 2 }),
+          rect(78, 55, 22, 4, { fill: ink, rx: 1 }),
+          rect(134, 22, 50, 40, { fill: '#B0E0E6', rx: 2 }),
+          rect(138, 55, 22, 4, { fill: ink, rx: 1 }),
+          rect(14, 66, 56, 40, { fill: graphite, opacity: 0.15, rx: 2 }),
+          rect(18, 99, 22, 4, { fill: ink, rx: 1 }),
+          rect(74, 66, 56, 40, { fill: '#16A34A', rx: 2 }),
+          rect(78, 99, 22, 4, { fill: ink, rx: 1 }),
+          rect(134, 66, 50, 40, { fill: '#2563EB', rx: 2 }),
+          rect(138, 99, 22, 4, { fill: ink, rx: 1 }),
+        ])
+
+      case 'peopleGrid':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          // Editorial head
+          rect(14, 8, 100, 8, { fill: ink }),
+          rect(14, 20, 30, 3, { fill: graphite, opacity: 0.4 }),
+          rect(140, 20, 44, 3, { fill: graphite, opacity: 0.5 }),
+          // Four person cards
+          ...[14, 60, 106, 152].map((x, i) => {
+            const colors = ['#2563EB', ink, '#F97316', '#16A34A']
+            return [
+              rect(x, 34, 42, 76, { fill: '#fff', stroke: graphite, opacity: 0.15, rx: 2 }),
+              // avatar
+              rect(x + 6, 40, 14, 14, { fill: colors[i]!, rx: 7 }),
+              // name
+              rect(x + 6, 60, 30, 4, { fill: ink }),
+              // role
+              rect(x + 6, 68, 18, 3, { fill: graphite, opacity: 0.5 }),
+              // body
+              rect(x + 6, 78, 30, 2, { fill: graphite, opacity: 0.35 }),
+              rect(x + 6, 82, 26, 2, { fill: graphite, opacity: 0.35 }),
+              rect(x + 6, 86, 28, 2, { fill: graphite, opacity: 0.35 }),
+              // email
+              rect(x + 6, 100, 24, 3, { fill: graphite, opacity: 0.5 }),
+            ]
+          }).flat(),
         ])
 
       case 'contactForm':

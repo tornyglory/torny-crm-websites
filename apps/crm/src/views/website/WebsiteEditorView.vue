@@ -42,6 +42,9 @@ import type {
   MembersSearchProps,
   MembershipJoinFormProps,
   GalleryProps,
+  PeopleGridProps,
+  PeopleGridPerson,
+  PeopleGridTone,
   ContactFormProps,
   MembershipCtaProps,
   CtaBannerProps,
@@ -355,8 +358,22 @@ const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
         ctaLabel: 'See the full calendar',
         ctaHref: '/events',
       }) },
-    { type: 'gallery', label: 'Gallery', hint: 'A photo strip of the club', icon: '▨',
-      defaults: (): GalleryProps => ({ heading: 'Around the club', images: [] }) },
+    { type: 'gallery', label: 'Gallery', hint: 'Editorial photo grid with mono caption pills', icon: '▨',
+      defaults: (): GalleryProps => ({
+        eyebrow: 'AROUND THE GREENS · THIS SEASON',
+        heading: 'Some Fridays we photograph.',
+        ctaLabel: 'Open full gallery',
+        ctaHref: '',
+        images: [],
+      }) },
+    { type: 'peopleGrid', label: 'People grid', hint: 'Committee / staff cards with initials + role + email', icon: '☺',
+      defaults: (): PeopleGridProps => ({
+        eyebrow: 'THE COMMITTEE · 2026',
+        heading: 'The people to know.',
+        subheading: "Volunteers, all of them. Pull one aside next time you're at the club.",
+        people: [],
+        columns: 4,
+      }) },
     { type: 'membershipCta', label: 'Membership CTA', hint: 'Push people to /membership', icon: '★',
       defaults: (): MembershipCtaProps => ({ heading: 'Play with us this season', body: 'Whether you\'re a first-time bowler or a seasoned skip, there\'s a spot for you.', ctaLabel: 'See tiers', ctaHref: '/membership' }) },
     { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
@@ -479,6 +496,7 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   honourBoardSearch: 'Honour board · Search',
   membersSearch: 'Members',
   membershipJoinForm: 'Join form',
+  peopleGrid: 'People grid',
   gallery: 'Gallery',
   contactForm: 'Contact form',
   membershipCta: 'Membership CTA',
@@ -1084,6 +1102,7 @@ function blockSummary(block: Block): string {
       const scope = positions.length > 0 ? positions.join(', ') : 'all positions'
       return p.heading ? `${p.heading} — ${scope}` : `Members — ${scope}`
     }
+    case 'peopleGrid':    return (block.props as PeopleGridProps).heading || `${(block.props as PeopleGridProps).people.length} people`
     case 'gallery':       return `${(block.props as GalleryProps).images.length} photos`
     case 'contactForm':   return (block.props as ContactFormProps).heading || 'Contact form'
     case 'membershipJoinForm': return (block.props as MembershipJoinFormProps).heading || 'Join form'
@@ -1814,17 +1833,88 @@ const lastSavedLabel = computed(() => {
           <!-- Gallery -->
           <template v-else-if="selectedBlock.type === 'gallery'">
             <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as GalleryProps).eyebrow" type="text" placeholder="AROUND THE GREENS · THIS SEASON" />
+            </label>
+            <label class="field">
               <span class="field__label">Heading</span>
-              <input v-model="(selectedBlock.props as GalleryProps).heading" type="text" />
+              <input v-model="(selectedBlock.props as GalleryProps).heading" type="text" placeholder="Some Fridays we photograph." />
+            </label>
+            <label class="field">
+              <span class="field__label">Link label</span>
+              <input v-model="(selectedBlock.props as GalleryProps).ctaLabel" type="text" placeholder="Open full gallery" />
+              <span class="field__hint">Leave blank to hide.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Link URL</span>
+              <input v-model="(selectedBlock.props as GalleryProps).ctaHref" type="text" placeholder="/gallery" />
             </label>
             <div class="field">
               <span class="field__label">Images ({{ (selectedBlock.props as GalleryProps).images.length }})</span>
               <div v-for="(img, ii) in (selectedBlock.props as GalleryProps).images" :key="ii" class="gallery-item">
                 <ImagePicker v-model="img.url" content-type="gallery" aspect="4 / 3" />
                 <input v-model="img.alt" placeholder="Alt text (for screen readers)" type="text" class="gallery-item__alt" />
+                <input v-model="img.caption" placeholder="Caption pill — e.g. WEEK 6 · TWILIGHT ROLL-UP" type="text" class="gallery-item__alt" />
+                <div class="gallery-item__row">
+                  <label class="chip-picker__item">
+                    <input type="checkbox" v-model="img.wide" />
+                    <span>Wide (2 cols)</span>
+                  </label>
+                  <label class="chip-picker__item">
+                    <input type="checkbox" v-model="img.tall" />
+                    <span>Tall (2 rows)</span>
+                  </label>
+                </div>
                 <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as GalleryProps).images.splice(ii, 1)">Remove</button>
               </div>
-              <button type="button" class="gallery-add" @click="(selectedBlock!.props as GalleryProps).images.push({ url: '', alt: '' })">+ Add image</button>
+              <button type="button" class="gallery-add" @click="(selectedBlock!.props as GalleryProps).images.push({ url: '', alt: '', caption: '' })">+ Add image</button>
+            </div>
+          </template>
+
+          <!-- People grid -->
+          <template v-else-if="selectedBlock.type === 'peopleGrid'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as PeopleGridProps).eyebrow" type="text" placeholder="THE COMMITTEE · 2026" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as PeopleGridProps).heading" type="text" placeholder="The people to know." />
+            </label>
+            <label class="field">
+              <span class="field__label">Subheading (right-aligned)</span>
+              <textarea v-model="(selectedBlock.props as PeopleGridProps).subheading" rows="2" placeholder="Volunteers, all of them. Pull one aside next time you're at the club." />
+            </label>
+            <label class="field">
+              <span class="field__label">Columns</span>
+              <select v-model.number="(selectedBlock.props as PeopleGridProps).columns">
+                <option :value="2">2</option>
+                <option :value="3">3</option>
+                <option :value="4">4</option>
+              </select>
+            </label>
+            <div class="field">
+              <span class="field__label">People ({{ (selectedBlock.props as PeopleGridProps).people.length }})</span>
+              <div v-for="(person, pi) in (selectedBlock.props as PeopleGridProps).people" :key="pi" class="gallery-item">
+                <input v-model="person.name" placeholder="Full name" type="text" class="gallery-item__alt" />
+                <input v-model="person.role" placeholder="Role — e.g. CLUB PRESIDENT" type="text" class="gallery-item__alt" />
+                <textarea v-model="person.body" placeholder="A sentence or two about them" rows="2" class="gallery-item__alt" />
+                <input v-model="person.email" placeholder="email@club.co.nz" type="text" class="gallery-item__alt" />
+                <div class="gallery-item__row">
+                  <input v-model="person.initials" placeholder="Initials (e.g. GW)" type="text" class="gallery-item__alt" style="flex: 1;" />
+                  <select v-model="person.tone" class="gallery-item__alt" style="flex: 1;">
+                    <option :value="undefined">Auto-tint</option>
+                    <option value="accent">Accent</option>
+                    <option value="ink">Ink</option>
+                    <option value="mint">Mint</option>
+                    <option value="tangerine">Tangerine</option>
+                    <option value="violet">Violet</option>
+                    <option value="sky">Sky</option>
+                  </select>
+                </div>
+                <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as PeopleGridProps).people.splice(pi, 1)">Remove</button>
+              </div>
+              <button type="button" class="gallery-add" @click="(selectedBlock!.props as PeopleGridProps).people.push({ name: '' } satisfies PeopleGridPerson)">+ Add person</button>
             </div>
           </template>
 
@@ -2697,6 +2787,8 @@ const lastSavedLabel = computed(() => {
 .switch__knob { width: 16px; height: 16px; border-radius: 999px; background: #fff; }
 
 .gallery-item { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 10px; margin-top: 8px; }
+.gallery-item__row { display: flex; gap: 8px; align-items: center; }
+.gallery-item textarea.gallery-item__alt { resize: vertical; min-height: 44px; font-family: var(--font-body); }
 .gallery-item__alt { padding: 8px 10px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 12px; color: var(--color-ink); background: #fff; }
 .gallery-item__alt:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .gallery-item__remove { align-self: flex-start; background: transparent; border: 0; padding: 0; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-danger); cursor: pointer; }

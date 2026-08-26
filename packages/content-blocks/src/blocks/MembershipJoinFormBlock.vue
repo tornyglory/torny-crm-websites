@@ -47,6 +47,24 @@ const cadenceUnit = computed(() => (
       : '/ season'
 ))
 
+// ── Tier tone palette — matches CRM Settings → Membership types.
+//    Same four-slot rotation the CRM uses so an owner picking "mint" for
+//    Twilight in Settings sees that colour on the public site's tier card.
+interface TierTone { key: string; bg: string; fg: string }
+const TIER_TONES: TierTone[] = [
+  { key: 'accent',    bg: 'var(--color-accent-soft)', fg: 'var(--color-accent-strong)' },
+  { key: 'mint',      bg: '#DCFCE7', fg: '#166534' },
+  { key: 'tangerine', bg: '#FEF3C7', fg: '#92400E' },
+  { key: 'violet',    bg: '#EDE9FE', fg: '#5B21B6' },
+]
+function toneFor(tone: string | null | undefined, index: number): TierTone {
+  if (tone) {
+    const stored = TIER_TONES.find((t) => t.key === tone)
+    if (stored) return stored
+  }
+  return TIER_TONES[index % TIER_TONES.length]!
+}
+
 // ── Tier list — reads BlockContext, falls back to a stub trio so the
 //    CRM preview looks like the real site.
 interface DisplayTier {
@@ -55,21 +73,23 @@ interface DisplayTier {
   description: string | null
   fee: number | null
   isDefault: boolean
+  tone: TierTone
 }
 const PREVIEW_TIERS: DisplayTier[] = [
-  { id: 'preview-1', name: 'Social bowler', description: 'Friday twilight roll-ups, clubhouse access, sets provided.', fee: 60, isDefault: false },
-  { id: 'preview-2', name: 'Playing member', description: 'Pennant, tournaments, every roll-up, and voting rights at AGM.', fee: 140, isDefault: true },
-  { id: 'preview-3', name: 'Life member', description: '10+ year members. Honorary — subs waived, honour board earned.', fee: null, isDefault: false },
+  { id: 'preview-1', name: 'Social bowler',  description: 'Friday twilight roll-ups, clubhouse access, sets provided.',    fee: 60,   isDefault: false, tone: TIER_TONES[0]! },
+  { id: 'preview-2', name: 'Playing member', description: 'Pennant, tournaments, every roll-up, and voting rights at AGM.', fee: 140,  isDefault: true,  tone: TIER_TONES[1]! },
+  { id: 'preview-3', name: 'Life member',    description: '10+ year members. Honorary — subs waived, honour board earned.',  fee: null, isDefault: false, tone: TIER_TONES[2]! },
 ]
 const tiers = computed<DisplayTier[]>(() => {
   const raw = ctx.value?.membershipTiers
   if (!raw || raw.length === 0) return PREVIEW_TIERS
-  return raw.map((t) => ({
+  return raw.map((t, i) => ({
     id: t.id,
     name: t.type_name,
     description: t.description ?? null,
     fee: t.fee ?? null,
     isDefault: t.is_default,
+    tone: toneFor(t.tone, t.sort_order ?? i),
   }))
 })
 
@@ -298,8 +318,15 @@ function joinFormErrorMessage(err: unknown): string {
             </div>
           </div>
           <div class="jf__tier-grid">
-            <label v-for="t in tiers" :key="t.id" class="jf__tier" :class="{ 'jf__tier--selected': (selectedTierId ?? defaultTier?.id) === t.id }">
+            <label
+              v-for="t in tiers"
+              :key="t.id"
+              class="jf__tier"
+              :class="{ 'jf__tier--selected': (selectedTierId ?? defaultTier?.id) === t.id }"
+              :style="{ '--tier-tone-bg': t.tone.bg, '--tier-tone-fg': t.tone.fg } as any"
+            >
               <input type="radio" name="tier" :value="t.id" v-model="selectedTierId" class="jf__tier-input" />
+              <span class="jf__tier-stripe" aria-hidden="true" />
               <div class="jf__tier-head">
                 <span class="jf__tier-eyebrow">{{ t.isDefault ? 'DEFAULT' : t.name.split(' ')[0]?.toUpperCase() }}</span>
                 <span class="jf__radio" :class="{ 'jf__radio--on': (selectedTierId ?? defaultTier?.id) === t.id }">
@@ -588,13 +615,24 @@ function joinFormErrorMessage(err: unknown): string {
 
 /* Tier grid */
 .jf__tier-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding-left: 56px; }
-.jf__tier { display: flex; flex-direction: column; gap: 12px; padding: 24px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 20px; cursor: pointer; transition: border-color 160ms, box-shadow 160ms, transform 160ms; }
+.jf__tier { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 24px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 20px; cursor: pointer; transition: border-color 160ms, box-shadow 160ms, transform 160ms; overflow: hidden; }
 .jf__tier:hover { border-color: var(--color-ink); transform: translateY(-1px); }
 .jf__tier--selected { background: var(--color-ink); color: #fff; border-color: var(--color-ink); box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 20%, transparent); }
 .jf__tier-input { position: absolute; opacity: 0; pointer-events: none; }
+.jf__tier-stripe { position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--tier-tone-fg, var(--color-accent)); }
 .jf__tier-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.jf__tier-eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--color-fog); text-transform: uppercase; }
-.jf__tier--selected .jf__tier-eyebrow { color: rgba(255,255,255,0.6); }
+.jf__tier-eyebrow {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--tier-tone-bg, var(--color-surface));
+  color: var(--tier-tone-fg, var(--color-fog));
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.jf__tier--selected .jf__tier-eyebrow { background: var(--tier-tone-bg, rgba(255,255,255,0.15)); color: var(--tier-tone-fg, #fff); }
 .jf__radio { width: 20px; height: 20px; border-radius: 999px; border: 1px solid var(--color-hairline); background: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .jf__radio--on { background: var(--brand); border-color: var(--brand); }
 .jf__radio-dot { width: 8px; height: 8px; border-radius: 999px; background: #fff; }

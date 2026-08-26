@@ -120,6 +120,10 @@ export interface SiteMembershipTier {
   cadence: 'annual' | 'monthly' | 'season' | null
   fee: number | null
   is_default: boolean
+  /** Palette slot chosen in CRM Settings (accent / mint / tangerine / violet).
+   *  Blocks fall back to a position-based rotation when omitted. */
+  tone?: string | null
+  sort_order?: number
 }
 
 export interface SiteEvent {

@@ -348,6 +348,10 @@ export interface BlockContext {
     cadence?: 'annual' | 'monthly' | 'season' | null
     fee?: number | null
     is_default: boolean
+    /** Optional palette rotation slot — matches CRM Settings tier tone. */
+    tone?: string | null
+    /** Row order set in CRM. Falls back to array position when absent. */
+    sort_order?: number
   }>
   /** Club-level billing cadence — used by the join-form price suffix. */
   cadence?: 'annual' | 'monthly' | 'season' | null

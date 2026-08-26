@@ -52,6 +52,11 @@ async function loadList() {
     rows.value = res.applications
     counts.value = res.counts
     total.value = res.pagination.total
+    // Broadcast the pending count so CrmShell's sidebar stays in sync
+    // without a second fetch.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('torny:applications-count', { detail: res.counts.pending }))
+    }
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') return
     toast.error(err instanceof ApiError ? err.message : 'Could not load applications.')

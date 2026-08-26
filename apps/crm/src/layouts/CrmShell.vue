@@ -4,7 +4,11 @@ import { RouterView, RouterLink, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
 import { useClubSettingsStore } from '@/stores/clubSettings'
-import { members as membersApi } from '@torny/api-client'
+import {
+  members as membersApi,
+  applications as applicationsApi,
+  events as eventsApi,
+} from '@torny/api-client'
 import { useHonourCategoriesStore } from '@/stores/honourCategories'
 import NotificationsDropdown from '@/components/NotificationsDropdown.vue'
 import NewMenu from '@/components/NewMenu.vue'
@@ -191,15 +195,96 @@ if (typeof window !== 'undefined') {
   onBeforeUnmount(() => window.removeEventListener('torny:roster-count', onRosterCountUpdate))
 }
 
+// ── Applications pending count ────────────────────────────────
+// Sidebar badge shows how many applications need triage. Reads brief 38's
+// list endpoint with limit=1 so we only pay for the counts envelope. Kept
+// in sync by ApplicationsView broadcasting torny:applications-count after
+// every load / approve / reject.
+const applicationsPendingCount = ref<number | null>(null)
+async function loadApplicationsCount(clubId: number) {
+  try {
+    const res = await applicationsApi.list(clubId, { status: 'pending', limit: 1 })
+    applicationsPendingCount.value = res.counts.pending
+  } catch {
+    applicationsPendingCount.value = null
+  }
+}
+
+watch(
+  () => club.current?.id,
+  (id) => {
+    if (id != null && typeof id === 'number') void loadApplicationsCount(id)
+    else applicationsPendingCount.value = null
+  },
+  { immediate: true },
+)
+
+function onApplicationsCountUpdate(e: Event) {
+  const detail = (e as CustomEvent).detail
+  if (typeof detail === 'number') applicationsPendingCount.value = detail
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('torny:applications-count', onApplicationsCountUpdate)
+  onBeforeUnmount(() => window.removeEventListener('torny:applications-count', onApplicationsCountUpdate))
+}
+
+// ── Events upcoming count ─────────────────────────────────────
+// One rolling year forward. EventsView dispatches torny:events-count after
+// its own fetch so the sidebar doesn't refetch when the user is on Events.
+const eventsUpcomingCount = ref<number | null>(null)
+async function loadEventsCount(clubId: number) {
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const nextYear = new Date()
+    nextYear.setFullYear(nextYear.getFullYear() + 1)
+    const list = await eventsApi.list(clubId, { from: today, to: nextYear.toISOString().slice(0, 10) })
+    eventsUpcomingCount.value = list.length
+  } catch {
+    eventsUpcomingCount.value = null
+  }
+}
+
+watch(
+  () => club.current?.id,
+  (id) => {
+    if (id != null && typeof id === 'number') void loadEventsCount(id)
+    else eventsUpcomingCount.value = null
+  },
+  { immediate: true },
+)
+
+function onEventsCountUpdate(e: Event) {
+  const detail = (e as CustomEvent).detail
+  if (typeof detail === 'number') eventsUpcomingCount.value = detail
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('torny:events-count', onEventsCountUpdate)
+  onBeforeUnmount(() => window.removeEventListener('torny:events-count', onEventsCountUpdate))
+}
+
 const manageNav = computed<NavItem[]>(() => [
   { to: '/crm/dashboard', label: 'Dashboard', icon: 'dashboard' },
   { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? '—', countTone: 'neutral' },
-  { to: '/crm/applications', label: 'Applications', icon: 'applications', count: 3, countTone: 'accent' },
+  {
+    to: '/crm/applications',
+    label: 'Applications',
+    icon: 'applications',
+    ...(applicationsPendingCount.value != null
+      ? { count: applicationsPendingCount.value, countTone: applicationsPendingCount.value > 0 ? 'accent' as const : 'neutral' as const }
+      : {}),
+  },
   { to: '/crm/enquiries', label: 'Enquiries', icon: 'enquiries', count: 2, countTone: 'accent' },
 ])
 const contentNav = computed<NavItem[]>(() => [
   { to: '/crm/website', label: 'Website', icon: 'website' },
-  { to: '/crm/events', label: 'Events', icon: 'events', count: 12, countTone: 'neutral' },
+  {
+    to: '/crm/events',
+    label: 'Events',
+    icon: 'events',
+    ...(eventsUpcomingCount.value != null
+      ? { count: eventsUpcomingCount.value, countTone: 'neutral' as const }
+      : {}),
+  },
   { to: '/crm/teams', label: 'Team selections', icon: 'teams', count: 4, countTone: 'neutral' },
   {
     to: '/crm/honour-board',
@@ -224,7 +309,7 @@ interface TabItem { to: string; label: string; count?: number; icon: 'home' | 'm
 const bottomTabs = computed<TabItem[]>(() => [
   { to: '/crm/dashboard', label: 'Home', icon: 'home' },
   { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? undefined },
-  { to: '/crm/applications', label: 'Apps', count: 3, icon: 'apps' },
+  { to: '/crm/applications', label: 'Apps', count: applicationsPendingCount.value ?? undefined, icon: 'apps' },
   { to: '/crm/enquiries', label: 'Enquiries', count: 2, icon: 'enquiries' },
 ])
 </script>

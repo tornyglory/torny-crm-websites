@@ -67,6 +67,13 @@ async function loadEvents() {
       to: to.toISOString().slice(0, 10),
     })
     events.value = list
+    // Broadcast the upcoming count so CrmShell's sidebar stays in sync
+    // without a second fetch.
+    if (typeof window !== 'undefined') {
+      const now = Date.now()
+      const upcoming = list.filter((e) => new Date(e.start_datetime).getTime() >= now).length
+      window.dispatchEvent(new CustomEvent('torny:events-count', { detail: upcoming }))
+    }
   } catch (err) {
     events.value = []
     toast.error(errMessage(err, 'Failed to load events.'))

@@ -11,26 +11,15 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useClubStore } from '@/stores/club'
+import { useNotificationsStore } from '@/stores/notifications'
+import { useToast } from '@/composables/useToast'
+import { ApiError, type Notification, type NotificationKind } from '@torny/api-client'
 
-type Kind =
-  | 'application'      // new membership application
-  | 'enquiry'          // contact-form message
-  | 'rsvp'             // event RSVP hit a threshold
-  | 'team'             // team selection needs confirming
-  | 'publish'          // website publish result
-  | 'payment'          // dues / campaign result
-  | 'milestone'        // member milestone
-
-interface Notif {
-  id: string
-  kind: Kind
-  title: string
-  body: string
-  when: string
-  unread: boolean
-  primaryAction?: { label: string; route?: string }
-  destination?: string
-}
+/** Local UI kind maps 1:1 to backend NotificationKind. `member_milestone`
+ *  collapses to the existing `milestone` icon so we don't need to draw a
+ *  new one. */
+type Kind = 'application' | 'enquiry' | 'rsvp' | 'team' | 'publish' | 'payment' | 'milestone'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{
@@ -38,109 +27,91 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
+const toast = useToast()
+const clubStore = useClubStore()
+const notificationsStore = useNotificationsStore()
 
-const notifs = ref<Notif[]>([
-  {
-    id: 'n1',
-    kind: 'application',
-    title: 'Aroha Ngata applied to join',
-    body: 'Playing member · referred by Marcus Tuilagi',
-    when: '12m',
-    unread: true,
-    primaryAction: { label: 'Approve', route: '/crm/applications' },
-    destination: '/crm/applications',
-  },
-  {
-    id: 'n2',
-    kind: 'enquiry',
-    title: 'Jamila Otto sent an enquiry',
-    body: '“Hi team, my partner and I are keen to try lawn bowls…”',
-    when: '2h',
-    unread: true,
-    primaryAction: { label: 'Reply', route: '/crm/enquiries' },
-    destination: '/crm/enquiries',
-  },
-  {
-    id: 'n3',
-    kind: 'team',
-    title: 'Round 8 team selection needs confirming',
-    body: 'Pennant Div 3 · Petone A · Saturday 12:30pm',
-    when: '3h',
-    unread: true,
-    primaryAction: { label: 'Open', route: '/crm/teams' },
-    destination: '/crm/teams',
-  },
-  {
-    id: 'n4',
-    kind: 'rsvp',
-    title: 'Twilight roll-up hit 40 RSVPs',
-    body: 'Threshold you set: 30. Cap is 60.',
-    when: '5h',
-    unread: true,
-    destination: '/crm/events',
-  },
-  {
-    id: 'n5',
-    kind: 'publish',
-    title: 'Membership page published',
-    body: 'Cache purged across 3 URLs. 2 blocks changed.',
-    when: 'Yesterday',
-    unread: false,
-    destination: '/crm/website',
-  },
-  {
-    id: 'n6',
-    kind: 'payment',
-    title: 'Dues collected: 6 members',
-    body: '$840.00 processed via Stripe.',
-    when: '2d',
-    unread: false,
-    destination: '/crm/settings',
-  },
-  {
-    id: 'n7',
-    kind: 'milestone',
-    title: 'Denise Peters hit 500 games',
-    body: 'Achievement auto-suggested for grant.',
-    when: '3d',
-    unread: false,
-    primaryAction: { label: 'Add to honour board', route: '/crm/honour-board' },
-    destination: '/crm/honour-board',
-  },
-])
+/** Coerce a backend kind to the local UI kind (only `member_milestone` differs). */
+function toUiKind(kind: NotificationKind): Kind {
+  return kind === 'member_milestone' ? 'milestone' : kind
+}
 
-type Tab = 'all' | 'unread'
-const activeTab = ref<Tab>('all')
+/** Relative time — the backend sends ISO 8601 UTC, we render short strings
+ *  like `12m` / `2h` / `Yesterday` / `3d` to match the design. */
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return ''
+  const diff = Date.now() - then
+  const min = Math.floor(diff / 60_000)
+  if (min < 1) return 'now'
+  if (min < 60) return `${min}m`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h`
+  const day = Math.floor(hr / 24)
+  if (day === 1) return 'Yesterday'
+  if (day < 7) return `${day}d`
+  const wk = Math.floor(day / 7)
+  if (wk < 4) return `${wk}w`
+  return new Date(iso).toLocaleDateString()
+}
 
-const filtered = computed(() =>
-  activeTab.value === 'unread'
-    ? notifs.value.filter((n) => n.unread)
-    : notifs.value,
-)
-const unreadCount = computed(() => notifs.value.filter((n) => n.unread).length)
+// ── Store bindings ────────────────────────────────────────────
+const activeTab = computed<'all' | 'unread'>({
+  get: () => notificationsStore.activeTab,
+  set: (v) => notificationsStore.setTab(v),
+})
+const unreadCount = computed(() => notificationsStore.unreadCount)
+const filtered = computed<Notification[]>(() => notificationsStore.filteredRows)
 
 function close() {
   emit('update:open', false)
 }
 
-function markRead(n: Notif) {
-  n.unread = false
-}
-function markAllRead() {
-  notifs.value.forEach((n) => (n.unread = false))
+/** Fire-and-forget mark-read that swallows any error — the UI has already
+ *  moved on and a red toast on a background action would surprise. */
+async function markRead(n: Notification): Promise<void> {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  if (!n.unread) return
+  try {
+    await notificationsStore.markRead(cid, n.id)
+  } catch { /* silent — badge will self-correct on the next poll */ }
 }
 
-function openRow(n: Notif) {
-  markRead(n)
-  if (n.destination) router.push(n.destination)
+async function markAllRead(): Promise<void> {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  try {
+    await notificationsStore.markAllRead(cid)
+  } catch (err) {
+    toast.error(err instanceof ApiError ? err.message : 'Could not mark all as read.')
+  }
+}
+
+function openRow(n: Notification): void {
+  void markRead(n)
+  if (n.target?.destination_href) router.push(n.target.destination_href)
   close()
 }
-function runAction(n: Notif, ev: Event) {
+function runAction(n: Notification, ev: Event): void {
   ev.stopPropagation()
-  markRead(n)
-  if (n.primaryAction?.route) router.push(n.primaryAction.route)
+  void markRead(n)
+  if (n.primary_action?.href) router.push(n.primary_action.href)
   close()
 }
+
+// Refetch the list every time the dropdown opens so we don't stare at
+// stale rows from an hour ago.
+watch(() => props.open, async (open) => {
+  if (!open) return
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  try {
+    await notificationsStore.fetchList(cid)
+  } catch (err) {
+    toast.error(err instanceof ApiError ? err.message : 'Could not load notifications.')
+  }
+})
 
 // Dismiss on outside click / Esc
 function onKey(e: KeyboardEvent) {
@@ -230,7 +201,7 @@ defineExpose({ unreadCount })
           :class="{ 'is-unread': n.unread }"
           @click="openRow(n)"
         >
-          <div class="notif-dd__icon" :class="`t-${kindMeta[n.kind].tone}`" aria-hidden="true">
+          <div class="notif-dd__icon" :class="`t-${kindMeta[toUiKind(n.kind)].tone}`" aria-hidden="true">
             <!-- application: person plus -->
             <svg v-if="n.kind === 'application'" width="16" height="16" viewBox="0 0 20 20" fill="none">
               <circle cx="8" cy="6" r="3" stroke="currentColor" stroke-width="1.6"/>
@@ -273,20 +244,20 @@ defineExpose({ unreadCount })
           </div>
           <div class="notif-dd__body">
             <div class="notif-dd__row-title">{{ n.title }}</div>
-            <div class="notif-dd__row-desc">{{ n.body }}</div>
+            <div v-if="n.body" class="notif-dd__row-desc">{{ n.body }}</div>
             <div class="notif-dd__row-meta">
-              <span class="notif-dd__row-kind" :class="`t-${kindMeta[n.kind].tone}`">{{ kindMeta[n.kind].label }}</span>
+              <span class="notif-dd__row-kind" :class="`t-${kindMeta[toUiKind(n.kind)].tone}`">{{ kindMeta[toUiKind(n.kind)].label }}</span>
               <span class="notif-dd__row-dot">·</span>
-              <span class="notif-dd__row-when">{{ n.when }}</span>
+              <span class="notif-dd__row-when">{{ relativeTime(n.created_at) }}</span>
             </div>
           </div>
           <div class="notif-dd__right">
             <span v-if="n.unread" class="notif-dd__unread-dot" aria-label="Unread" />
             <button
-              v-if="n.primaryAction"
+              v-if="n.primary_action"
               class="notif-dd__action"
               @click="runAction(n, $event)"
-            >{{ n.primaryAction.label }}</button>
+            >{{ n.primary_action.label }}</button>
           </div>
         </li>
       </ul>

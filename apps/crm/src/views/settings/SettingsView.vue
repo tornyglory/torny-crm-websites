@@ -7,13 +7,15 @@ import { useOnboardingStore } from '@/stores/onboarding'
 import { useClubStore } from '@/stores/club'
 import { useClubSettingsStore } from '@/stores/clubSettings'
 import { useMembershipTiersStore } from '@/stores/membershipTiers'
-import { ApiError, clubs, type MembershipTierListItem } from '@torny/api-client'
+import { useNotificationsStore } from '@/stores/notifications'
+import { ApiError, clubs, type EmailDigest, type MembershipTierListItem, type NotificationKind } from '@torny/api-client'
 
 const toast = useToast()
 const onboarding = useOnboardingStore()
 const clubStore = useClubStore()
 const settingsStore = useClubSettingsStore()
 const tiersStore = useMembershipTiersStore()
+const notificationsStore = useNotificationsStore()
 
 // Fetch the one-shot settings payload on mount + whenever the active club
 // changes. Reads brand.logo_url / favicon_url out of this response instead
@@ -42,6 +44,7 @@ type SectionKey =
   | 'billing'
   | 'team'
   | 'security'
+  | 'notifications'
   | 'integrations'
   | 'danger'
 
@@ -52,6 +55,7 @@ const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
   { key: 'billing', label: 'Billing', hint: 'Torny subscription + invoices.' },
   { key: 'team', label: 'Team access', hint: 'Who else can manage the CRM.' },
   { key: 'security', label: 'Security', hint: 'Sign-in, sessions, 2FA.' },
+  { key: 'notifications', label: 'Notifications', hint: 'Which kinds ping you in-app + by email.' },
   { key: 'integrations', label: 'Integrations', hint: 'Stripe, Google Calendar, mail.' },
   { key: 'danger', label: 'Danger zone', hint: 'Archive or transfer the club.' },
 ]
@@ -308,6 +312,91 @@ async function saveMembershipChanges() {
     toast.error(tierErrorMessage(err))
   } finally {
     membershipSaving.value = false
+  }
+}
+
+// ── Notifications preferences (brief 40) ─────────────────────
+// Per-user, not per-club. One matrix of seven kinds × in-app × email
+// + a digest radio. Buffered like the tiers form so the Save button
+// stays in charge.
+const NOTIFICATION_KINDS: Array<{ key: NotificationKind; label: string; hint: string }> = [
+  { key: 'application',      label: 'Applications',      hint: 'New applications land in the inbox.' },
+  { key: 'enquiry',          label: 'Enquiries',         hint: 'Someone sent a contact-form message.' },
+  { key: 'rsvp',             label: 'Event RSVPs',       hint: 'An event hits a threshold you set.' },
+  { key: 'team',             label: 'Team selections',   hint: 'A round needs confirming.' },
+  { key: 'publish',          label: 'Website publish',   hint: 'A page deploy finished.' },
+  { key: 'payment',          label: 'Payment batches',   hint: 'Dues collection or renewal run finished.' },
+  { key: 'member_milestone', label: 'Member milestones', hint: 'A member hits a games / years / trophies milestone.' },
+]
+
+interface NotificationDraft {
+  perKind: Partial<Record<NotificationKind, Partial<{ in_app: boolean; email: boolean }>>>
+  digest?: EmailDigest
+}
+const notificationDraft = reactive<NotificationDraft>({ perKind: {} })
+const notificationSaving = ref(false)
+
+async function loadNotificationSettings() {
+  try {
+    await notificationsStore.fetchSettings()
+  } catch (err) {
+    toast.error(err instanceof ApiError ? err.message : 'Could not load notification settings.')
+  }
+}
+onMounted(loadNotificationSettings)
+
+function draftedPref(kind: NotificationKind, field: 'in_app' | 'email'): boolean {
+  const override = notificationDraft.perKind[kind]?.[field]
+  if (typeof override === 'boolean') return override
+  const stored = notificationsStore.settings?.per_kind[kind]?.[field]
+  return stored ?? false
+}
+function stagePref(kind: NotificationKind, field: 'in_app' | 'email') {
+  const stored = notificationsStore.settings?.per_kind[kind]?.[field] ?? false
+  const next = !draftedPref(kind, field)
+  const draft = notificationDraft.perKind[kind] ?? (notificationDraft.perKind[kind] = {})
+  if (next === stored) {
+    delete draft[field]
+    if (Object.keys(draft).length === 0) delete notificationDraft.perKind[kind]
+    return
+  }
+  draft[field] = next
+}
+const draftedDigest = computed<EmailDigest>(
+  () => notificationDraft.digest ?? notificationsStore.settings?.email_digest ?? 'off',
+)
+function stageDigest(next: EmailDigest) {
+  const stored = notificationsStore.settings?.email_digest ?? 'off'
+  if (next === stored) {
+    delete notificationDraft.digest
+    return
+  }
+  notificationDraft.digest = next
+}
+const isNotificationsDirty = computed<boolean>(
+  () => notificationDraft.digest != null || Object.keys(notificationDraft.perKind).length > 0,
+)
+function clearNotificationDraft() {
+  for (const key of Object.keys(notificationDraft.perKind)) delete notificationDraft.perKind[key as NotificationKind]
+  delete notificationDraft.digest
+}
+async function saveNotificationSettings() {
+  if (!isNotificationsDirty.value || notificationSaving.value) return
+  notificationSaving.value = true
+  try {
+    const patch: { per_kind?: NotificationDraft['perKind']; email_digest?: EmailDigest } = {}
+    if (Object.keys(notificationDraft.perKind).length > 0) patch.per_kind = { ...notificationDraft.perKind }
+    if (notificationDraft.digest) patch.email_digest = notificationDraft.digest
+    await notificationsStore.saveSettings(patch)
+    clearNotificationDraft()
+    toast.success('Notification settings saved.')
+  } catch (err) {
+    const body = err instanceof ApiError ? ((err.body ?? {}) as { code?: string }) : {}
+    if (body.code === 'bad_kind') toast.error('One of the kinds looks wrong — refresh and try again.')
+    else if (body.code === 'bad_digest') toast.error('Pick a valid digest schedule (Off / Daily / Weekly).')
+    else toast.error(err instanceof ApiError ? err.message : 'Could not save notification settings.')
+  } finally {
+    notificationSaving.value = false
   }
 }
 
@@ -876,6 +965,75 @@ function sendInvite() {
           </div>
         </template>
 
+        <!-- Notifications -->
+        <template v-else-if="active === 'notifications'">
+          <div class="card">
+            <div class="card__head">
+              <div>
+                <div class="card__eyebrow">Notifications</div>
+                <h2 class="card__title">What pings you</h2>
+              </div>
+              <div class="tier__head-actions">
+                <span v-if="isNotificationsDirty && !notificationSaving" class="tier__saving tier__saving--pending">Unsaved changes</span>
+                <button
+                  type="button"
+                  class="ghost-btn"
+                  :disabled="!isNotificationsDirty || notificationSaving"
+                  @click="clearNotificationDraft"
+                >Discard</button>
+                <button
+                  type="button"
+                  class="primary-btn"
+                  :disabled="!isNotificationsDirty || notificationSaving"
+                  @click="saveNotificationSettings"
+                >{{ notificationSaving ? 'Saving…' : 'Save changes' }}</button>
+              </div>
+            </div>
+            <p class="card__sub">Preferences are per-user — they follow you across clubs. In-app pings show in the bell dropdown; email pings send a transactional email as soon as the event fires.</p>
+
+            <div v-if="notificationsStore.settingsLoading && !notificationsStore.settings" class="tier__loading">
+              Loading preferences…
+            </div>
+            <table v-else class="notif-matrix">
+              <thead>
+                <tr>
+                  <th class="notif-matrix__kind">Kind</th>
+                  <th class="notif-matrix__col">In-app</th>
+                  <th class="notif-matrix__col">Email</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="k in NOTIFICATION_KINDS" :key="k.key">
+                  <td>
+                    <div class="notif-matrix__label">{{ k.label }}</div>
+                    <div class="notif-matrix__hint">{{ k.hint }}</div>
+                  </td>
+                  <td class="notif-matrix__toggle-cell">
+                    <button type="button" class="switch" :class="{ 'is-on': draftedPref(k.key, 'in_app') }" @click="stagePref(k.key, 'in_app')">
+                      <span class="switch__knob" />
+                    </button>
+                  </td>
+                  <td class="notif-matrix__toggle-cell">
+                    <button type="button" class="switch" :class="{ 'is-on': draftedPref(k.key, 'email') }" @click="stagePref(k.key, 'email')">
+                      <span class="switch__knob" />
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="notif-digest">
+              <div class="field__label">Email digest</div>
+              <div class="segmented">
+                <button type="button" :class="{ 'is-on': draftedDigest === 'off' }" @click="stageDigest('off')">Off</button>
+                <button type="button" :class="{ 'is-on': draftedDigest === 'daily' }" @click="stageDigest('daily')">Daily</button>
+                <button type="button" :class="{ 'is-on': draftedDigest === 'weekly' }" @click="stageDigest('weekly')">Weekly</button>
+              </div>
+              <p class="card__sub" style="margin-top: 8px;">Bundles anything you opted into email for above into one send. Immediate emails still fire regardless when Off is picked.</p>
+            </div>
+          </div>
+        </template>
+
         <!-- Integrations -->
         <template v-else-if="active === 'integrations'">
           <div class="grid grid--intg">
@@ -1113,6 +1271,21 @@ function sendInvite() {
 .ghost-btn { padding: 9px 14px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--color-hairline); background: transparent; color: var(--color-ink); }
 .ghost-btn:hover:not(:disabled) { background: var(--color-surface); border-color: var(--color-ink); }
 .ghost-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Notifications matrix ────────────────────────────────────── */
+.notif-matrix { width: 100%; border-collapse: collapse; margin-top: 16px; }
+.notif-matrix th, .notif-matrix td { padding: 12px 16px; border-bottom: 1px solid var(--color-hairline); text-align: left; vertical-align: middle; }
+.notif-matrix thead th { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); background: var(--color-surface); border-bottom: 1px solid var(--color-hairline); }
+.notif-matrix__kind { width: 100%; }
+.notif-matrix__col { width: 96px; text-align: center; }
+.notif-matrix__toggle-cell { text-align: center; }
+.notif-matrix__toggle-cell .switch { margin: 0 auto; }
+.notif-matrix__label { font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--color-ink); }
+.notif-matrix__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; line-height: 145%; }
+.notif-matrix tbody tr:last-child th, .notif-matrix tbody tr:last-child td { border-bottom: 0; }
+
+.notif-digest { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--color-hairline); }
+.notif-digest .field__label { margin-bottom: 8px; }
 
 /* ── Opening hours ───────────────────────────────────────────── */
 .hours-grid { display: flex; flex-direction: column; margin-top: 16px; }

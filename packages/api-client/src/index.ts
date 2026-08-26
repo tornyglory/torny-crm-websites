@@ -89,6 +89,21 @@ export type { DirectoryClub, ClubSearchParams, ClubSearchResult } from './resour
 export * as auth from './resources/auth'
 export { AuthError } from './resources/auth'
 export type { AuthUser, LoginResponse, RegisterInput, Role, UserClub } from './resources/auth'
+export * as notifications from './resources/notifications'
+export type {
+  NotificationKind,
+  EmailDigest,
+  NotificationTarget,
+  NotificationAction,
+  NotificationActor,
+  Notification,
+  ListNotificationsParams,
+  ListNotificationsResponse,
+  NotificationKindPreferences,
+  NotificationSettings,
+  NotificationSettingsPatch,
+  NotificationErrorCode,
+} from './resources/notifications'
 export * as applications from './resources/applications'
 export type {
   ApplicationStatus,

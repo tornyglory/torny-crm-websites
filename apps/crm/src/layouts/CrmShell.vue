@@ -10,6 +10,7 @@ import {
   events as eventsApi,
 } from '@torny/api-client'
 import { useHonourCategoriesStore } from '@/stores/honourCategories'
+import { useNotificationsStore } from '@/stores/notifications'
 import NotificationsDropdown from '@/components/NotificationsDropdown.vue'
 import NewMenu from '@/components/NewMenu.vue'
 import UserMenu from '@/components/UserMenu.vue'
@@ -227,6 +228,22 @@ if (typeof window !== 'undefined') {
   window.addEventListener('torny:applications-count', onApplicationsCountUpdate)
   onBeforeUnmount(() => window.removeEventListener('torny:applications-count', onApplicationsCountUpdate))
 }
+
+// ── Notifications (brief 40) ──────────────────────────────────
+// The store handles the 60s poll + Page Visibility pause internally.
+// We just start/stop it when the active club flips.
+const notificationsStore = useNotificationsStore()
+const unreadNotifications = computed(() => notificationsStore.unreadCount)
+
+watch(
+  () => club.current?.id,
+  (id) => {
+    if (id != null && typeof id === 'number') notificationsStore.startPolling(id)
+    else notificationsStore.clear()
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => notificationsStore.stopPolling())
 
 // ── Events upcoming count ─────────────────────────────────────
 // One rolling year forward. EventsView dispatches torny:events-count after
@@ -504,7 +521,7 @@ const bottomTabs = computed<TabItem[]>(() => [
               <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
               <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
             </svg>
-            <span class="mobile-top__bell-dot" />
+            <span v-if="unreadNotifications > 0" class="mobile-top__bell-dot" :aria-label="`${unreadNotifications} unread notifications`" />
           </button>
           <button
             class="hamburger hamburger--mobile"
@@ -551,7 +568,7 @@ const bottomTabs = computed<TabItem[]>(() => [
               <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
               <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
             </svg>
-            <span class="topbar__bell-dot" />
+            <span v-if="unreadNotifications > 0" class="topbar__bell-dot" :aria-label="`${unreadNotifications} unread notifications`" />
           </button>
           <button
             class="topbar__new"

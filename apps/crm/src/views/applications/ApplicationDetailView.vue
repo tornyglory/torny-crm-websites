@@ -623,6 +623,7 @@ async function submitReject() {
   font-weight: 600;
   cursor: pointer;
   transition: background 120ms, border-color 120ms;
+  margin-left: auto;
 }
 .download-btn:hover { background: var(--color-surface); border-color: var(--color-ink); }
 .download-btn:active { transform: translateY(1px); }

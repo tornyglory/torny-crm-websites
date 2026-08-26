@@ -865,7 +865,7 @@ const bottomTabs = computed<TabItem[]>(() => [
 .mobile-top__avatar:hover { background: var(--color-ink); }
 
 /* -------- Page area -------- */
-.page { flex: 1; padding: 32px 40px; background: var(--color-surface); }
+.page { flex: 1; padding: 0 40px 32px 24px; background: var(--color-surface); }
 
 /* -------- Bottom tabbar -------- */
 .tabbar { display: none; position: sticky; bottom: 0; background: #fff; border-top: 1px solid var(--color-hairline); padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0)); z-index: 5; justify-content: space-around; }

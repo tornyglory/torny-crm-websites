@@ -58,6 +58,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'members/import', name: 'members-import', component: () => import('@/views/members/MembersImportView.vue') },
       { path: 'members/:id', name: 'member-detail', component: () => import('@/views/members/MemberDetailView.vue') },
       { path: 'applications', name: 'applications', component: () => import('@/views/applications/ApplicationsView.vue') },
+      { path: 'applications/:id', name: 'application-detail', component: () => import('@/views/applications/ApplicationDetailView.vue') },
       { path: 'enquiries', name: 'enquiries', component: () => import('@/views/enquiries/EnquiriesView.vue') },
       { path: 'events', name: 'events', component: () => import('@/views/events/EventsView.vue') },
       { path: 'teams', name: 'teams', component: () => import('@/views/teams/TeamsView.vue') },

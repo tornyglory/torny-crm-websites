@@ -54,6 +54,9 @@ const TAGS_BY_TYPE: Record<BlockType, Tag[]> = {
   membersSearch: ['data'],
   membershipJoinForm: ['forms', 'data'],
   peopleGrid:     ['layout', 'text'],
+  venueHireHero:  ['layout', 'text', 'media'],
+  venueSpaces:    ['layout', 'data'],
+  venuePackages:  ['layout', 'cta'],
   gallery:        ['media', 'layout'],
   contactForm:    ['forms'],
   membershipCta:  ['cta'],
@@ -308,6 +311,83 @@ const BlockPreview = defineComponent({
           rect(78, 99, 22, 4, { fill: ink, rx: 1 }),
           rect(134, 66, 50, 40, { fill: '#2563EB', rx: 2 }),
           rect(138, 99, 22, 4, { fill: ink, rx: 1 }),
+        ])
+
+      case 'venueHireHero':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          // Left copy
+          rect(12, 14, 20, 3, { fill: graphite, opacity: 0.5 }),
+          rect(12, 22, 80, 12, { fill: ink }),
+          rect(12, 40, 60, 3, { fill: graphite, opacity: 0.35 }),
+          // Stats
+          rect(12, 54, 20, 6, { fill: ink }),
+          rect(38, 54, 20, 6, { fill: ink }),
+          rect(64, 54, 20, 6, { fill: ink }),
+          // CTAs
+          rect(12, 70, 32, 8, { fill: ink, rx: 4 }),
+          rect(50, 72, 24, 3, { fill: graphite, opacity: 0.6 }),
+          // Right feature card
+          rect(100, 14, 88, 92, { fill: '#F97316', rx: 4 }),
+          rect(106, 20, 30, 4, { fill: '#fff', opacity: 0.4, rx: 2 }),
+          rect(155, 20, 30, 5, { fill: '#fff', rx: 2 }),
+          // Quote overlay
+          rect(112, 78, 70, 24, { fill: ink, opacity: 0.85, rx: 3 }),
+          rect(116, 82, 40, 3, { fill: '#fff', opacity: 0.9 }),
+          rect(116, 88, 44, 3, { fill: '#fff', opacity: 0.9 }),
+          rect(116, 96, 10, 4, { fill: '#2563EB', rx: 2 }),
+        ])
+
+      case 'venueSpaces':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          rect(14, 10, 60, 8, { fill: ink }),
+          rect(160, 12, 24, 3, { fill: graphite, opacity: 0.6 }),
+          // Three cards
+          ...[14, 78, 142].map((x, i) => {
+            const colors = ['#F97316', '#22C55E', ink]
+            return [
+              rect(x, 26, 44, 80, { fill: '#fff', stroke: graphite, opacity: 0.15, rx: 3 }),
+              rect(x, 26, 44, 30, { fill: colors[i]!, rx: 3 }),
+              rect(x + 30, 30, 10, 3, { fill: '#fff', opacity: 0.8, rx: 1 }),
+              rect(x + 4, 60, 26, 4, { fill: ink }),
+              rect(x + 4, 68, 30, 2, { fill: graphite, opacity: 0.4 }),
+              rect(x + 4, 74, 26, 2, { fill: graphite, opacity: 0.4 }),
+              rect(x + 4, 88, 16, 4, { fill: ink }),
+              rect(x + 24, 90, 16, 5, { fill: ink, rx: 2 }),
+            ]
+          }).flat(),
+        ])
+
+      case 'venuePackages':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          rect(70, 8, 60, 6, { fill: ink }),
+          rect(75, 18, 50, 3, { fill: graphite, opacity: 0.5 }),
+          // Three cards — middle featured
+          rect(14, 26, 56, 80, { fill: '#fff', stroke: graphite, opacity: 0.15, rx: 3 }),
+          rect(74, 22, 56, 84, { fill: ink, rx: 3 }),
+          rect(134, 26, 52, 80, { fill: '#fff', stroke: graphite, opacity: 0.15, rx: 3 }),
+          // Card content
+          ...[
+            { x: 14, dark: false },
+            { x: 74, dark: true },
+            { x: 134, dark: false },
+          ].map(({ x, dark }, i) => {
+            const y = dark ? 22 : 26
+            const nameFill = dark ? '#fff' : ink
+            const mutedFill = dark ? '#fff' : graphite
+            const mutedOpacity = dark ? 0.5 : 0.4
+            return [
+              rect(x + 4, y + 6, 20, 3, { fill: mutedFill, opacity: mutedOpacity }),
+              rect(x + 4, y + 14, 30, 5, { fill: nameFill }),
+              rect(x + 4, y + 26, 20, 8, { fill: nameFill }),
+              rect(x + 4, y + 40, 46, 2, { fill: mutedFill, opacity: mutedOpacity }),
+              rect(x + 4, y + 46, 40, 2, { fill: mutedFill, opacity: mutedOpacity }),
+              rect(x + 4, y + 52, 42, 2, { fill: mutedFill, opacity: mutedOpacity }),
+              rect(x + 4, y + 66, i === 1 ? 40 : 30, 6, { fill: i === 1 ? '#fff' : ink, rx: 3 }),
+            ]
+          }).flat(),
         ])
 
       case 'peopleGrid':

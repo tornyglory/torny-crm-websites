@@ -45,6 +45,12 @@ import type {
   PeopleGridProps,
   PeopleGridPerson,
   PeopleGridTone,
+  VenueHireHeroProps,
+  VenueSpacesProps,
+  VenueSpaceItem,
+  VenuePackagesProps,
+  VenuePackageItem,
+  VenueStat,
   ContactFormProps,
   MembershipCtaProps,
   CtaBannerProps,
@@ -374,6 +380,141 @@ const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
         people: [],
         columns: 4,
       }) },
+    { type: 'venueHireHero', label: 'Venue-hire hero', hint: 'Split hero with stats + testimonial card', icon: '◨',
+      defaults: (): VenueHireHeroProps => ({
+        eyebrow: 'VENUE HIRE · 2026',
+        heading: 'Have your next thing at our place.',
+        description: 'A clubhouse for eighty, three greens for the game, and a licensed bar that has poured Speight\'s since 1874. Birthdays, wakes, work days, wedding warm-ups.',
+        stats: [
+          { value: '80',  label: 'Seated capacity' },
+          { value: '140', label: 'Standing' },
+          { value: '$40', label: 'Per hour' },
+        ] satisfies VenueStat[],
+        primaryCta: { label: 'Check availability', href: '/venue-hire/book' },
+        secondaryCta: { label: 'Talk to Grace', href: '/contact' },
+        cardEyebrow: 'THE CLUBHOUSE · OCEAN LIGHT',
+        cardBadge: '3 FRIDAYS FREE IN OCT',
+        cardTone: 'tangerine',
+        cardImageUrl: '',
+        testimonial: {
+          quote: "Best 60th we've thrown. The green at dusk, the fire in the clubhouse, the bar going late.",
+          authorName: 'Ruth W.',
+          authorRole: 'HIRE · JUNE 2026',
+        },
+      }) },
+    { type: 'venueSpaces', label: 'Venue spaces', hint: 'Grid of hire-able spaces with capacity + price', icon: '▦',
+      defaults: (): VenueSpacesProps => ({
+        eyebrow: 'THREE SPACES · HIRE ONE OR ALL',
+        heading: 'Pick your patch.',
+        ctaLabel: 'All spaces are OK',
+        ctaHref: '/venue-hire',
+        spaces: [
+          {
+            name: 'The clubhouse',
+            badge: 'MOST BOOKED',
+            tone: 'tangerine',
+            description: 'Timber-lined main room, licensed bar, kitchen, and a fireplace that pulls its weight.',
+            capacity: 'Seated 80 · Standing 140',
+            availability: 'Any evening, plus weekends',
+            included: 'Bar staff · sound · cleanup',
+            price: '$180',
+            priceUnit: '/ half day',
+            ctaLabel: 'Book now',
+            ctaHref: '/venue-hire/book?space=clubhouse',
+          },
+          {
+            name: 'Green + BBQ',
+            badge: 'AVAILABLE',
+            tone: 'mint',
+            description: 'Green A plus the covered BBQ area. Perfect for a corporate day or a team-building afternoon.',
+            capacity: '40 · outdoors',
+            availability: 'Weekend mornings',
+            included: 'Bowls · coach · gear',
+            price: '$220',
+            priceUnit: '/ half day',
+            ctaLabel: 'Book now',
+            ctaHref: '/venue-hire/book?space=green-bbq',
+          },
+          {
+            name: 'Whole shebang',
+            badge: 'UP TO 150',
+            tone: 'ink',
+            description: 'Exclusive-use all-day: three greens, clubhouse, catering, and Grace on hand to run the game.',
+            capacity: 'Up to 150',
+            availability: 'One Saturday a month',
+            included: 'Full team, all in',
+            price: '$1,600',
+            priceUnit: '/ full day',
+            ctaLabel: 'Request a quote',
+            ctaHref: '/venue-hire/book?space=whole',
+          },
+        ] satisfies VenueSpaceItem[],
+      }) },
+    { type: 'venuePackages', label: 'Venue packages', hint: 'Corporate hire tiers — three pricing cards', icon: '☰',
+      defaults: (): VenuePackagesProps => ({
+        eyebrow: 'CORPORATE HIRE · 2026',
+        heading: 'Bowls for your team, delivered.',
+        description: 'Three packages tuned for corporate days, team building, and full-facility takeover. All catered, all coached, all sorted.',
+        packages: [
+          {
+            name: 'Team afternoon',
+            eyebrow: 'HALF DAY',
+            price: '$680',
+            priceSuffix: 'up to 20 people',
+            includes: [
+              '4 hours on the green with coaching',
+              'Refreshments, and a handshake at the end',
+              'Tea, coffee, and afternoon snacks',
+              'Weather backup — inside if wet',
+            ],
+            smallPrint: 'Mon–Thu after 4pm',
+            ctaLabel: 'Book afternoon',
+            ctaHref: '/venue-hire/book?package=team-afternoon',
+          },
+          {
+            name: 'Corporate day',
+            eyebrow: 'FULL DAY',
+            badge: 'MOST POPULAR',
+            featured: true,
+            price: '$1,850',
+            priceSuffix: 'up to 40 people',
+            includes: [
+              '10 hours · Green A + Clubhouse',
+              'Full lunch spread from Naenae Cafe',
+              'Bar open · staff + register included',
+              'Bowls kit for the whole team',
+              'Champion trophy for the winning team',
+            ],
+            smallPrint: '',
+            ctaLabel: 'Book a full day',
+            ctaHref: '/venue-hire/book?package=corporate-day',
+          },
+          {
+            name: 'Full takeover',
+            eyebrow: 'EXCLUSIVE',
+            price: '$3,400',
+            priceSuffix: 'up to 150 people',
+            includes: [
+              'Everything in Corporate day',
+              'Exclusive-use · 8am – 11pm',
+              'Full bar packages incl. keg reserve',
+              'Photographer for the day, all in',
+              'Named in the sponsors\' wall for a year',
+            ],
+            smallPrint: '',
+            ctaLabel: 'Request a quote',
+            ctaHref: '/venue-hire/book?package=full-takeover',
+          },
+        ] satisfies VenuePackageItem[],
+        footer: {
+          eyebrow: 'SOMETHING ELSE IN MIND?',
+          text: 'We can be bespoke. Get in touch with Grace.',
+          ctaLabel: 'Start a conversation',
+          ctaHref: '/contact',
+          contactName: 'Grace',
+          contactRole: 'EXT 143',
+        },
+      }) },
     { type: 'membershipCta', label: 'Membership CTA', hint: 'Push people to /membership', icon: '★',
       defaults: (): MembershipCtaProps => ({ heading: 'Play with us this season', body: 'Whether you\'re a first-time bowler or a seasoned skip, there\'s a spot for you.', ctaLabel: 'See tiers', ctaHref: '/membership' }) },
     { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
@@ -497,6 +638,9 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   membersSearch: 'Members',
   membershipJoinForm: 'Join form',
   peopleGrid: 'People grid',
+  venueHireHero: 'Venue-hire hero',
+  venueSpaces: 'Venue spaces',
+  venuePackages: 'Venue packages',
   gallery: 'Gallery',
   contactForm: 'Contact form',
   membershipCta: 'Membership CTA',
@@ -1103,6 +1247,9 @@ function blockSummary(block: Block): string {
       return p.heading ? `${p.heading} — ${scope}` : `Members — ${scope}`
     }
     case 'peopleGrid':    return (block.props as PeopleGridProps).heading || `${(block.props as PeopleGridProps).people.length} people`
+    case 'venueHireHero': return (block.props as VenueHireHeroProps).heading || 'Venue-hire hero'
+    case 'venueSpaces':   return (block.props as VenueSpacesProps).heading || `${(block.props as VenueSpacesProps).spaces.length} spaces`
+    case 'venuePackages': return (block.props as VenuePackagesProps).heading || `${(block.props as VenuePackagesProps).packages.length} packages`
     case 'gallery':       return `${(block.props as GalleryProps).images.length} photos`
     case 'contactForm':   return (block.props as ContactFormProps).heading || 'Contact form'
     case 'membershipJoinForm': return (block.props as MembershipJoinFormProps).heading || 'Join form'
@@ -1915,6 +2062,199 @@ const lastSavedLabel = computed(() => {
                 <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as PeopleGridProps).people.splice(pi, 1)">Remove</button>
               </div>
               <button type="button" class="gallery-add" @click="(selectedBlock!.props as PeopleGridProps).people.push({ name: '' } satisfies PeopleGridPerson)">+ Add person</button>
+            </div>
+          </template>
+
+          <!-- Venue-hire hero -->
+          <template v-else-if="selectedBlock.type === 'venueHireHero'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as VenueHireHeroProps).eyebrow" type="text" placeholder="VENUE HIRE · 2026" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <textarea v-model="(selectedBlock.props as VenueHireHeroProps).heading" rows="2" />
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as VenueHireHeroProps).description" rows="3" />
+            </label>
+            <div class="field">
+              <span class="field__label">Stats ({{ (selectedBlock.props as VenueHireHeroProps).stats?.length ?? 0 }})</span>
+              <div v-for="(s, si) in ((selectedBlock.props as VenueHireHeroProps).stats ?? [])" :key="si" class="gallery-item">
+                <div class="gallery-item__row">
+                  <input v-model="s.value" placeholder="Value (e.g. 80)" type="text" class="gallery-item__alt" style="flex: 1;" />
+                  <input v-model="s.label" placeholder="Label (e.g. Seated capacity)" type="text" class="gallery-item__alt" style="flex: 2;" />
+                </div>
+                <button type="button" class="gallery-item__remove" @click="((selectedBlock!.props as VenueHireHeroProps).stats ??= []).splice(si, 1)">Remove</button>
+              </div>
+              <button type="button" class="gallery-add" @click="((selectedBlock!.props as VenueHireHeroProps).stats ??= []).push({ value: '', label: '' })">+ Add stat</button>
+            </div>
+            <label class="field">
+              <span class="field__label">Primary CTA label</span>
+              <input v-model="(selectedBlock.props as VenueHireHeroProps).primaryCta!.label" type="text" placeholder="Check availability" />
+            </label>
+            <label class="field">
+              <span class="field__label">Primary CTA link</span>
+              <input v-model="(selectedBlock.props as VenueHireHeroProps).primaryCta!.href" type="text" placeholder="/venue-hire/book" />
+            </label>
+            <label class="field">
+              <span class="field__label">Secondary CTA label</span>
+              <input v-model="(selectedBlock.props as VenueHireHeroProps).secondaryCta!.label" type="text" placeholder="Talk to Grace" />
+            </label>
+            <label class="field">
+              <span class="field__label">Secondary CTA link</span>
+              <input v-model="(selectedBlock.props as VenueHireHeroProps).secondaryCta!.href" type="text" placeholder="/contact" />
+            </label>
+            <label class="field">
+              <span class="field__label">Card eyebrow</span>
+              <input v-model="(selectedBlock.props as VenueHireHeroProps).cardEyebrow" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Card badge</span>
+              <input v-model="(selectedBlock.props as VenueHireHeroProps).cardBadge" type="text" placeholder="3 FRIDAYS FREE IN OCT" />
+            </label>
+            <label class="field">
+              <span class="field__label">Card tone</span>
+              <select v-model="(selectedBlock.props as VenueHireHeroProps).cardTone">
+                <option value="tangerine">Tangerine</option>
+                <option value="mint">Mint</option>
+                <option value="accent">Accent</option>
+                <option value="ink">Ink</option>
+                <option value="violet">Violet</option>
+                <option value="sky">Sky</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Card background image URL</span>
+              <input v-model="(selectedBlock.props as VenueHireHeroProps).cardImageUrl" type="text" placeholder="/media/clubhouse-dusk.jpg" />
+              <span class="field__hint">Optional — overrides the tone gradient.</span>
+            </label>
+            <div class="field">
+              <span class="field__label">Testimonial</span>
+              <textarea v-model="(selectedBlock.props as VenueHireHeroProps).testimonial!.quote" rows="3" placeholder="Quote from a happy hirer" />
+              <div class="gallery-item">
+                <input v-model="(selectedBlock.props as VenueHireHeroProps).testimonial!.authorName" placeholder="Author name" type="text" class="gallery-item__alt" />
+                <input v-model="(selectedBlock.props as VenueHireHeroProps).testimonial!.authorRole" placeholder="Role or context (e.g. HIRE · JUNE 2026)" type="text" class="gallery-item__alt" />
+                <input v-model="(selectedBlock.props as VenueHireHeroProps).testimonial!.authorInitials" placeholder="Initials (auto if empty)" type="text" class="gallery-item__alt" />
+              </div>
+            </div>
+          </template>
+
+          <!-- Venue spaces -->
+          <template v-else-if="selectedBlock.type === 'venueSpaces'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as VenueSpacesProps).eyebrow" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as VenueSpacesProps).heading" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Right link label</span>
+              <input v-model="(selectedBlock.props as VenueSpacesProps).ctaLabel" type="text" placeholder="All spaces are OK" />
+            </label>
+            <label class="field">
+              <span class="field__label">Right link URL</span>
+              <input v-model="(selectedBlock.props as VenueSpacesProps).ctaHref" type="text" placeholder="/venue-hire" />
+            </label>
+            <div class="field">
+              <span class="field__label">Spaces ({{ (selectedBlock.props as VenueSpacesProps).spaces.length }})</span>
+              <div v-for="(sp, si) in (selectedBlock.props as VenueSpacesProps).spaces" :key="si" class="gallery-item">
+                <input v-model="sp.name" placeholder="Space name" type="text" class="gallery-item__alt" />
+                <input v-model="sp.badge" placeholder="Badge — e.g. MOST BOOKED" type="text" class="gallery-item__alt" />
+                <textarea v-model="sp.description" placeholder="One-line description" rows="2" class="gallery-item__alt" />
+                <div class="gallery-item__row">
+                  <select v-model="sp.tone" class="gallery-item__alt" style="flex: 1;">
+                    <option :value="undefined">Auto tone</option>
+                    <option value="tangerine">Tangerine</option>
+                    <option value="mint">Mint</option>
+                    <option value="ink">Ink</option>
+                    <option value="accent">Accent</option>
+                    <option value="violet">Violet</option>
+                    <option value="sky">Sky</option>
+                  </select>
+                  <input v-model="sp.imageUrl" placeholder="Photo URL (optional)" type="text" class="gallery-item__alt" style="flex: 2;" />
+                </div>
+                <input v-model="sp.capacity" placeholder="Capacity — Seated 80 · Standing 140" type="text" class="gallery-item__alt" />
+                <input v-model="sp.availability" placeholder="Availability" type="text" class="gallery-item__alt" />
+                <input v-model="sp.included" placeholder="What's included" type="text" class="gallery-item__alt" />
+                <div class="gallery-item__row">
+                  <input v-model="sp.price" placeholder="Price ($180)" type="text" class="gallery-item__alt" style="flex: 1;" />
+                  <input v-model="sp.priceUnit" placeholder="Unit (/ half day)" type="text" class="gallery-item__alt" style="flex: 1;" />
+                </div>
+                <div class="gallery-item__row">
+                  <input v-model="sp.ctaLabel" placeholder="CTA label (Book now)" type="text" class="gallery-item__alt" style="flex: 1;" />
+                  <input v-model="sp.ctaHref" placeholder="CTA URL" type="text" class="gallery-item__alt" style="flex: 1;" />
+                </div>
+                <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as VenueSpacesProps).spaces.splice(si, 1)">Remove</button>
+              </div>
+              <button type="button" class="gallery-add" @click="(selectedBlock!.props as VenueSpacesProps).spaces.push({ name: '' } satisfies VenueSpaceItem)">+ Add space</button>
+            </div>
+          </template>
+
+          <!-- Venue packages -->
+          <template v-else-if="selectedBlock.type === 'venuePackages'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as VenuePackagesProps).eyebrow" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <textarea v-model="(selectedBlock.props as VenuePackagesProps).heading" rows="2" />
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as VenuePackagesProps).description" rows="3" />
+            </label>
+            <div class="field">
+              <span class="field__label">Packages ({{ (selectedBlock.props as VenuePackagesProps).packages.length }})</span>
+              <div v-for="(pkg, pi) in (selectedBlock.props as VenuePackagesProps).packages" :key="pi" class="gallery-item">
+                <input v-model="pkg.name" placeholder="Package name" type="text" class="gallery-item__alt" />
+                <div class="gallery-item__row">
+                  <input v-model="pkg.eyebrow" placeholder="Eyebrow (HALF DAY)" type="text" class="gallery-item__alt" style="flex: 1;" />
+                  <input v-model="pkg.badge" placeholder="Badge (MOST POPULAR)" type="text" class="gallery-item__alt" style="flex: 1;" />
+                </div>
+                <div class="gallery-item__row">
+                  <input v-model="pkg.price" placeholder="Price ($680)" type="text" class="gallery-item__alt" style="flex: 1;" />
+                  <input v-model="pkg.priceSuffix" placeholder="Suffix (up to 20 people)" type="text" class="gallery-item__alt" style="flex: 2;" />
+                </div>
+                <div class="chip-picker">
+                  <label class="chip-picker__item">
+                    <input type="checkbox" v-model="pkg.featured" />
+                    <span>Featured (dark card)</span>
+                  </label>
+                </div>
+                <textarea
+                  :value="(pkg.includes ?? []).join('\n')"
+                  @input="pkg.includes = ($event.target as HTMLTextAreaElement).value.split('\n').filter(Boolean)"
+                  placeholder="Includes — one per line"
+                  rows="5"
+                  class="gallery-item__alt"
+                />
+                <input v-model="pkg.smallPrint" placeholder="Small print (e.g. Mon–Thu after 4pm)" type="text" class="gallery-item__alt" />
+                <div class="gallery-item__row">
+                  <input v-model="pkg.ctaLabel" placeholder="CTA label (Book afternoon)" type="text" class="gallery-item__alt" style="flex: 1;" />
+                  <input v-model="pkg.ctaHref" placeholder="CTA URL" type="text" class="gallery-item__alt" style="flex: 1;" />
+                </div>
+                <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as VenuePackagesProps).packages.splice(pi, 1)">Remove</button>
+              </div>
+              <button type="button" class="gallery-add" @click="(selectedBlock!.props as VenuePackagesProps).packages.push({ name: '' } satisfies VenuePackageItem)">+ Add package</button>
+            </div>
+            <div class="field">
+              <span class="field__label">Footer strip</span>
+              <input v-model="(selectedBlock.props as VenuePackagesProps).footer!.eyebrow" placeholder="Eyebrow (SOMETHING ELSE IN MIND?)" type="text" />
+              <textarea v-model="(selectedBlock.props as VenuePackagesProps).footer!.text" placeholder="One-liner — e.g. We can be bespoke. Get in touch with Grace." rows="2" />
+              <div class="gallery-item__row">
+                <input v-model="(selectedBlock.props as VenuePackagesProps).footer!.ctaLabel" placeholder="CTA label" type="text" style="flex: 1;" />
+                <input v-model="(selectedBlock.props as VenuePackagesProps).footer!.ctaHref" placeholder="CTA URL" type="text" style="flex: 1;" />
+              </div>
+              <div class="gallery-item__row">
+                <input v-model="(selectedBlock.props as VenuePackagesProps).footer!.contactName" placeholder="Contact name" type="text" style="flex: 1;" />
+                <input v-model="(selectedBlock.props as VenuePackagesProps).footer!.contactRole" placeholder="Role (EXT 143)" type="text" style="flex: 1;" />
+                <input v-model="(selectedBlock.props as VenuePackagesProps).footer!.contactInitials" placeholder="Initials" type="text" style="width: 80px;" />
+              </div>
             </div>
           </template>
 

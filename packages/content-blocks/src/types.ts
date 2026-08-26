@@ -8,6 +8,9 @@ export type BlockType =
   | 'membersSearch'
   | 'membershipJoinForm'
   | 'peopleGrid'
+  | 'venueHireHero'
+  | 'venueSpaces'
+  | 'venuePackages'
   | 'gallery'
   | 'contactForm'
   | 'membershipCta'
@@ -145,6 +148,110 @@ export interface PeopleGridProps {
   people: PeopleGridPerson[]
   /** Cards per row on desktop. Default 4. */
   columns?: 2 | 3 | 4
+}
+
+/** Reusable palette slot for venue blocks — shared with PeopleGrid. */
+export type VenueTone = PeopleGridTone
+
+export interface VenueStat {
+  value: string
+  label: string
+}
+
+export interface VenueTestimonial {
+  quote: string
+  authorName: string
+  authorRole?: string
+  authorInitials?: string
+  authorAvatarUrl?: string
+}
+
+export interface VenueHireHeroProps {
+  eyebrow?: string
+  heading: string
+  description?: string
+  /** Three stat pills under the description. */
+  stats?: VenueStat[]
+  primaryCta?: { label: string; href: string }
+  secondaryCta?: { label: string; href: string }
+  /** Right-side feature card. */
+  cardEyebrow?: string
+  /** Bright badge floated over the card — e.g. "3 FRIDAYS FREE IN OCT". */
+  cardBadge?: string
+  /** Colour treatment for the right card. Defaults to `tangerine`. */
+  cardTone?: VenueTone
+  /** Background photo URL for the card. Falls back to the tone gradient. */
+  cardImageUrl?: string
+  /** Overlay quote card. Positioned bottom-right of the feature card. */
+  testimonial?: VenueTestimonial
+}
+
+export interface VenueSpaceItem {
+  name: string
+  /** Small mono line above the name — e.g. "MOST BOOKED". */
+  badge?: string
+  /** Coloured card treatment on the top half of the card. */
+  tone?: VenueTone
+  /** Optional photo behind the tone. */
+  imageUrl?: string
+  /** Short blurb rendered under the name. */
+  description?: string
+  /** Detail rows on the card. */
+  capacity?: string
+  availability?: string
+  included?: string
+  price?: string
+  priceUnit?: string
+  ctaLabel?: string
+  ctaHref?: string
+}
+
+export interface VenueSpacesProps {
+  eyebrow?: string
+  heading?: string
+  /** Right-aligned CTA link on the header row. */
+  ctaLabel?: string
+  ctaHref?: string
+  spaces: VenueSpaceItem[]
+}
+
+export interface VenuePackageItem {
+  /** Big display name — e.g. "Team afternoon". */
+  name: string
+  /** Small mono eyebrow — e.g. "HALF DAY". */
+  eyebrow?: string
+  /** Highlighted badge — e.g. "MOST POPULAR". */
+  badge?: string
+  price?: string
+  /** Line under the price — e.g. "up to 20 people". */
+  priceSuffix?: string
+  /** Ticked list of what's included. */
+  includes?: string[]
+  /** Small print at the bottom of the includes list. */
+  smallPrint?: string
+  ctaLabel?: string
+  ctaHref?: string
+  /** Turns the card black with white type (for the "hero" tier). */
+  featured?: boolean
+}
+
+export interface VenuePackagesFooter {
+  eyebrow?: string
+  text?: string
+  ctaLabel?: string
+  ctaHref?: string
+  contactName?: string
+  contactRole?: string
+  contactInitials?: string
+  contactAvatarUrl?: string
+}
+
+export interface VenuePackagesProps {
+  eyebrow?: string
+  heading?: string
+  description?: string
+  packages: VenuePackageItem[]
+  footer?: VenuePackagesFooter
 }
 
 export interface GalleryImage {
@@ -348,6 +455,9 @@ export type Block =
   | BlockBase<'membersSearch', MembersSearchProps>
   | BlockBase<'membershipJoinForm', MembershipJoinFormProps>
   | BlockBase<'peopleGrid', PeopleGridProps>
+  | BlockBase<'venueHireHero', VenueHireHeroProps>
+  | BlockBase<'venueSpaces', VenueSpacesProps>
+  | BlockBase<'venuePackages', VenuePackagesProps>
   | BlockBase<'gallery', GalleryProps>
   | BlockBase<'contactForm', ContactFormProps>
   | BlockBase<'membershipCta', MembershipCtaProps>

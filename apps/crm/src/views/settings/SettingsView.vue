@@ -11,8 +11,13 @@ import { useNotificationsStore } from '@/stores/notifications'
 import {
   ApiError,
   clubs,
+  emailTemplate as emailTemplateApi,
   enquiries as enquiriesApi,
   type EmailDigest,
+  type EmailFlavor,
+  type EmailTemplate,
+  type EmailTemplatePatch,
+  type EmailVariable,
   type EnquirySettings,
   type EnquiryTopic,
   type MembershipTierListItem,
@@ -55,6 +60,7 @@ type SectionKey =
   | 'security'
   | 'notifications'
   | 'enquiries'
+  | 'email'
   | 'integrations'
   | 'danger'
 
@@ -67,6 +73,7 @@ const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
   { key: 'security', label: 'Security', hint: 'Sign-in, sessions, 2FA.' },
   { key: 'notifications', label: 'Notifications', hint: 'Which kinds ping you in-app + by email.' },
   { key: 'enquiries', label: 'Enquiries', hint: 'Contact-form intake, notify email, auto-reply.' },
+  { key: 'email', label: 'Email template', hint: 'Header + footer for every outgoing email.' },
   { key: 'integrations', label: 'Integrations', hint: 'Stripe, Google Calendar, mail.' },
   { key: 'danger', label: 'Danger zone', hint: 'Archive or transfer the club.' },
 ]
@@ -528,6 +535,208 @@ async function saveEnquirySettings() {
     enquirySettingsSaving.value = false
   }
 }
+
+// ── Email template (brief 45) ─────────────────────────────────
+// Owner-editable header + footer that wraps every outgoing club email.
+// {{curly-brace}} tokens get substituted at send time by the backend;
+// the CRM preview does the same substitution client-side using each
+// variable's `sample` value (or the owner's `sample_overrides`).
+
+const EMAIL_FLAVORS: Array<{ value: EmailFlavor; label: string; subject: string; body: string }> = [
+  { value: 'application_received', label: 'Application received', subject: 'Thanks for applying to {{club_name}}', body: 'Hi {{recipient_first_name}},\n\nThanks for your membership application. The committee reviews new applications weekly — you\'ll hear from us within seven days.\n\nApplied for: {{application_tier}}\n\nIf you don\'t hear back, email membership@{{club_name}} and we\'ll chase it up.\n\nSee you on the greens,\n{{club_name}}' },
+  { value: 'application_approved', label: 'Application approved', subject: 'Welcome to {{club_name}}', body: 'Hi {{recipient_first_name}},\n\nGreat news — your application to join {{club_name}} has been approved.\n\nHere\'s your member sign-in: {{sign_in_url}}\n\nSee you on the greens,\n{{club_name}}' },
+  { value: 'application_rejected', label: 'Application declined', subject: 'Update on your application to {{club_name}}', body: 'Hi {{recipient_first_name}},\n\nThanks for your interest in joining {{club_name}}. Unfortunately we\'re not able to progress your application at this time.\n\nRegards,\n{{club_name}}' },
+  { value: 'enquiry_received', label: 'Enquiry received', subject: 'Thanks for reaching out', body: 'Hi {{recipient_first_name}},\n\nThanks for your enquiry to {{club_name}}. We\'ll be in touch within a day or two.\n\nIf it\'s urgent, ring the clubhouse on {{club_phone}}.\n\n{{club_name}}' },
+  { value: 'enquiry_reply', label: 'Enquiry reply', subject: 'Re: your enquiry to {{club_name}}', body: '{{reply_body}}' },
+  { value: 'member_welcome', label: 'Member welcome', subject: 'Welcome to {{club_name}}, {{recipient_first_name}}', body: 'Hi {{recipient_first_name}},\n\nWelcome to {{club_name}}. You\'re officially a member — sign in any time at {{sign_in_url}}.\n\nSee you on the greens,\n{{club_name}}' },
+  { value: 'broadcast', label: 'Broadcast / announcement', subject: 'A quick note from {{club_name}}', body: 'Hi {{recipient_first_name}},\n\n[Your broadcast body goes here — use {{tokens}} to personalise per member.]\n\n— {{club_name}}' },
+]
+
+const emailTemplate = ref<EmailTemplate | null>(null)
+const emailLoading = ref(false)
+const emailSaving = ref(false)
+const emailTestSending = ref(false)
+const emailDraft = reactive<EmailTemplatePatch>({})
+const emailPreviewFlavor = ref<EmailFlavor>('application_received')
+const emailPreviewDevice = ref<'desktop' | 'mobile'>('desktop')
+
+async function loadEmailTemplate() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  emailLoading.value = true
+  try {
+    emailTemplate.value = await emailTemplateApi.get(cid)
+  } catch (err) {
+    // Endpoint may 404 until brief 45 ships — set a client-side stub so the
+    // preview + editor still works.
+    if (err instanceof ApiError && err.status === 404) {
+      emailTemplate.value = stubEmailTemplate()
+    } else {
+      toast.error(err instanceof ApiError ? err.message : 'Could not load email template.')
+    }
+  } finally {
+    emailLoading.value = false
+  }
+}
+onMounted(loadEmailTemplate)
+watch(() => clubStore.current?.id, loadEmailTemplate)
+
+function stubEmailTemplate(): EmailTemplate {
+  return {
+    header_html: '<div style="padding: 24px 32px; border-bottom: 1px solid #E7E7E1;">\n  <div style="font-family: Space Grotesk, sans-serif; font-size: 20px; font-weight: 700; color: #0A0A0B;">{{club_name}}</div>\n  <div style="font-family: JetBrains Mono, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B6B72; margin-top: 4px;">EST. 1953 · HUTT VALLEY</div>\n</div>',
+    footer_html: '<div style="padding: 32px; border-top: 1px solid #E7E7E1; text-align: center; font-family: Inter, sans-serif; font-size: 12px; color: #6B6B72;">\n  <div>{{club_name}}</div>\n  <div style="margin-top: 4px;">{{club_address}}</div>\n  <div style="margin-top: 4px;"><a href="mailto:{{club_email}}" style="color: #6B6B72;">{{club_email}}</a> · {{club_phone}}</div>\n  <div style="margin-top: 16px; font-size: 11px;"><a href="{{unsubscribe_url}}" style="color: #A3A39B;">Unsubscribe</a> · © {{year}} {{club_name}}</div>\n</div>',
+    accent_colour: null,
+    font_family: null,
+    show_logo: true,
+    sample_overrides: {},
+    variables: STUB_VARIABLES,
+    updated_at: null,
+  }
+}
+
+const STUB_VARIABLES: EmailVariable[] = [
+  { key: 'club_name',              token: '{{club_name}}',              label: 'Club name',                     category: 'club',      sample: 'Naenae Bowling Club' },
+  { key: 'club_email',             token: '{{club_email}}',             label: 'Club email',                    category: 'club',      sample: 'hello@naenaebowls.nz' },
+  { key: 'club_phone',             token: '{{club_phone}}',             label: 'Club phone',                    category: 'club',      sample: '04 567 5823' },
+  { key: 'club_address',           token: '{{club_address}}',           label: 'Club address',                  category: 'club',      sample: '25 Vogel Street, Naenae, Lower Hutt' },
+  { key: 'club_logo_url',          token: '{{club_logo_url}}',          label: 'Club logo URL',                 category: 'club',      sample: '' },
+  { key: 'club_url',               token: '{{club_url}}',               label: 'Public site URL',               category: 'club',      sample: 'https://naenaebowls.torny.co' },
+  { key: 'recipient_name',         token: '{{recipient_name}}',         label: "Recipient's full name",         category: 'recipient', sample: 'Frances Roydon-Miller' },
+  { key: 'recipient_first_name',   token: '{{recipient_first_name}}',   label: "Recipient's first name",        category: 'recipient', sample: 'Frances' },
+  { key: 'recipient_email',        token: '{{recipient_email}}',        label: "Recipient's email",             category: 'recipient', sample: 'frances@example.co.nz' },
+  { key: 'application_tier',       token: '{{application_tier}}',       label: 'Applied membership tier',       category: 'context',   sample: 'Playing member', flavors: ['application_received', 'application_approved', 'application_rejected'] },
+  { key: 'event_name',             token: '{{event_name}}',             label: 'Event name',                    category: 'context',   sample: 'Twilight Triples · Round 3', flavors: ['broadcast'] },
+  { key: 'event_date',             token: '{{event_date}}',             label: 'Event date',                    category: 'context',   sample: 'Friday 10 October 5:30pm', flavors: ['broadcast'] },
+  { key: 'reply_body',             token: '{{reply_body}}',             label: 'Admin reply body',              category: 'context',   sample: 'Great to hear from you — come along Friday.', flavors: ['enquiry_reply'] },
+  { key: 'sign_in_url',            token: '{{sign_in_url}}',            label: 'Sign-in URL',                   category: 'auto',      sample: 'https://naenaebowls.torny.co/sign-in' },
+  { key: 'unsubscribe_url',        token: '{{unsubscribe_url}}',        label: 'Unsubscribe URL',               category: 'auto',      sample: 'https://naenaebowls.torny.co/unsubscribe/…' },
+  { key: 'year',                   token: '{{year}}',                   label: 'Current year',                  category: 'auto',      sample: String(new Date().getFullYear()) },
+]
+
+// ── Draft helpers ────
+function draftedHeader(): string {
+  return emailDraft.header_html ?? emailTemplate.value?.header_html ?? ''
+}
+function draftedFooter(): string {
+  return emailDraft.footer_html ?? emailTemplate.value?.footer_html ?? ''
+}
+function draftedShowLogo(): boolean {
+  return emailDraft.show_logo ?? emailTemplate.value?.show_logo ?? true
+}
+const draftedHeaderVal = computed(draftedHeader)
+const draftedFooterVal = computed(draftedFooter)
+const draftedShowLogoVal = computed(draftedShowLogo)
+
+function stageHeader(v: string) {
+  const stored = emailTemplate.value?.header_html ?? ''
+  if (v === stored) delete emailDraft.header_html
+  else emailDraft.header_html = v
+}
+function stageFooter(v: string) {
+  const stored = emailTemplate.value?.footer_html ?? ''
+  if (v === stored) delete emailDraft.footer_html
+  else emailDraft.footer_html = v
+}
+function stageShowLogo() {
+  const stored = emailTemplate.value?.show_logo ?? true
+  const next = !draftedShowLogo()
+  if (next === stored) delete emailDraft.show_logo
+  else emailDraft.show_logo = next
+}
+const isEmailDirty = computed(() =>
+  emailDraft.header_html !== undefined || emailDraft.footer_html !== undefined || emailDraft.show_logo !== undefined,
+)
+function clearEmailDraft() {
+  delete emailDraft.header_html
+  delete emailDraft.footer_html
+  delete emailDraft.show_logo
+}
+async function saveEmailTemplate() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number' || !isEmailDirty.value) return
+  emailSaving.value = true
+  try {
+    emailTemplate.value = await emailTemplateApi.update(cid, { ...emailDraft })
+    clearEmailDraft()
+    toast.success('Email template saved.')
+  } catch (err) {
+    const body = err instanceof ApiError ? ((err.body ?? {}) as { code?: string }) : {}
+    if (body.code === 'unknown_variable') toast.error('One of the {{variables}} isn\'t recognised — check the palette on the right.')
+    else if (body.code === 'header_too_long') toast.error('Header HTML is too long. Trim it back.')
+    else if (body.code === 'footer_too_long') toast.error('Footer HTML is too long. Trim it back.')
+    else if (body.code === 'bad_html') toast.error('The HTML has an issue — check for unclosed tags.')
+    else toast.error(err instanceof ApiError ? err.message : 'Could not save email template.')
+  } finally {
+    emailSaving.value = false
+  }
+}
+async function sendTestEmail() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  emailTestSending.value = true
+  try {
+    const res = await emailTemplateApi.testSend(cid, { flavor: emailPreviewFlavor.value })
+    toast.success(`Test email sent to ${res.to}.`)
+  } catch (err) {
+    const body = err instanceof ApiError ? ((err.body ?? {}) as { code?: string }) : {}
+    if (body.code === 'rate_limited') toast.error('One test at a time — wait a minute and try again.')
+    else if (body.code === 'send_failed') toast.error('Send failed — check your SMTP settings.')
+    else toast.error(err instanceof ApiError ? err.message : 'Could not send test.')
+  } finally {
+    emailTestSending.value = false
+  }
+}
+
+// ── Variable substitution — client-side preview render ─────────
+function sampleValueFor(v: EmailVariable): string {
+  const override = emailTemplate.value?.sample_overrides[v.key]
+  return override ?? v.sample
+}
+function substituteTokens(html: string): string {
+  const vars = emailTemplate.value?.variables ?? STUB_VARIABLES
+  return vars.reduce((acc, v) => acc.split(v.token).join(sampleValueFor(v)), html)
+}
+function copyToken(token: string) {
+  if (typeof navigator === 'undefined' || !navigator.clipboard) return
+  void navigator.clipboard.writeText(token).catch(() => { /* silent */ })
+  toast.success(`Copied ${token}`)
+}
+function insertToken(target: 'header' | 'footer', token: string) {
+  if (target === 'header') stageHeader(draftedHeader() + token)
+  else stageFooter(draftedFooter() + token)
+}
+const availableVariables = computed(() => {
+  const list = emailTemplate.value?.variables ?? STUB_VARIABLES
+  return list.filter((v) => !v.flavors || v.flavors.includes(emailPreviewFlavor.value))
+})
+const variablesByCategory = computed(() => {
+  const groups: Record<string, EmailVariable[]> = { club: [], recipient: [], context: [], auto: [] }
+  for (const v of availableVariables.value) {
+    if (groups[v.category]) groups[v.category]!.push(v)
+  }
+  return groups
+})
+
+// ── Preview render ─────
+const currentFlavor = computed(() => EMAIL_FLAVORS.find((f) => f.value === emailPreviewFlavor.value)!)
+const renderedSubject = computed(() => substituteTokens(currentFlavor.value.subject))
+const renderedHeader = computed(() => substituteTokens(draftedHeaderVal.value))
+const renderedFooter = computed(() => substituteTokens(draftedFooterVal.value))
+const renderedBody = computed(() => {
+  // Escape HTML for the body then convert double-newlines to paragraphs
+  // — mirrors the platform default (owner doesn't write per-email HTML).
+  const escaped = substituteTokens(currentFlavor.value.body)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  return escaped
+    .split(/\n{2,}/)
+    .map((p) => `<p style="margin: 0 0 16px; font-family: Inter, sans-serif; font-size: 15px; line-height: 155%; color: #0A0A0B;">${p.replace(/\n/g, '<br>')}</p>`)
+    .join('')
+})
+const previewShellStyle = computed(() => ({
+  maxWidth: emailPreviewDevice.value === 'mobile' ? '390px' : '640px',
+}))
 
 // ── Opening hours (shared with onboarding store) ───────────────
 const HOURS_DAYS = [
@@ -1238,6 +1447,138 @@ function sendInvite() {
           </div>
         </template>
 
+        <!-- Email template -->
+        <template v-else-if="active === 'email'">
+          <div class="card">
+            <div class="card__head">
+              <div>
+                <div class="card__eyebrow">Transactional email</div>
+                <h2 class="card__title">Header &amp; footer</h2>
+              </div>
+              <div class="tier__head-actions">
+                <span v-if="isEmailDirty && !emailSaving" class="tier__saving tier__saving--pending">Unsaved changes</span>
+                <button
+                  type="button"
+                  class="ghost-btn"
+                  :disabled="!isEmailDirty || emailSaving"
+                  @click="clearEmailDraft"
+                >Discard</button>
+                <button
+                  type="button"
+                  class="primary-btn"
+                  :disabled="!isEmailDirty || emailSaving"
+                  @click="saveEmailTemplate"
+                >{{ emailSaving ? 'Saving…' : 'Save changes' }}</button>
+              </div>
+            </div>
+            <p class="card__sub">Applied to every outgoing club email — applications, enquiries, welcomes, broadcasts. Use <code>{{ '{{' }}variables{{ '}}' }}</code> to inject values at send time.</p>
+
+            <div class="email-editor">
+              <div class="email-editor__pane">
+                <label class="field">
+                  <span class="field__label">Header HTML</span>
+                  <textarea
+                    :value="draftedHeaderVal"
+                    @input="stageHeader(($event.target as HTMLTextAreaElement).value)"
+                    rows="10"
+                    class="email-editor__textarea"
+                    spellcheck="false"
+                  ></textarea>
+                  <span class="field__hint">Rendered above the body. Inline styles only — external CSS is dropped by most mail clients.</span>
+                </label>
+                <label class="field">
+                  <span class="field__label">Footer HTML</span>
+                  <textarea
+                    :value="draftedFooterVal"
+                    @input="stageFooter(($event.target as HTMLTextAreaElement).value)"
+                    rows="10"
+                    class="email-editor__textarea"
+                    spellcheck="false"
+                  ></textarea>
+                  <span class="field__hint">Must include the {{ '{{unsubscribe_url}}' }} link for CAN-SPAM compliance.</span>
+                </label>
+                <label class="switch-row">
+                  <div>
+                    <div class="switch-row__label">Show club logo above header</div>
+                    <div class="switch-row__hint">Uses the logo from Club &amp; brand. Turn off if your header HTML already includes an image.</div>
+                  </div>
+                  <button type="button" class="switch" :class="{ 'is-on': draftedShowLogoVal }" @click="stageShowLogo">
+                    <span class="switch__knob" />
+                  </button>
+                </label>
+              </div>
+
+              <aside class="email-vars">
+                <div class="email-vars__head">
+                  <h3 class="email-vars__title">Variables</h3>
+                  <p class="email-vars__hint">Click to copy or hit "Insert" to append to the focused editor.</p>
+                </div>
+                <template v-for="(list, cat) in variablesByCategory" :key="cat">
+                  <div v-if="list.length > 0" class="email-vars__group">
+                    <div class="email-vars__category">{{ cat }}</div>
+                    <ul class="email-vars__list">
+                      <li v-for="v in list" :key="v.key" class="email-vars__item">
+                        <button type="button" class="email-vars__token" @click="copyToken(v.token)" :title="`${v.label} — sample: ${v.sample}`">
+                          {{ v.token }}
+                        </button>
+                        <span class="email-vars__label">{{ v.label }}</span>
+                        <div class="email-vars__insert">
+                          <button type="button" @click="insertToken('header', v.token)">→ Header</button>
+                          <button type="button" @click="insertToken('footer', v.token)">→ Footer</button>
+                        </div>
+                      </li>
+                    </ul>
+                  </div>
+                </template>
+              </aside>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card__head">
+              <div>
+                <div class="card__eyebrow">Preview</div>
+                <h2 class="card__title">See it in a real email</h2>
+              </div>
+              <button
+                type="button"
+                class="primary-btn"
+                :disabled="emailTestSending"
+                @click="sendTestEmail"
+              >{{ emailTestSending ? 'Sending…' : 'Send test to me' }}</button>
+            </div>
+            <p class="card__sub">Substitutes {{ '{{' }}variables{{ '}}' }} with sample data. The real send uses the actual recipient's details.</p>
+
+            <div class="email-preview-controls">
+              <div class="segmented">
+                <button
+                  v-for="f in EMAIL_FLAVORS"
+                  :key="f.value"
+                  type="button"
+                  :class="{ 'is-on': emailPreviewFlavor === f.value }"
+                  @click="emailPreviewFlavor = f.value"
+                >{{ f.label }}</button>
+              </div>
+              <div class="segmented segmented--sm">
+                <button type="button" :class="{ 'is-on': emailPreviewDevice === 'desktop' }" @click="emailPreviewDevice = 'desktop'">Desktop</button>
+                <button type="button" :class="{ 'is-on': emailPreviewDevice === 'mobile' }" @click="emailPreviewDevice = 'mobile'">Mobile</button>
+              </div>
+            </div>
+
+            <div class="email-preview-frame">
+              <div class="email-preview-meta">
+                <div class="email-preview-meta-row"><span>Subject</span><span class="email-preview-subject">{{ renderedSubject }}</span></div>
+                <div class="email-preview-meta-row"><span>To</span><span>frances@example.co.nz</span></div>
+              </div>
+              <div class="email-preview-shell" :style="previewShellStyle">
+                <div class="email-preview-inner" v-html="renderedHeader" />
+                <div class="email-preview-body" v-html="renderedBody" />
+                <div class="email-preview-inner" v-html="renderedFooter" />
+              </div>
+            </div>
+          </div>
+        </template>
+
         <!-- Integrations -->
         <template v-else-if="active === 'integrations'">
           <div class="grid grid--intg">
@@ -1490,6 +1831,43 @@ function sendInvite() {
 
 .notif-digest { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--color-hairline); }
 .notif-digest .field__label { margin-bottom: 8px; }
+
+/* ── Email template ─────────────────────────────────────────── */
+.email-editor { display: grid; grid-template-columns: 1fr 320px; gap: 20px; margin-top: 16px; align-items: flex-start; }
+.email-editor__pane { display: flex; flex-direction: column; gap: 20px; }
+.email-editor__textarea { padding: 12px 14px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-mono); font-size: 12px; line-height: 155%; color: var(--color-ink); background: var(--color-surface); resize: vertical; min-height: 200px; box-sizing: border-box; width: 100%; }
+.email-editor__textarea:focus { outline: none; border-color: var(--color-ink); background: #fff; }
+
+.email-vars { padding: 20px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 12px; display: flex; flex-direction: column; gap: 16px; }
+.email-vars__title { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--color-ink); margin: 0; }
+.email-vars__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin: 0; line-height: 145%; }
+.email-vars__group { display: flex; flex-direction: column; gap: 6px; }
+.email-vars__category { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
+.email-vars__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.email-vars__item { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 8px; }
+.email-vars__token { padding: 3px 6px; background: var(--color-ink); color: #fff; border: 0; border-radius: 6px; font-family: var(--font-mono); font-size: 11px; cursor: pointer; }
+.email-vars__token:hover { background: var(--color-graphite); }
+.email-vars__label { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); flex: 1; min-width: 0; }
+.email-vars__insert { display: flex; gap: 4px; }
+.email-vars__insert button { padding: 2px 6px; background: transparent; border: 1px solid var(--color-hairline); border-radius: 6px; font-family: var(--font-body); font-size: 10px; color: var(--color-fog); cursor: pointer; }
+.email-vars__insert button:hover { color: var(--color-ink); border-color: var(--color-ink); }
+
+.email-preview-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+.email-preview-controls .segmented { flex-wrap: wrap; }
+.segmented--sm button { padding: 6px 12px; font-size: 12px; }
+
+.email-preview-frame { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; padding: 24px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 14px; }
+.email-preview-meta { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; }
+.email-preview-meta-row { display: flex; gap: 12px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); }
+.email-preview-meta-row > span:first-child { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); width: 60px; padding-top: 2px; }
+.email-preview-subject { font-weight: 600; }
+.email-preview-shell { width: 100%; margin: 0 auto; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 12px 24px -12px rgba(15, 23, 42, 0.15); }
+.email-preview-inner { }
+.email-preview-body { padding: 32px; font-family: Inter, sans-serif; color: var(--color-ink); }
+
+@media (max-width: 1023px) {
+  .email-editor { grid-template-columns: 1fr; }
+}
 
 /* ── Opening hours ───────────────────────────────────────────── */
 .hours-grid { display: flex; flex-direction: column; margin-top: 16px; }

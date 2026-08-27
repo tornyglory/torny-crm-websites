@@ -104,6 +104,18 @@ export type {
   NotificationSettingsPatch,
   NotificationErrorCode,
 } from './resources/notifications'
+export * as emailTemplate from './resources/emailTemplate'
+export type {
+  EmailFlavor,
+  EmailVariableCategory,
+  EmailVariable,
+  EmailTemplate,
+  EmailTemplatePatch,
+  EmailPreviewResult,
+  EmailTestSendInput,
+  EmailTestSendResult,
+  EmailTemplateErrorCode,
+} from './resources/emailTemplate'
 export * as enquiries from './resources/enquiries'
 export type {
   EnquiryStatus,

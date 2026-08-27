@@ -1471,7 +1471,7 @@ function sendInvite() {
                 >{{ emailSaving ? 'Saving…' : 'Save changes' }}</button>
               </div>
             </div>
-            <p class="card__sub">Applied to every outgoing club email — applications, enquiries, welcomes, broadcasts. Use <code>{{ '{{' }}variables{{ '}}' }}</code> to inject values at send time.</p>
+            <p class="card__sub">Applied to every outgoing club email — applications, enquiries, welcomes, broadcasts. Use <code v-pre>{{variables}}</code> to inject values at send time.</p>
 
             <div class="email-editor">
               <div class="email-editor__pane">
@@ -1495,7 +1495,7 @@ function sendInvite() {
                     class="email-editor__textarea"
                     spellcheck="false"
                   ></textarea>
-                  <span class="field__hint">Must include the {{ '{{unsubscribe_url}}' }} link for CAN-SPAM compliance.</span>
+                  <span class="field__hint">Must include the <code v-pre>{{unsubscribe_url}}</code> link for CAN-SPAM compliance.</span>
                 </label>
                 <label class="switch-row">
                   <div>
@@ -1547,7 +1547,7 @@ function sendInvite() {
                 @click="sendTestEmail"
               >{{ emailTestSending ? 'Sending…' : 'Send test to me' }}</button>
             </div>
-            <p class="card__sub">Substitutes {{ '{{' }}variables{{ '}}' }} with sample data. The real send uses the actual recipient's details.</p>
+            <p class="card__sub">Substitutes <code v-pre>{{variables}}</code> with sample data. The real send uses the actual recipient's details.</p>
 
             <div class="email-preview-controls">
               <div class="segmented">

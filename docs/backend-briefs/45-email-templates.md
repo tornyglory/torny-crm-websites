@@ -133,6 +133,9 @@ Ship as a JS constant in `src/handlers/utils/email-variables.js` (same pattern a
 | club_address | `{{club_address}}` | club | 25 Vogel Street, Naenae, Lower Hutt | (all) |
 | club_logo_url | `{{club_logo_url}}` | club | (empty when no logo) | (all) |
 | club_url | `{{club_url}}` | club | https://naenaebowls.torny.co | (all) |
+| accent_colour | `{{accent_colour}}` | club | #2563EB | (all) |
+| font_display | `{{font_display}}` | club | Space Grotesk | (all) |
+| font_body | `{{font_body}}` | club | Inter | (all) |
 | recipient_name | `{{recipient_name}}` | recipient | Frances Roydon-Miller | (all) |
 | recipient_first_name | `{{recipient_first_name}}` | recipient | Frances | (all) |
 | recipient_email | `{{recipient_email}}` | recipient | frances@example.co.nz | (all) |
@@ -180,13 +183,35 @@ Unknown flavour → 400 `bad_flavor`.
 
 ## 6. Platform defaults (seeded on first GET)
 
-Ship as `PLATFORM_DEFAULT_HEADER` and `PLATFORM_DEFAULT_FOOTER` constants. See the stub in `apps/crm/src/views/settings/SettingsView.vue` (`stubEmailTemplate()`) for the shape — clean typography, club name eyebrow, unsubscribe link in footer.
+Ship as `PLATFORM_DEFAULT_HEADER` and `PLATFORM_DEFAULT_FOOTER` constants. Copy the exact HTML from `PLATFORM_DEFAULT_HEADER` / `PLATFORM_DEFAULT_FOOTER` in `apps/crm/src/views/settings/SettingsView.vue` — same structural design across every club, brand-driven via tokens.
+
+**Design intent** — the header + footer are structurally identical for every club so every Torny email is recognisable as "a real communication from a bowls club, styled well". Brand tokens (`{{accent_colour}}`, `{{font_display}}`, `{{font_body}}`, `{{club_logo_url}}`, `{{club_name}}`, `{{club_address}}`) pull from the club's own settings so it also feels first-class to *that* club's members. Owners can edit either HTML string but the platform defaults ship polished.
+
+**Header shape** (see canonical source in SettingsView.vue):
+- White surface, 40px padding top, 44px-tall logo image, club name in display font (22px, weight 700), address in mono uppercase eyebrow (10px, 0.14em tracking).
+- 4px full-width bar in `{{accent_colour}}` at the base — one visual brand cue that scales across every email.
+
+**Footer shape** (see canonical source in SettingsView.vue):
+- Surface tint (`#F5F5F2`) two-row block. First row: mono eyebrow "GET IN TOUCH", club name, then address + email (accent-linked) + phone.
+- Second row: unsubscribe link, © year, "SENT WITH TORNY" mono mark, all fog-grey (`#A3A39B`) at 11px.
+
+**Token resolution** — the three brand tokens must resolve from stored club settings:
+
+| Token | Resolves from | Fallback |
+|---|---|---|
+| `{{accent_colour}}` | `clubs_data.email_accent_colour` → `clubs_data.accent_colour` | `#2563EB` |
+| `{{font_display}}` | `clubs_data.email_font_family` → the `display` family of the club's font-pair (brief 22) | `Space Grotesk` |
+| `{{font_body}}` | `clubs_data.email_font_family` → the `body` family of the club's font-pair (brief 22) | `Inter` |
+
+If `email_font_family` is set, use it for **both** `{{font_display}}` and `{{font_body}}` — that's the owner's manual override. Otherwise resolve independently from the font-pair.
 
 Seed values:
+- `email_header_html: PLATFORM_DEFAULT_HEADER`
+- `email_footer_html: PLATFORM_DEFAULT_FOOTER`
 - `email_show_logo: true`
 - `email_sample_overrides: {}`
 - `email_accent_colour: null` (inherits `clubs_data.accent_colour`)
-- `email_font_family: null` (inherits Inter)
+- `email_font_family: null` (inherits the club's font-pair)
 
 ---
 
@@ -203,6 +228,15 @@ async function sendClubEmail({ clubId, flavor, to, body_html, subject, context }
   return sendgrid.send({ to, subject: substitute(subject, vars), html, text, ... });
 }
 ```
+
+**`wrap()` skeleton** — the header/footer HTML strings are body fragments. `wrap()` inserts them into a full email document that:
+
+1. Sets `<meta name="viewport" content="width=device-width, initial-scale=1">`.
+2. Includes a Google Fonts stylesheet link for `{{font_display}}` and `{{font_body}}` so Gmail / Apple Mail / mobile clients render the club's brand fonts. Other clients fall back to the system-font stack already declared inline (`'Helvetica Neue', Arial, sans-serif`). Skip the link when the club is on the default pair to save weight.
+3. Wraps the body in a max-width container (`max-width: 640px; margin: 0 auto; background: #FFFFFF`) so long emails don't stretch on desktop.
+4. Ends with a hidden preheader `<div>` (accessible text preview shown alongside the subject line in most inboxes) — plain text pulled from the body's opening sentence.
+
+Substitution happens **after** wrapping so tokens inside the header/footer AND any tokens the transactional body renders are resolved in one pass.
 
 Called from every existing send site:
 - brief 38 — `/applications` POST ack, approve email, reject email, notification email to admin.

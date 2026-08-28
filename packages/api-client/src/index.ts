@@ -104,6 +104,16 @@ export type {
   NotificationSettingsPatch,
   NotificationErrorCode,
 } from './resources/notifications'
+export * as bulkEmail from './resources/bulkEmail'
+export type {
+  BulkEmailInput,
+  BulkEmailRecipients,
+  BulkEmailRecipientsIds,
+  BulkEmailRecipientsFilter,
+  BulkEmailResult,
+  BulkEmailFailedRecipient,
+  BulkEmailErrorCode,
+} from './resources/bulkEmail'
 export * as emailTemplate from './resources/emailTemplate'
 export type {
   EmailFlavor,
@@ -115,6 +125,10 @@ export type {
   EmailTestSendInput,
   EmailTestSendResult,
   EmailTemplateErrorCode,
+  EmailFlavorRow,
+  EmailFlavorPatch,
+  EmailFlavorsResponse,
+  EmailFlavorErrorCode,
 } from './resources/emailTemplate'
 export * as enquiries from './resources/enquiries'
 export type {

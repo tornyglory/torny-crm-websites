@@ -15,6 +15,9 @@ import {
   enquiries as enquiriesApi,
   type EmailDigest,
   type EmailFlavor,
+  type EmailFlavorPatch,
+  type EmailFlavorRow,
+  type EmailPreviewResult,
   type EmailTemplate,
   type EmailTemplatePatch,
   type EmailVariable,
@@ -559,6 +562,10 @@ const emailTestSending = ref(false)
 const emailDraft = reactive<EmailTemplatePatch>({})
 const emailPreviewFlavor = ref<EmailFlavor>('application_received')
 const emailPreviewDevice = ref<'desktop' | 'mobile'>('desktop')
+const serverPreview = ref<EmailPreviewResult | null>(null)
+const serverPreviewLoading = ref(false)
+const serverPreviewError = ref<string | null>(null)
+let serverPreviewAbort: AbortController | null = null
 
 async function loadEmailTemplate() {
   const cid = clubStore.current?.id
@@ -581,10 +588,79 @@ async function loadEmailTemplate() {
 onMounted(loadEmailTemplate)
 watch(() => clubStore.current?.id, loadEmailTemplate)
 
+/** Fetch the server-rendered preview HTML. Reflects the *saved* template
+ *  — unsaved draft edits show up in the small live previews above but
+ *  won't show in the iframe until the owner hits Save. */
+async function loadServerPreview() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number' || !emailTemplate.value) return
+  serverPreviewAbort?.abort()
+  serverPreviewAbort = new AbortController()
+  serverPreviewLoading.value = true
+  serverPreviewError.value = null
+  try {
+    serverPreview.value = await emailTemplateApi.preview(
+      cid,
+      emailPreviewFlavor.value,
+      { signal: serverPreviewAbort.signal },
+    )
+  } catch (err) {
+    if ((err as { name?: string })?.name === 'AbortError') return
+    // Endpoint may 404 during the pre-shipping window — fall back to the
+    // client-side render already computed below.
+    if (err instanceof ApiError && err.status === 404) {
+      serverPreview.value = null
+    } else {
+      serverPreviewError.value = err instanceof ApiError ? err.message : 'Could not load preview.'
+    }
+  } finally {
+    serverPreviewLoading.value = false
+  }
+}
+
+// Re-fetch on flavour change and whenever the saved template rev changes
+// (i.e. after a successful save or reload).
+watch([emailPreviewFlavor, () => emailTemplate.value?.updated_at], () => {
+  void loadServerPreview()
+})
+
+/** Polished platform-default header. Same skeleton for every club — logo,
+ *  club name, address eyebrow, brand-accent rule underneath. Tokens for
+ *  brand colour + font pull from the club's own Settings so every email
+ *  feels like a first-class communication from that specific club. */
+const PLATFORM_DEFAULT_HEADER = `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #FFFFFF;">
+  <tr>
+    <td valign="middle" style="padding: 32px 0 32px 40px; width: 1px; white-space: nowrap;">
+      <img src="{{club_logo_url}}" alt="{{club_name}} logo" style="display: block; height: 44px; width: auto; border: 0;" />
+    </td>
+    <td align="left" valign="middle" style="padding: 32px 40px 32px 16px;">
+      <div style="font-family: '{{font_display}}', 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: #0A0A0B; line-height: 1.2;">{{club_name}}</div>
+    </td>
+  </tr>
+</table>
+<div style="height: 4px; background: {{accent_colour}}; line-height: 4px; font-size: 4px;">&nbsp;</div>`
+
+/** Polished platform-default footer. Contact block on surface tint,
+ *  hairline separator, then legal row with unsubscribe + Torny mark. */
+const PLATFORM_DEFAULT_FOOTER = `<div style="padding: 32px 40px 24px; background: #F5F5F2; border-top: 1px solid #E7E7E1;">
+  <div style="font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace; font-size: 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #6B6B72; margin-bottom: 12px;">GET IN TOUCH</div>
+  <div style="font-family: '{{font_display}}', 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; color: #0A0A0B; margin-bottom: 8px;">{{club_name}}</div>
+  <div style="font-family: '{{font_body}}', 'Inter', 'Helvetica Neue', Arial, sans-serif; font-size: 13px; line-height: 1.55; color: #6B6B72;">
+    {{club_address}}<br>
+    <a href="mailto:{{club_email}}" style="color: {{accent_colour}}; text-decoration: none;">{{club_email}}</a> · {{club_phone}}
+  </div>
+</div>
+<div style="padding: 20px 40px 32px; background: #F5F5F2; border-top: 1px solid #E7E7E1;">
+  <div style="font-family: '{{font_body}}', 'Inter', 'Helvetica Neue', Arial, sans-serif; font-size: 11px; color: #A3A39B; line-height: 1.55;">
+    <a href="{{unsubscribe_url}}" style="color: #A3A39B; text-decoration: underline;">Unsubscribe</a> · © {{year}} {{club_name}}<br>
+    <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: 0.08em;">SENT WITH TORNY</span>
+  </div>
+</div>`
+
 function stubEmailTemplate(): EmailTemplate {
   return {
-    header_html: '<div style="padding: 24px 32px; border-bottom: 1px solid #E7E7E1;">\n  <div style="font-family: Space Grotesk, sans-serif; font-size: 20px; font-weight: 700; color: #0A0A0B;">{{club_name}}</div>\n  <div style="font-family: JetBrains Mono, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B6B72; margin-top: 4px;">EST. 1953 · HUTT VALLEY</div>\n</div>',
-    footer_html: '<div style="padding: 32px; border-top: 1px solid #E7E7E1; text-align: center; font-family: Inter, sans-serif; font-size: 12px; color: #6B6B72;">\n  <div>{{club_name}}</div>\n  <div style="margin-top: 4px;">{{club_address}}</div>\n  <div style="margin-top: 4px;"><a href="mailto:{{club_email}}" style="color: #6B6B72;">{{club_email}}</a> · {{club_phone}}</div>\n  <div style="margin-top: 16px; font-size: 11px;"><a href="{{unsubscribe_url}}" style="color: #A3A39B;">Unsubscribe</a> · © {{year}} {{club_name}}</div>\n</div>',
+    header_html: resolveBrandTokens(PLATFORM_DEFAULT_HEADER),
+    footer_html: resolveBrandTokens(PLATFORM_DEFAULT_FOOTER),
     accent_colour: null,
     font_family: null,
     show_logo: true,
@@ -592,6 +668,31 @@ function stubEmailTemplate(): EmailTemplate {
     variables: STUB_VARIABLES,
     updated_at: null,
   }
+}
+
+/** Resolve FE-only brand tokens ({{font_display}}, {{font_body}},
+ *  {{accent_colour}}) into concrete values from the club's Settings.
+ *  These tokens are NOT on the backend whitelist — inlining them here
+ *  keeps the template brand-driven without triggering `unknown_variable`
+ *  on PATCH. The backend still substitutes the 16 real tokens at send
+ *  time ({{club_name}}, {{club_logo_url}}, {{unsubscribe_url}}, etc). */
+function resolveBrandTokens(html: string): string {
+  const brand = settingsStore.data?.brand
+  const fontDisplay = brand?.font_pair_resolved?.heading?.family ?? 'Space Grotesk'
+  const fontBody = brand?.font_pair_resolved?.body?.family ?? 'Inter'
+  const accent = brand?.accent_colour ?? '#2563EB'
+  return html
+    .split('{{font_display}}').join(fontDisplay)
+    .split('{{font_body}}').join(fontBody)
+    .split('{{accent_colour}}').join(accent)
+}
+
+/** Overwrite the current draft with the Torny polished default, brand
+ *  tokens already resolved so it saves cleanly. */
+function resetEmailTemplateToDefault() {
+  stageHeader(resolveBrandTokens(PLATFORM_DEFAULT_HEADER))
+  stageFooter(resolveBrandTokens(PLATFORM_DEFAULT_FOOTER))
+  toast.info('Reset to Torny default — hit Save changes to apply.')
 }
 
 const STUB_VARIABLES: EmailVariable[] = [
@@ -651,21 +752,54 @@ function clearEmailDraft() {
   delete emailDraft.footer_html
   delete emailDraft.show_logo
 }
+/** Sanitizer + variable errors come back with structured `ctx` / `missing`
+ *  arrays. Build the most specific human message we can. */
+interface EmailSaveErrorBody {
+  code?: string
+  ctx?: { tag?: string; attr?: string; value?: string }
+  missing?: string[]
+}
+function saveErrorMessage(body: EmailSaveErrorBody, fallback: string): string {
+  switch (body.code) {
+    case 'bad_html': {
+      const c = body.ctx ?? {}
+      if (c.tag && c.attr) return `<${c.tag} ${c.attr}="…"> isn't allowed. Remove that attribute and try again.`
+      if (c.tag) return `<${c.tag}> isn't allowed in email HTML. Remove it and try again.`
+      if (c.attr) return `The "${c.attr}" attribute isn't allowed. Remove it and try again.`
+      return 'The HTML has a disallowed tag or attribute — check the console for details.'
+    }
+    case 'unknown_variable': {
+      const missing = body.missing ?? []
+      if (missing.length === 1) return `${missing[0]} isn't a recognised variable — check the palette.`
+      if (missing.length > 1) return `These variables aren't recognised: ${missing.join(', ')}. Check the palette.`
+      return 'One of the {{variables}} isn\'t recognised — check the palette.'
+    }
+    case 'header_too_long': return 'Header HTML is too long (max 20,000 chars). Trim it back.'
+    case 'footer_too_long': return 'Footer HTML is too long (max 20,000 chars). Trim it back.'
+    case 'sample_overrides_too_long': return 'Sample overrides are too long. Shorten a value and try again.'
+    case 'bad_sample_overrides': return 'Sample overrides must be an object of string values.'
+    case 'bad_accent': return 'That accent colour isn\'t valid CSS — use a hex or rgba() value.'
+    default: return fallback
+  }
+}
+
 async function saveEmailTemplate() {
   const cid = clubStore.current?.id
   if (typeof cid !== 'number' || !isEmailDirty.value) return
   emailSaving.value = true
   try {
-    emailTemplate.value = await emailTemplateApi.update(cid, { ...emailDraft })
+    // Resolve FE-only brand tokens before PATCH — the backend whitelist
+    // doesn't include font_display / font_body / accent_colour.
+    const patch: EmailTemplatePatch = { ...emailDraft }
+    if (patch.header_html != null) patch.header_html = resolveBrandTokens(patch.header_html)
+    if (patch.footer_html != null) patch.footer_html = resolveBrandTokens(patch.footer_html)
+    emailTemplate.value = await emailTemplateApi.update(cid, patch)
     clearEmailDraft()
     toast.success('Email template saved.')
   } catch (err) {
-    const body = err instanceof ApiError ? ((err.body ?? {}) as { code?: string }) : {}
-    if (body.code === 'unknown_variable') toast.error('One of the {{variables}} isn\'t recognised — check the palette on the right.')
-    else if (body.code === 'header_too_long') toast.error('Header HTML is too long. Trim it back.')
-    else if (body.code === 'footer_too_long') toast.error('Footer HTML is too long. Trim it back.')
-    else if (body.code === 'bad_html') toast.error('The HTML has an issue — check for unclosed tags.')
-    else toast.error(err instanceof ApiError ? err.message : 'Could not save email template.')
+    const body = err instanceof ApiError ? ((err.body ?? {}) as EmailSaveErrorBody) : {}
+    const fallback = err instanceof ApiError ? err.message : 'Could not save email template.'
+    toast.error(saveErrorMessage(body, fallback))
   } finally {
     emailSaving.value = false
   }
@@ -676,15 +810,244 @@ async function sendTestEmail() {
   emailTestSending.value = true
   try {
     const res = await emailTemplateApi.testSend(cid, { flavor: emailPreviewFlavor.value })
-    toast.success(`Test email sent to ${res.to}.`)
+    const idSuffix = res.provider_message_id ? ` · ${res.provider_message_id.slice(0, 16)}…` : ''
+    toast.success(`Test email sent to ${res.to}${idSuffix}`)
   } catch (err) {
-    const body = err instanceof ApiError ? ((err.body ?? {}) as { code?: string }) : {}
-    if (body.code === 'rate_limited') toast.error('One test at a time — wait a minute and try again.')
-    else if (body.code === 'send_failed') toast.error('Send failed — check your SMTP settings.')
+    const body = err instanceof ApiError
+      ? ((err.body ?? {}) as { code?: string; data?: { provider_error?: string } })
+      : {}
+    if (body.code === 'rate_limited') toast.error('3 test sends per hour — try again in a bit.')
+    else if (body.code === 'bad_flavor') toast.error('That preview flavour isn\'t recognised.')
+    else if (body.code === 'bad_email') toast.error('Recipient email isn\'t valid.')
+    else if (body.code === 'send_failed') {
+      const providerErr = body.data?.provider_error
+      toast.error(providerErr ? `SES rejected the send: ${providerErr}` : 'Send failed — check SES setup.')
+    }
     else toast.error(err instanceof ApiError ? err.message : 'Could not send test.')
   } finally {
     emailTestSending.value = false
   }
+}
+
+// ── Per-flavour body overrides — brief 46 ─────────────────────
+// Owner customises subject + body per transactional flavour. Shared
+// header + footer from brief 45 still wraps every send.
+
+const emailFlavors = ref<EmailFlavorRow[]>([])
+const emailFlavorsLoading = ref(false)
+const selectedFlavor = ref<EmailFlavor>('application_received')
+const activeEmailTab = ref<'frame' | 'body'>('frame')
+const flavorDrafts = reactive<Partial<Record<EmailFlavor, EmailFlavorPatch>>>({})
+const flavorSaving = ref(false)
+const flavorLastFocused = ref<'subject' | 'body'>('body')
+
+async function loadEmailFlavors() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  emailFlavorsLoading.value = true
+  try {
+    const res = await emailTemplateApi.listFlavors(cid)
+    emailFlavors.value = res.flavors
+  } catch (err) {
+    // Silently 404 until backend ships — the header/footer editor above
+    // still works without this data.
+    if (!(err instanceof ApiError && err.status === 404)) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not load email bodies.')
+    }
+    emailFlavors.value = []
+  } finally {
+    emailFlavorsLoading.value = false
+  }
+}
+onMounted(loadEmailFlavors)
+watch(() => clubStore.current?.id, loadEmailFlavors)
+// Also refetch when the outer template save fires (updated_at rev change)
+// so any flavour edits done elsewhere stay in sync.
+
+const currentFlavorRow = computed<EmailFlavorRow | null>(() =>
+  emailFlavors.value.find(f => f.flavor === selectedFlavor.value) ?? null,
+)
+
+/** Effective override for a field on a given flavour, blending draft →
+ *  stored override → null (using default). Empty string in the draft
+ *  means the field is being cleared by the user. */
+function draftedFlavorSubject(): string {
+  const draft = flavorDrafts[selectedFlavor.value]
+  if (draft && 'subject_override' in draft) return draft.subject_override ?? ''
+  return currentFlavorRow.value?.subject_override ?? ''
+}
+function draftedFlavorBody(): string {
+  const draft = flavorDrafts[selectedFlavor.value]
+  if (draft && 'body_html_override' in draft) return draft.body_html_override ?? ''
+  return currentFlavorRow.value?.body_html_override ?? ''
+}
+const draftedFlavorSubjectVal = computed(draftedFlavorSubject)
+const draftedFlavorBodyVal = computed(draftedFlavorBody)
+
+function stageFlavorSubject(v: string) {
+  const stored = currentFlavorRow.value?.subject_override ?? ''
+  const draft = flavorDrafts[selectedFlavor.value] ?? {}
+  if (v === stored) {
+    delete draft.subject_override
+    if (Object.keys(draft).length === 0) delete flavorDrafts[selectedFlavor.value]
+    else flavorDrafts[selectedFlavor.value] = draft
+  } else {
+    flavorDrafts[selectedFlavor.value] = { ...draft, subject_override: v }
+  }
+}
+function stageFlavorBody(v: string) {
+  const stored = currentFlavorRow.value?.body_html_override ?? ''
+  const draft = flavorDrafts[selectedFlavor.value] ?? {}
+  if (v === stored) {
+    delete draft.body_html_override
+    if (Object.keys(draft).length === 0) delete flavorDrafts[selectedFlavor.value]
+    else flavorDrafts[selectedFlavor.value] = draft
+  } else {
+    flavorDrafts[selectedFlavor.value] = { ...draft, body_html_override: v }
+  }
+}
+
+function flavorHasOverride(row: EmailFlavorRow): boolean {
+  return row.subject_override !== null || row.body_html_override !== null
+}
+function flavorHasDraft(flavor: EmailFlavor): boolean {
+  return flavorDrafts[flavor] !== undefined
+}
+const isCurrentFlavorDirty = computed(() => flavorHasDraft(selectedFlavor.value))
+const currentFlavorHasStoredOverride = computed(() =>
+  currentFlavorRow.value ? flavorHasOverride(currentFlavorRow.value) : false,
+)
+
+function discardCurrentFlavor() {
+  delete flavorDrafts[selectedFlavor.value]
+}
+
+/** Body ref for cursor-aware token insertion into whichever field
+ *  was last focused. */
+const flavorSubjectRef = ref<HTMLInputElement | null>(null)
+const flavorBodyRef = ref<HTMLTextAreaElement | null>(null)
+
+function insertFlavorToken(token: string) {
+  const useSubject = flavorLastFocused.value === 'subject'
+  const target = useSubject ? flavorSubjectRef.value : flavorBodyRef.value
+  const current = useSubject ? draftedFlavorSubject() : draftedFlavorBody()
+  if (!target) {
+    const next = current + token
+    if (useSubject) stageFlavorSubject(next)
+    else stageFlavorBody(next)
+    return
+  }
+  const start = target.selectionStart ?? current.length
+  const end = target.selectionEnd ?? current.length
+  const next = current.slice(0, start) + token + current.slice(end)
+  if (useSubject) stageFlavorSubject(next)
+  else stageFlavorBody(next)
+  requestAnimationFrame(() => {
+    target.focus()
+    const caret = start + token.length
+    if ('setSelectionRange' in target) target.setSelectionRange(caret, caret)
+  })
+}
+
+async function saveCurrentFlavor() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  const flavor = selectedFlavor.value
+  const draft = flavorDrafts[flavor]
+  if (!draft) return
+
+  // Empty string in a draft field = "clear the override" — send null.
+  const patch: EmailFlavorPatch = {}
+  if ('subject_override' in draft) {
+    patch.subject_override = draft.subject_override && draft.subject_override.length > 0
+      ? draft.subject_override
+      : null
+  }
+  if ('body_html_override' in draft) {
+    patch.body_html_override = draft.body_html_override && draft.body_html_override.length > 0
+      ? draft.body_html_override
+      : null
+  }
+
+  flavorSaving.value = true
+  try {
+    const updated = await emailTemplateApi.updateFlavor(cid, flavor, patch)
+    const idx = emailFlavors.value.findIndex(f => f.flavor === flavor)
+    if (idx >= 0) emailFlavors.value[idx] = updated
+    delete flavorDrafts[flavor]
+    toast.success(`${updated.label} saved.`)
+    // Refetch preview so iframe reflects the new override.
+    void loadServerPreview()
+  } catch (err) {
+    const body = err instanceof ApiError
+      ? ((err.body ?? {}) as { code?: string; ctx?: { tag?: string; attr?: string }; missing?: string[] })
+      : {}
+    switch (body.code) {
+      case 'bad_html': {
+        const c = body.ctx ?? {}
+        if (c.tag && c.attr) toast.error(`<${c.tag} ${c.attr}="…"> isn't allowed in email HTML.`)
+        else if (c.tag) toast.error(`<${c.tag}> isn't allowed in email HTML.`)
+        else if (c.attr) toast.error(`The "${c.attr}" attribute isn't allowed.`)
+        else toast.error('The body HTML has a disallowed tag or attribute.')
+        break
+      }
+      case 'unknown_variable': {
+        const missing = body.missing ?? []
+        if (missing.length === 1) toast.error(`${missing[0]} isn't valid for this flavour.`)
+        else if (missing.length > 1) toast.error(`Not valid for this flavour: ${missing.join(', ')}`)
+        else toast.error('One of the {{tokens}} isn\'t valid for this flavour.')
+        break
+      }
+      case 'subject_too_long': toast.error('Subject is too long (max 200 chars).'); break
+      case 'body_too_long':    toast.error('Body is too long (max 20,000 chars).'); break
+      case 'empty_subject':    toast.error('Subject can\'t be empty.'); break
+      case 'empty_body':       toast.error('Body can\'t be empty.'); break
+      case 'empty_patch':      toast.error('Nothing to save.'); break
+      default: toast.error(err instanceof ApiError ? err.message : 'Could not save.')
+    }
+  } finally {
+    flavorSaving.value = false
+  }
+}
+
+async function resetCurrentFlavor() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  const flavor = selectedFlavor.value
+  flavorSaving.value = true
+  try {
+    await emailTemplateApi.resetFlavor(cid, flavor)
+    const idx = emailFlavors.value.findIndex(f => f.flavor === flavor)
+    if (idx >= 0) {
+      emailFlavors.value[idx] = {
+        ...emailFlavors.value[idx]!,
+        subject_override: null,
+        body_html_override: null,
+        updated_at: null,
+        updated_by: null,
+      }
+    }
+    delete flavorDrafts[flavor]
+    toast.success('Reset to platform default.')
+    void loadServerPreview()
+  } catch (err) {
+    toast.error(err instanceof ApiError ? err.message : 'Could not reset.')
+  } finally {
+    flavorSaving.value = false
+  }
+}
+
+// Sync selectedFlavor with the preview picker so switching one moves the
+// other. The preview iframe already reflects overrides server-side.
+watch(selectedFlavor, (f) => { emailPreviewFlavor.value = f })
+watch(emailPreviewFlavor, (f) => { selectedFlavor.value = f })
+
+/** Build a `{{token}}` string for a token key. Kept as a helper because
+ *  a template literal like `` `{{${k}}}` `` inside a Vue mustache
+ *  ({{ … }}) confuses the compiler — it sees `{{` as an interpolation
+ *  open. Concatenation sidesteps that. */
+function tokenFor(k: string): string {
+  return '{' + '{' + k + '}' + '}'
 }
 
 // ── Variable substitution — client-side preview render ─────────
@@ -1453,27 +1816,56 @@ function sendInvite() {
             <div class="card__head">
               <div>
                 <div class="card__eyebrow">Transactional email</div>
-                <h2 class="card__title">Header &amp; footer</h2>
-              </div>
-              <div class="tier__head-actions">
-                <span v-if="isEmailDirty && !emailSaving" class="tier__saving tier__saving--pending">Unsaved changes</span>
-                <button
-                  type="button"
-                  class="ghost-btn"
-                  :disabled="!isEmailDirty || emailSaving"
-                  @click="clearEmailDraft"
-                >Discard</button>
-                <button
-                  type="button"
-                  class="primary-btn"
-                  :disabled="!isEmailDirty || emailSaving"
-                  @click="saveEmailTemplate"
-                >{{ emailSaving ? 'Saving…' : 'Save changes' }}</button>
+                <h2 class="card__title">Design your emails</h2>
               </div>
             </div>
-            <p class="card__sub">Applied to every outgoing club email — applications, enquiries, welcomes, broadcasts. Use <code v-pre>{{variables}}</code> to inject values at send time.</p>
+            <p class="card__sub">Shared header + footer wraps every outgoing club email; the middle body changes per flavour. Your logo, fonts and accent colour come from <router-link to="/settings">Club &amp; brand</router-link>. Use <code v-pre>{{variables}}</code> to inject values at send time.</p>
 
-            <div class="email-editor">
+            <div class="segmented email-tabs">
+              <button
+                type="button"
+                :class="{ 'is-on': activeEmailTab === 'frame' }"
+                @click="activeEmailTab = 'frame'"
+              >Header &amp; footer</button>
+              <button
+                v-if="emailFlavors.length > 0"
+                type="button"
+                :class="{ 'is-on': activeEmailTab === 'body' }"
+                @click="activeEmailTab = 'body'"
+              >Subject &amp; body</button>
+            </div>
+
+            <section v-if="activeEmailTab === 'frame'" class="email-section">
+              <header class="email-section__head">
+                <div>
+                  <div class="email-section__eyebrow">Shared frame</div>
+                  <div class="email-section__title">Header &amp; footer</div>
+                </div>
+                <div class="tier__head-actions">
+                  <span v-if="isEmailDirty && !emailSaving" class="tier__saving tier__saving--pending">Unsaved changes</span>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    :disabled="emailSaving"
+                    @click="resetEmailTemplateToDefault"
+                    title="Overwrite with Torny's polished default, using your club's brand"
+                  >Reset to default</button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    :disabled="!isEmailDirty || emailSaving"
+                    @click="clearEmailDraft"
+                  >Discard</button>
+                  <button
+                    type="button"
+                    class="primary-btn"
+                    :disabled="!isEmailDirty || emailSaving"
+                    @click="saveEmailTemplate"
+                  >{{ emailSaving ? 'Saving…' : 'Save changes' }}</button>
+                </div>
+              </header>
+
+              <div class="email-editor">
               <div class="email-editor__pane">
                 <label class="field">
                   <span class="field__label">Header HTML</span>
@@ -1497,12 +1889,36 @@ function sendInvite() {
                   ></textarea>
                   <span class="field__hint">Must include the <code v-pre>{{unsubscribe_url}}</code> link for CAN-SPAM compliance.</span>
                 </label>
-                <label class="switch-row">
-                  <div>
-                    <div class="switch-row__label">Show club logo above header</div>
-                    <div class="switch-row__hint">Uses the logo from Club &amp; brand. Turn off if your header HTML already includes an image.</div>
+                <label class="logo-toggle" :class="{ 'is-off': !draftedShowLogoVal }">
+                  <div class="logo-toggle__crest">
+                    <img
+                      v-if="clubStore.current?.logoUrl"
+                      :src="clubStore.current.logoUrl"
+                      :alt="`${clubStore.current?.name ?? 'Club'} logo`"
+                    />
+                    <div v-else class="logo-toggle__placeholder">
+                      <span class="logo-toggle__placeholder-eyebrow">No logo</span>
+                      <router-link to="/settings" class="logo-toggle__placeholder-link">Add one →</router-link>
+                    </div>
                   </div>
-                  <button type="button" class="switch" :class="{ 'is-on': draftedShowLogoVal }" @click="stageShowLogo">
+                  <div class="logo-toggle__body">
+                    <div class="logo-toggle__label">
+                      <span class="logo-toggle__title">Show club logo above the header</span>
+                      <span class="logo-toggle__badge" :class="draftedShowLogoVal ? 'is-on' : 'is-off'">
+                        {{ draftedShowLogoVal ? 'On' : 'Off' }}
+                      </span>
+                    </div>
+                    <div class="logo-toggle__hint">
+                      Pulled from <router-link to="/settings">Club &amp; brand</router-link>. Turn off if your header HTML already ships its own image.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="switch"
+                    :class="{ 'is-on': draftedShowLogoVal }"
+                    :aria-pressed="draftedShowLogoVal"
+                    @click="stageShowLogo"
+                  >
                     <span class="switch__knob" />
                   </button>
                 </label>
@@ -1532,6 +1948,122 @@ function sendInvite() {
                 </template>
               </aside>
             </div>
+            </section>
+
+            <!-- Body copy — per-flavour subject + body overrides (brief 46) -->
+            <section v-if="activeEmailTab === 'body' && emailFlavors.length > 0" class="email-section">
+              <header class="email-section__head">
+                <div>
+                  <div class="email-section__eyebrow">Per email</div>
+                  <div class="email-section__title">Subject &amp; body</div>
+                </div>
+                <div class="tier__head-actions">
+                  <span v-if="isCurrentFlavorDirty && !flavorSaving" class="tier__saving tier__saving--pending">Unsaved changes</span>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    :disabled="!currentFlavorHasStoredOverride || flavorSaving"
+                    @click="resetCurrentFlavor"
+                    title="Clear both overrides — revert to Torny's platform copy"
+                  >Use default</button>
+                  <button
+                    type="button"
+                    class="ghost-btn"
+                    :disabled="!isCurrentFlavorDirty || flavorSaving"
+                    @click="discardCurrentFlavor"
+                  >Discard</button>
+                  <button
+                    type="button"
+                    class="primary-btn"
+                    :disabled="!isCurrentFlavorDirty || flavorSaving"
+                    @click="saveCurrentFlavor"
+                  >{{ flavorSaving ? 'Saving…' : 'Save changes' }}</button>
+                </div>
+              </header>
+
+              <div class="flavor-editor">
+              <!-- Left: flavour picker -->
+              <aside class="flavor-picker">
+                <ul class="flavor-picker__list">
+                  <li v-for="f in emailFlavors" :key="f.flavor">
+                    <button
+                      type="button"
+                      class="flavor-picker__row"
+                      :class="{ 'is-on': selectedFlavor === f.flavor }"
+                      @click="selectedFlavor = f.flavor"
+                    >
+                      <div class="flavor-picker__row-top">
+                        <span class="flavor-picker__label">{{ f.label }}</span>
+                        <span v-if="flavorHasDraft(f.flavor)" class="flavor-picker__chip flavor-picker__chip--dirty">Unsaved</span>
+                        <span v-else-if="flavorHasOverride(f)" class="flavor-picker__chip flavor-picker__chip--on">Custom</span>
+                        <span v-else class="flavor-picker__chip flavor-picker__chip--default">Default</span>
+                      </div>
+                      <div class="flavor-picker__hint">{{ f.hint }}</div>
+                    </button>
+                  </li>
+                </ul>
+              </aside>
+
+              <!-- Right: subject + body editor -->
+              <div v-if="currentFlavorRow" class="flavor-editor__pane">
+                <label class="field">
+                  <span class="field__label">Subject</span>
+                  <input
+                    ref="flavorSubjectRef"
+                    type="text"
+                    class="flavor-editor__subject"
+                    :value="draftedFlavorSubjectVal"
+                    :placeholder="currentFlavorRow.subject_default"
+                    @input="stageFlavorSubject(($event.target as HTMLInputElement).value)"
+                    @focus="flavorLastFocused = 'subject'"
+                  />
+                  <span class="field__hint">
+                    <template v-if="draftedFlavorSubjectVal.length > 0">
+                      Overriding Torny's default: <em>{{ currentFlavorRow.subject_default }}</em>
+                    </template>
+                    <template v-else>
+                      Blank — Torny's default subject will be used.
+                    </template>
+                  </span>
+                </label>
+
+                <label class="field">
+                  <span class="field__label">Body HTML</span>
+                  <textarea
+                    ref="flavorBodyRef"
+                    class="flavor-editor__body"
+                    :value="draftedFlavorBodyVal"
+                    :placeholder="currentFlavorRow.body_html_default"
+                    rows="14"
+                    spellcheck="false"
+                    @input="stageFlavorBody(($event.target as HTMLTextAreaElement).value)"
+                    @focus="flavorLastFocused = 'body'"
+                  ></textarea>
+                  <span class="field__hint">
+                    <template v-if="draftedFlavorBodyVal.length > 0">
+                      Overriding Torny's default body.
+                    </template>
+                    <template v-else>
+                      Blank — Torny's default body will be used. Placeholder shows what recipients get today.
+                    </template>
+                  </span>
+                </label>
+
+                <div class="flavor-tokens">
+                  <div class="flavor-tokens__head">Supported tokens · click to insert at cursor</div>
+                  <div class="flavor-tokens__list">
+                    <button
+                      v-for="k in currentFlavorRow.supported_tokens"
+                      :key="k"
+                      type="button"
+                      class="flavor-tokens__pill"
+                      @click="insertFlavorToken(tokenFor(k))"
+                    >{{ tokenFor(k) }}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            </section>
           </div>
 
           <div class="card">
@@ -1550,15 +2082,12 @@ function sendInvite() {
             <p class="card__sub">Substitutes <code v-pre>{{variables}}</code> with sample data. The real send uses the actual recipient's details.</p>
 
             <div class="email-preview-controls">
-              <div class="segmented">
-                <button
-                  v-for="f in EMAIL_FLAVORS"
-                  :key="f.value"
-                  type="button"
-                  :class="{ 'is-on': emailPreviewFlavor === f.value }"
-                  @click="emailPreviewFlavor = f.value"
-                >{{ f.label }}</button>
-              </div>
+              <label class="email-preview-flavor">
+                <span class="email-preview-flavor__label">Preview</span>
+                <select v-model="emailPreviewFlavor" class="email-preview-flavor__select">
+                  <option v-for="f in EMAIL_FLAVORS" :key="f.value" :value="f.value">{{ f.label }}</option>
+                </select>
+              </label>
               <div class="segmented segmented--sm">
                 <button type="button" :class="{ 'is-on': emailPreviewDevice === 'desktop' }" @click="emailPreviewDevice = 'desktop'">Desktop</button>
                 <button type="button" :class="{ 'is-on': emailPreviewDevice === 'mobile' }" @click="emailPreviewDevice = 'mobile'">Mobile</button>
@@ -1567,13 +2096,38 @@ function sendInvite() {
 
             <div class="email-preview-frame">
               <div class="email-preview-meta">
-                <div class="email-preview-meta-row"><span>Subject</span><span class="email-preview-subject">{{ renderedSubject }}</span></div>
+                <div class="email-preview-meta-row">
+                  <span>Subject</span>
+                  <span class="email-preview-subject">{{ serverPreview?.subject ?? renderedSubject }}</span>
+                </div>
                 <div class="email-preview-meta-row"><span>To</span><span>frances@example.co.nz</span></div>
               </div>
+
+              <div v-if="isEmailDirty" class="email-preview-hint">
+                <span class="email-preview-hint__dot"></span>
+                You've got unsaved edits — this preview still shows the last saved template. Save to update it.
+              </div>
+
               <div class="email-preview-shell" :style="previewShellStyle">
-                <div class="email-preview-inner" v-html="renderedHeader" />
-                <div class="email-preview-body" v-html="renderedBody" />
-                <div class="email-preview-inner" v-html="renderedFooter" />
+                <!-- Server-rendered HTML (isolated in an iframe so its CSS
+                     doesn't leak into the CRM). Falls back to a client
+                     render while the endpoint loads or if it 404s. -->
+                <iframe
+                  v-if="serverPreview"
+                  class="email-preview-iframe"
+                  :srcdoc="serverPreview.html"
+                  sandbox=""
+                  title="Email preview"
+                ></iframe>
+                <div v-else-if="serverPreviewLoading" class="email-preview-loading">Rendering preview…</div>
+                <div v-else-if="serverPreviewError" class="email-preview-loading email-preview-loading--error">
+                  {{ serverPreviewError }}
+                </div>
+                <template v-else>
+                  <div class="email-preview-inner" v-html="renderedHeader" />
+                  <div class="email-preview-body" v-html="renderedBody" />
+                  <div class="email-preview-inner" v-html="renderedFooter" />
+                </template>
               </div>
             </div>
           </div>
@@ -1736,6 +2290,26 @@ function sendInvite() {
 .switch__knob { width: 18px; height: 18px; border-radius: 999px; background: #fff; transition: transform 0.15s ease; }
 .switch.is-on .switch__knob { transform: translateX(16px); }
 
+/* Logo toggle — card-style row with a live crest of the club's saved logo. */
+.logo-toggle { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 16px; margin-top: 12px; padding: 14px 16px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 14px; cursor: pointer; transition: opacity 150ms ease; }
+.logo-toggle:hover { border-color: var(--color-graphite); }
+.logo-toggle.is-off .logo-toggle__crest { opacity: 0.35; filter: grayscale(1); }
+.logo-toggle__crest { width: 64px; height: 64px; border-radius: 12px; background: #fff; border: 1px solid var(--color-hairline); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 8px; box-sizing: border-box; transition: opacity 150ms ease, filter 150ms ease; }
+.logo-toggle__crest img { max-width: 100%; max-height: 100%; display: block; }
+.logo-toggle__placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-align: center; }
+.logo-toggle__placeholder-eyebrow { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
+.logo-toggle__placeholder-link { font-family: var(--font-body); font-size: 10px; color: var(--color-accent); text-decoration: none; }
+.logo-toggle__placeholder-link:hover { text-decoration: underline; }
+.logo-toggle__body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.logo-toggle__label { display: flex; align-items: center; gap: 8px; }
+.logo-toggle__title { font-family: var(--font-display); font-size: 15px; font-weight: 600; letter-spacing: -0.005em; color: var(--color-ink); }
+.logo-toggle__badge { font-family: var(--font-mono); font-size: 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
+.logo-toggle__badge.is-on { background: #DCFCE7; color: #166534; }
+.logo-toggle__badge.is-off { background: var(--color-hairline); color: var(--color-graphite); }
+.logo-toggle__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); line-height: 1.5; }
+.logo-toggle__hint a { color: var(--color-accent); text-decoration: none; }
+.logo-toggle__hint a:hover { text-decoration: underline; }
+
 .intg__crest { width: 40px; height: 40px; border-radius: 10px; background: var(--color-accent-soft); color: var(--color-accent-strong); display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 18px; font-weight: 700; margin-bottom: 12px; }
 .intg__label { font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin: 0 0 4px; color: var(--color-ink); }
 .intg__desc { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); line-height: 1.5; margin: 0 0 12px; }
@@ -1854,6 +2428,10 @@ function sendInvite() {
 
 .email-preview-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
 .email-preview-controls .segmented { flex-wrap: wrap; }
+.email-preview-flavor { display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 999px; }
+.email-preview-flavor__label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
+.email-preview-flavor__select { border: 0; background: transparent; padding: 4px 24px 4px 6px; font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%230A0A0B' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>"); background-repeat: no-repeat; background-position: right 6px center; }
+.email-preview-flavor__select:focus { outline: none; }
 .segmented--sm button { padding: 6px 12px; font-size: 12px; }
 
 .email-preview-frame { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; padding: 24px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 14px; }
@@ -1864,6 +2442,55 @@ function sendInvite() {
 .email-preview-shell { width: 100%; margin: 0 auto; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 12px 24px -12px rgba(15, 23, 42, 0.15); }
 .email-preview-inner { }
 .email-preview-body { padding: 32px; font-family: Inter, sans-serif; color: var(--color-ink); }
+.email-preview-iframe { display: block; width: 100%; height: 720px; border: 0; background: #fff; }
+.email-preview-loading { padding: 48px 24px; text-align: center; font-family: var(--font-body); font-size: 13px; color: var(--color-fog); }
+.email-preview-loading--error { color: #B91C1C; }
+.email-preview-hint { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 10px; font-family: var(--font-body); font-size: 12px; color: #92400E; }
+.email-preview-hint__dot { width: 8px; height: 8px; border-radius: 999px; background: #F59E0B; flex-shrink: 0; }
+
+/* Email tabs — pick between shared frame + per-email body. */
+.email-tabs { margin: 16px 0 4px; }
+
+/* Email section — one tab's worth of editor. */
+.email-section { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.email-section__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.email-section__eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-fog); }
+.email-section__title { font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; color: var(--color-ink); margin-top: 2px; }
+
+/* Body copy — per-flavour subject + body editor */
+.flavor-editor { display: grid; grid-template-columns: 260px 1fr; gap: 20px; margin-top: 16px; align-items: flex-start; }
+.flavor-picker { background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 12px; overflow: hidden; }
+.flavor-picker__list { list-style: none; padding: 0; margin: 0; }
+.flavor-picker__list li + li { border-top: 1px solid var(--color-hairline); }
+.flavor-picker__row { display: block; width: 100%; padding: 12px 14px; background: transparent; border: 0; text-align: left; cursor: pointer; font-family: var(--font-body); transition: background 120ms ease; }
+.flavor-picker__row:hover:not(.is-on) { background: #fff; }
+.flavor-picker__row.is-on { background: var(--color-ink); }
+.flavor-picker__row-top { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.flavor-picker__label { font-size: 13px; font-weight: 600; color: var(--color-ink); flex: 1; min-width: 0; }
+.flavor-picker__row.is-on .flavor-picker__label { color: #fff; }
+.flavor-picker__hint { font-size: 11px; color: var(--color-fog); line-height: 1.4; }
+.flavor-picker__row.is-on .flavor-picker__hint { color: rgba(255, 255, 255, 0.6); }
+.flavor-picker__chip { font-family: var(--font-mono); font-size: 9px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; flex-shrink: 0; }
+.flavor-picker__chip--default { background: var(--color-hairline); color: var(--color-graphite); }
+.flavor-picker__chip--on { background: #DCFCE7; color: #166534; }
+.flavor-picker__chip--dirty { background: #FEF3C7; color: #92400E; }
+.flavor-picker__row.is-on .flavor-picker__chip--default { background: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.7); }
+
+.flavor-editor__pane { display: flex; flex-direction: column; gap: 20px; }
+.flavor-editor__subject { width: 100%; box-sizing: border-box; padding: 10px 14px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 14px; color: var(--color-ink); background: var(--color-surface); }
+.flavor-editor__subject:focus { outline: none; border-color: var(--color-ink); background: #fff; }
+.flavor-editor__body { width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-mono); font-size: 12px; line-height: 155%; color: var(--color-ink); background: var(--color-surface); resize: vertical; min-height: 220px; }
+.flavor-editor__body:focus { outline: none; border-color: var(--color-ink); background: #fff; }
+
+.flavor-tokens { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 10px; }
+.flavor-tokens__head { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
+.flavor-tokens__list { display: flex; flex-wrap: wrap; gap: 6px; }
+.flavor-tokens__pill { padding: 4px 10px; background: var(--color-ink); color: #fff; border: 0; border-radius: 6px; font-family: var(--font-mono); font-size: 11px; cursor: pointer; }
+.flavor-tokens__pill:hover { background: var(--color-graphite); }
+
+@media (max-width: 1023px) {
+  .flavor-editor { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 1023px) {
   .email-editor { grid-template-columns: 1fr; }

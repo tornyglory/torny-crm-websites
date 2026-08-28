@@ -90,6 +90,54 @@ export type EmailTemplateErrorCode =
   | 'rate_limited'
   | 'send_failed'
 
+// ── Per-flavour body overrides — backend brief 46 ─────────────────
+
+/** One row per (club, flavor) — combines the platform default copy
+ *  (read-only) with the owner's override (nullable). */
+export interface EmailFlavorRow {
+  flavor: EmailFlavor
+  /** Human label the CRM shows in the flavour picker. */
+  label: string
+  /** One-line description of when this flavour fires. */
+  hint: string
+  /** Platform default subject line. Read-only. */
+  subject_default: string
+  /** Owner's saved override, or null when using the default. */
+  subject_override: string | null
+  /** Platform default body HTML. Read-only. */
+  body_html_default: string
+  /** Owner's saved override, or null when using the default. */
+  body_html_override: string | null
+  /** Token keys (not full {{tokens}} form) valid inside this flavour's
+   *  subject + body. Strictly enforced on PATCH. */
+  supported_tokens: string[]
+  /** Last saved timestamp for the override, or null if never saved. */
+  updated_at: string | null
+  /** user_id of whoever last saved the override, or null. */
+  updated_by: number | null
+}
+
+export type EmailFlavorPatch = Partial<{
+  /** New subject, or explicit null to clear the override. */
+  subject_override: string | null
+  /** New body HTML, or explicit null to clear the override. */
+  body_html_override: string | null
+}>
+
+export interface EmailFlavorsResponse {
+  flavors: EmailFlavorRow[]
+}
+
+export type EmailFlavorErrorCode =
+  | 'bad_flavor'
+  | 'empty_patch'
+  | 'subject_too_long'
+  | 'body_too_long'
+  | 'empty_subject'
+  | 'empty_body'
+  | 'bad_html'
+  | 'unknown_variable'
+
 interface Envelope<T> {
   status: 'success'
   message?: string
@@ -145,4 +193,47 @@ export async function testSend(
     { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
   )
   return res.data
+}
+
+// ── Per-flavour body overrides — brief 46 ─────────────────────────
+
+/** GET /clubs/{club_id}/email-template/flavors — all 7 flavours with
+ *  defaults + overrides in one call. */
+export async function listFlavors(
+  clubId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<EmailFlavorsResponse> {
+  const res = await authedFetch<Envelope<EmailFlavorsResponse>>(
+    `${CRM_BASE}/clubs/${clubId}/email-template/flavors`,
+    { method: 'GET', signal: opts.signal },
+  )
+  return res.data
+}
+
+/** PATCH /clubs/{club_id}/email-template/flavors/{flavor} — send only
+ *  the fields you want to change. Explicit null clears a field. */
+export async function updateFlavor(
+  clubId: number,
+  flavor: EmailFlavor,
+  patch: EmailFlavorPatch,
+  opts: { signal?: AbortSignal } = {},
+): Promise<EmailFlavorRow> {
+  const res = await authedFetch<Envelope<EmailFlavorRow>>(
+    `${CRM_BASE}/clubs/${clubId}/email-template/flavors/${encodeURIComponent(flavor)}`,
+    { method: 'PATCH', body: JSON.stringify(patch), signal: opts.signal },
+  )
+  return res.data
+}
+
+/** DELETE /clubs/{club_id}/email-template/flavors/{flavor} — clears
+ *  both subject + body overrides in one call. Idempotent. */
+export async function resetFlavor(
+  clubId: number,
+  flavor: EmailFlavor,
+  opts: { signal?: AbortSignal } = {},
+): Promise<void> {
+  await authedFetch<unknown>(
+    `${CRM_BASE}/clubs/${clubId}/email-template/flavors/${encodeURIComponent(flavor)}`,
+    { method: 'DELETE', signal: opts.signal },
+  )
 }

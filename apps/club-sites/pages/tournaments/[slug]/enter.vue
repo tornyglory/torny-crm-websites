@@ -1,8 +1,20 @@
 <script setup lang="ts">
-import { tournaments, type EnterTournamentInput, type PublicTournamentDetail, type TournamentFormat } from '@torny/api-client'
+import { tournaments, TOKEN_STORAGE_KEY, type EnterTournamentInput, type PublicTournamentDetail, type TournamentFormat } from '@torny/api-client'
 
 const route = useRoute()
 const club = useClub()
+
+// ── Auth detection ─────────────────────────────────────────────
+// SSR-safe: always guest on server, hydrates to signed-in on mount if the
+// Torny session token exists in localStorage. Custom-domain club sites can't
+// share cookies with torny.co.nz, so those visitors always look like guests
+// unless we introduce an OAuth-style handshake (out of scope for v1).
+const isSignedIn = ref(false)
+onMounted(() => {
+  if (typeof localStorage !== 'undefined' && localStorage.getItem(TOKEN_STORAGE_KEY)) {
+    isSignedIn.value = true
+  }
+})
 
 const tournamentSlug = computed(() => (route.params.slug as string) || '')
 const clubSlug = computed(() => club.value?.slug ?? '')
@@ -61,17 +73,21 @@ watchEffect(() => {
     return
   }
   const positions = POSITIONS_BY_FORMAT[tournament.value.format] ?? []
+  const prefillCaptain = isSignedIn.value
   roster.value = positions.map((position, idx) => ({
     position,
-    filled: idx === 0,
-    name: idx === 0 ? 'You' : '',
+    filled: idx === 0 && prefillCaptain,
+    name: idx === 0 && prefillCaptain ? 'You' : '',
     handle: null,
     isCaptain: idx === 0,
-    method: idx === 0 ? 'torny' : null,
-    initials: idx === 0 ? 'YO' : '',
+    method: idx === 0 && prefillCaptain ? 'torny' : null,
+    initials: idx === 0 && prefillCaptain ? 'YO' : '',
     colorClass: railClasses[idx % railClasses.length],
   }))
 })
+
+// Gate the form when a guest lands on a Torny-members-only tournament.
+const isGated = computed(() => !isSignedIn.value && tournament.value?.open_to_visitors === false)
 
 const filledCount = computed(() => roster.value.filter((r) => r.filled).length)
 const isComplete = computed(() => roster.value.length > 0 && filledCount.value === roster.value.length)
@@ -136,6 +152,28 @@ const shortFeeLabel = computed(() => {
 const spotsRemaining = computed(() => tournament.value?.stats?.spots_remaining ?? 0)
 
 // ── Submit ─────────────────────────────────────────────────────
+
+function updateGuestName(idx: number, value: string) {
+  const slot = roster.value[idx]
+  if (!slot) return
+  slot.name = value
+  slot.filled = value.trim().length > 0
+  if (slot.filled) {
+    slot.initials = value
+      .split(/\s+/)
+      .map((s) => s[0] ?? '')
+      .join('')
+      .slice(0, 2)
+      .toUpperCase()
+  } else {
+    slot.initials = ''
+  }
+}
+
+const signInHref = computed(() => {
+  const next = encodeURIComponent(`/tournaments/${tournamentSlug.value}/enter`)
+  return `/sign-in?next=${next}`
+})
 
 const submitting = ref(false)
 const submitError = ref<string | null>(null)
@@ -220,17 +258,47 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
         </div>
       </header>
 
+      <!-- Members-only gate (guest + open_to_visitors:false) -->
+      <div v-if="isGated" class="enter__gated">
+        <div class="enter__gated-inner">
+          <div class="enter__gated-eyebrow">TORNY MEMBERS ONLY</div>
+          <h2 class="enter__gated-title">Sign in to enter this one.</h2>
+          <p class="enter__gated-sub">{{ tournament.club.name }} has restricted entries to Torny members. Sign in with your handle to see the entry form.</p>
+          <div class="enter__gated-actions">
+            <NuxtLink :to="signInHref" class="btn-primary">Sign in with Torny <span class="btn-primary__arrow">→</span></NuxtLink>
+            <NuxtLink to="/tournaments" class="btn-secondary">Browse other tournaments</NuxtLink>
+          </div>
+        </div>
+      </div>
+
       <!-- Body: form + sticky summary rail -->
-      <div class="enter__body">
+      <div v-else class="enter__body">
         <div class="enter__body-inner">
           <div class="enter__form">
+            <!-- Guest upsell banner -->
+            <NuxtLink v-if="!isSignedIn" :to="signInHref" class="upsell">
+              <div class="upsell__mark">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14V12H2V4Z" stroke="currentColor" stroke-width="1.4"/><path d="M2 4L8 9L14 4" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="upsell__copy">
+                <div class="upsell__title">Already on Torny? Sign in to speed this up.</div>
+                <div class="upsell__sub">Captain and payment pre-fill from your profile, and you can add teammates by their Torny handle.</div>
+              </div>
+              <div class="upsell__cta">Sign in <span>→</span></div>
+            </NuxtLink>
+
             <!-- Section 1 — Your team -->
             <section class="section">
               <div class="section__head">
                 <div class="section__eyebrow">STEP 01 · YOUR TEAM</div>
                 <h2 class="section__title">Who's on the mat.</h2>
                 <p class="section__sub">
-                  {{ roster.length === 1 ? 'You against the world.' : `${roster.length} bowlers per team` }} — add each one by their Torny handle if they're already on here, or invite them by name and email.
+                  <template v-if="isSignedIn">
+                    {{ roster.length === 1 ? 'You against the world.' : `${roster.length} bowlers per team` }} — add each one by their Torny handle if they're already on here, or invite them by name and email.
+                  </template>
+                  <template v-else>
+                    {{ roster.length === 1 ? 'You against the world.' : `${roster.length} bowlers per team` }} — start with your own name, then add the rest of the squad.
+                  </template>
                 </p>
               </div>
 
@@ -248,7 +316,31 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
                     <div class="slot__pos-name">{{ slot.position }}</div>
                   </div>
 
-                  <template v-if="slot.filled">
+                  <!-- Guest mode: plain name inputs, no handle lookup or invite -->
+                  <template v-if="!isSignedIn">
+                    <div class="slot__body slot__body--guest">
+                      <div class="slot__avatar" :class="slot.filled ? `slot__avatar--${slot.colorClass}` : 'slot__avatar--empty'">
+                        <template v-if="slot.filled">{{ slot.initials }}</template>
+                        <template v-else>+</template>
+                      </div>
+                      <div class="slot__player">
+                        <input
+                          type="text"
+                          class="slot__input"
+                          :placeholder="slot.isCaptain ? `Your name (captain)` : `${slot.position}'s full name`"
+                          :value="slot.name"
+                          @input="updateGuestName(idx, ($event.target as HTMLInputElement).value)"
+                        />
+                        <div class="slot__player-meta">
+                          <template v-if="slot.isCaptain">You're the captain — draw updates go to you.</template>
+                          <template v-else>Full name — we'll email them a confirmation.</template>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- Signed-in mode: captain prefilled, teammates via handle search -->
+                  <template v-else-if="slot.filled">
                     <div class="slot__body">
                       <div class="slot__avatar" :class="`slot__avatar--${slot.colorClass}`">{{ slot.initials }}</div>
                       <div class="slot__player">
@@ -457,6 +549,24 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
 .enter__form { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 40px; }
 .rail { width: 380px; flex-shrink: 0; position: sticky; top: 24px; display: flex; flex-direction: column; gap: 16px; }
 
+/* ── Guest upsell banner ────────────────────────────────────── */
+.upsell { display: flex; align-items: center; gap: 16px; padding: 18px 22px; background: color-mix(in oklab, var(--brand) 8%, white); border: 1px solid color-mix(in oklab, var(--brand) 20%, var(--color-hairline)); border-radius: 14px; text-decoration: none; color: inherit; transition: background-color 0.15s ease; }
+.upsell:hover { background: color-mix(in oklab, var(--brand) 12%, white); }
+.upsell__mark { width: 40px; height: 40px; border-radius: 999px; background: var(--brand); color: white; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.upsell__copy { flex: 1; min-width: 0; }
+.upsell__title { font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: -0.01em; color: var(--color-ink); }
+.upsell__sub { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; line-height: 1.5; }
+.upsell__cta { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--brand); flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; }
+
+/* ── Members-only gate ──────────────────────────────────────── */
+.enter__gated { padding: 96px max(48px, calc((100vw - var(--container-content, 1280px)) / 2)); display: flex; justify-content: center; }
+.enter__gated-inner { max-width: 520px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.enter__gated-eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--color-fog); font-weight: 700; }
+.enter__gated-title { font-family: var(--font-display); font-size: 40px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; margin: 0; color: var(--color-ink); }
+.enter__gated-sub { font-family: var(--font-body); font-size: 15px; color: var(--color-fog); line-height: 1.55; margin: 0; }
+.enter__gated-actions { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; justify-content: center; }
+.enter__gated-actions .btn-primary, .enter__gated-actions .btn-secondary { text-decoration: none; }
+
 /* ── Section head ────────────────────────────────────────────── */
 .section { display: flex; flex-direction: column; gap: 24px; }
 .section__head { display: flex; flex-direction: column; gap: 8px; }
@@ -493,6 +603,10 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
 .slot__pos-name { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: -0.02em; color: var(--color-ink); line-height: 1; white-space: nowrap; }
 
 .slot__body { flex: 1; padding: 18px 20px; display: flex; align-items: center; gap: 16px; min-width: 0; }
+.slot__body--guest { padding: 14px 20px; }
+.slot__input { width: 100%; padding: 8px 12px; background: transparent; border: 0; border-bottom: 1.5px solid var(--color-hairline); font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; color: var(--color-ink); outline: none; box-sizing: border-box; }
+.slot__input::placeholder { color: var(--color-mute); font-weight: 500; }
+.slot__input:focus { border-bottom-color: var(--color-ink); }
 .slot__avatar { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-family: var(--font-display); font-weight: 700; font-size: 15px; flex-shrink: 0; }
 .slot__avatar--mint { background: linear-gradient(135deg, #16A34A 0%, #0F5132 100%); }
 .slot__avatar--accent { background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%); }

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 /**
- * torny.co/sign-in — the Torny web app's front door.
+ * torny.co/register — sign-up for a new Torny account.
  *
- * Optional ?club=slug query param fetches that club's brand payload and
- * skins the left rail with its logo, name, and accent colour so a member
- * arriving from `[slug].torny.co` feels continuity at the auth moment.
- * Without the param, the page shows Torny's generic surface.
+ * Same shape as /sign-in — same left rail (Torny mark + tenant chip when
+ * arriving from a club via ?club=slug) and same right column. Different
+ * form: name + email + password + terms agreement, primary CTA "Create
+ * account". Copy adapts when a tenant is present.
+ *
+ * Auth still stubbed until backend cookie auth wires up.
  */
 import { computed, ref, watch } from 'vue'
 
@@ -16,8 +18,6 @@ const clubParam = computed(() => {
   return raw.trim().toLowerCase() || null
 })
 
-// Nuxt warns when useAsyncData's handler returns null/undefined, so we
-// wrap the null case in an object and unwrap it after.
 const { data: skinWrap } = await useAsyncData(
   () => `club-skin:${clubParam.value ?? 'none'}`,
   async () => {
@@ -29,16 +29,13 @@ const { data: skinWrap } = await useAsyncData(
 )
 const skin = computed<ClubSkin | null>(() => skinWrap.value?.value ?? null)
 
-// ── Brand-driven CSS custom properties ─────────────────────────
-// Defaults reflect Torny's generic surface; overridden by the club skin
-// when a valid ?club= slug is present.
+// ── Brand-driven CSS custom properties (same recipe as sign-in) ────
 const brandStyles = computed(() => {
   const s = skin.value
   const out: Record<string, string> = {}
   if (s?.accentColour) {
     out['--brand-accent'] = s.accentColour
-    // Derived tint for focus glow — the CRM uses the same pattern.
-    out['--brand-accent-glow'] = `${s.accentColour}14` // ~8% alpha via hex suffix
+    out['--brand-accent-glow'] = `${s.accentColour}14`
   } else {
     out['--brand-accent'] = 'var(--color-accent)'
     out['--brand-accent-glow'] = 'rgba(37, 99, 235, 0.08)'
@@ -50,27 +47,29 @@ const brandStyles = computed(() => {
   return out
 })
 
-// The hero content is always Torny-editorial — one account works everywhere.
-// The tenant identity is signalled through the small chip under the wordmark
-// and the "FROM <CLUB>" pill above the form heading. That way members don't
-// mistake this for a per-club account.
-const HERO_HEADLINE = ['Every green', 'you play.', 'One profile.']
+// Hero — always Torny-editorial, tenant identity lives in the chip + FROM pill.
+const HERO_HEADLINE = ['One profile.', 'Every green', 'you play.']
 const HERO_SUB =
-  "Your Torny account works at every club running on Torny — enter tournaments, see the draw, follow the results, without a fresh sign-up each time."
+  'Get one Torny account, then use it at every club running on Torny — enter tournaments, track your record, follow players you like.'
 
 const backHref = computed(() => skin.value?.publicSiteUrl ?? 'https://torny.co')
 const backLabel = computed(() => {
   if (!skin.value) return 'torny.co'
   try { return new URL(skin.value.publicSiteUrl).host } catch { return 'Back' }
 })
-const registerCopy = computed(() =>
-  skin.value ? `New to ${skin.value.name.split(' ')[0]}?` : 'No account yet?',
-)
-const registerHref = computed(() =>
-  skin.value ? `${skin.value.publicSiteUrl}/membership` : '/register',
-)
 
-// Tenant chip host label — the naenae.torny.co the visitor is being sent back to.
+// Sign-in preserves the ?club= param so a visitor bouncing between the two
+// keeps the tenant context.
+const signInHref = computed(() => {
+  const path = '/sign-in'
+  const next = typeof route.query.next === 'string' ? route.query.next : null
+  const params = new URLSearchParams()
+  if (clubParam.value) params.set('club', clubParam.value)
+  if (next) params.set('next', next)
+  const qs = params.toString()
+  return qs ? `${path}?${qs}` : path
+})
+
 const tenantHost = computed(() => {
   if (!skin.value) return null
   try { return new URL(skin.value.publicSiteUrl).host } catch { return null }
@@ -81,61 +80,58 @@ const tenantInitials = computed(() => {
   return n.split(/\s+/).map((s) => s[0] ?? '').join('').slice(0, 2).toUpperCase()
 })
 const formSubCopy = computed(() => {
-  if (!skin.value) return 'Use the same email you gave the club when you joined.'
+  if (!skin.value) return "Takes about 30 seconds. You can join clubs, follow players, and enter tournaments once you're in."
   const first = skin.value.name.split(/\s+/)[0]
-  return `Once you're in, we'll take you back to ${first} to finish what you started.`
+  return `Once you're set up, we'll take you back to ${first} to finish what you started.`
 })
+const primaryCtaLabel = computed(() => (skin.value ? 'Create account & continue' : 'Create account'))
 
-// ── Form state — minimal, mocked auth for now. Real POST wires later. ─
-const form = ref({ email: '', password: '', keepSignedIn: true })
+// ── Form state — mocked until auth wires up. ─────────────────────
+const form = ref({ name: '', email: '', password: '', agreeTerms: false })
 const showPassword = ref(false)
 const submitting = ref(false)
 const errorMessage = ref<string | null>(null)
 
 async function handleSubmit() {
-  if (!form.value.email.trim() || !form.value.password) {
-    errorMessage.value = 'Enter your email and password.'
+  if (!form.value.name.trim() || !form.value.email.trim() || !form.value.password) {
+    errorMessage.value = 'Fill in your name, email, and password.'
+    return
+  }
+  if (form.value.password.length < 8) {
+    errorMessage.value = 'Password needs to be at least 8 characters.'
+    return
+  }
+  if (!form.value.agreeTerms) {
+    errorMessage.value = "You'll need to agree to the terms to create an account."
     return
   }
   submitting.value = true
   errorMessage.value = null
   try {
-    // TODO: wire to auth.login() from @torny/api-client + persist token.
+    // TODO: wire to auth.register() from @torny/api-client + persist token.
     await new Promise((r) => setTimeout(r, 500))
-    errorMessage.value = 'Auth endpoint not wired yet — coming next.'
+    errorMessage.value = 'Register endpoint not wired yet — coming next.'
   } finally {
     submitting.value = false
   }
 }
 
-// SEO — dynamic based on skin.
+// SEO
 watch(
   skin,
   (s) => {
     useSeoMeta({
-      title: s ? `Sign in to ${s.name} · Torny` : 'Sign in · Torny',
-      description: s
-        ? `Sign in to your ${s.name} member portal on Torny.`
-        : "Sign in to Torny — the bowls club network.",
+      title: s ? `Create your Torny · from ${s.name}` : 'Create your Torny',
+      description: 'Set up a Torny account to enter tournaments, track your record, and follow players you like.',
     })
   },
   { immediate: true },
 )
-
-// Stats surfaced in the bottom strip (only when we have a club skin).
-const stats = computed(() => {
-  const s = skin.value
-  if (!s) return []
-  const out: Array<{ value: string; label: string }> = []
-  if (s.foundedYear) out.push({ value: `Est. '${String(s.foundedYear).slice(-2)}`, label: 'ESTABLISHED' })
-  if (s.region) out.push({ value: s.region, label: `${s.country ? `${s.country} ·` : ''} REGION` })
-  return out
-})
 </script>
 
 <template>
   <div class="signin" :style="brandStyles">
-    <!-- Left rail — Torny-primary; subtle tenant chip when arriving from a club -->
+    <!-- Left rail — Torny-primary; tenant chip when arriving from a club -->
     <aside class="signin__left">
       <header class="signin__nav">
         <div class="crest-col">
@@ -163,7 +159,7 @@ const stats = computed(() => {
       </header>
 
       <section class="hero">
-        <div class="hero__eyebrow">SIGN IN · MEMBER PORTAL</div>
+        <div class="hero__eyebrow">CREATE ACCOUNT · MEMBER PORTAL</div>
         <h1 class="hero__title">
           <span v-for="(line, i) in HERO_HEADLINE" :key="i">{{ line }}<br v-if="i < HERO_HEADLINE.length - 1" /></span>
         </h1>
@@ -184,10 +180,21 @@ const stats = computed(() => {
             <span class="card__from-dot" aria-hidden="true"></span>
             <span>FROM {{ skin.name.toUpperCase() }}</span>
           </div>
-          <div class="card__eyebrow">SIGN IN</div>
-          <h2 class="card__title">Hi again.</h2>
+          <div class="card__eyebrow">CREATE ACCOUNT</div>
+          <h2 class="card__title">Create your Torny.</h2>
           <p class="card__sub">{{ formSubCopy }}</p>
         </header>
+
+        <label class="field">
+          <span class="field__label">FULL NAME</span>
+          <input
+            v-model="form.name"
+            type="text"
+            autocomplete="name"
+            required
+            placeholder="First and last name"
+          />
+        </label>
 
         <label class="field">
           <span class="field__label">EMAIL</span>
@@ -197,22 +204,20 @@ const stats = computed(() => {
             autocomplete="email"
             spellcheck="false"
             required
-            :placeholder="skin ? `you@${skin.slug}.org.nz` : 'you@email.com'"
+            placeholder="you@email.com"
           />
         </label>
 
         <label class="field">
-          <div class="field__label-row">
-            <span class="field__label">PASSWORD</span>
-            <a href="#" class="field__hint-link" @click.prevent>Forgot password</a>
-          </div>
+          <span class="field__label">PASSWORD</span>
           <div class="field__with-toggle">
             <input
               v-model="form.password"
               :type="showPassword ? 'text' : 'password'"
-              autocomplete="current-password"
+              autocomplete="new-password"
               required
-              placeholder="Your password"
+              placeholder="At least 8 characters"
+              minlength="8"
             />
             <button
               type="button"
@@ -226,35 +231,38 @@ const stats = computed(() => {
               </svg>
             </button>
           </div>
+          <span class="field__hint">At least 8 characters.</span>
         </label>
 
         <label class="check">
-          <input v-model="form.keepSignedIn" type="checkbox" />
+          <input v-model="form.agreeTerms" type="checkbox" />
           <span class="check__box" aria-hidden="true">
-            <svg v-if="form.keepSignedIn" width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <svg v-if="form.agreeTerms" width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M2.5 6L5 8.5L9.5 3.5" stroke="var(--color-ground)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </span>
-          <span class="check__label">Keep me signed in on this device</span>
+          <span class="check__label">
+            I agree to Torny's <a href="#" @click.prevent>terms of use</a> and <a href="#" @click.prevent>privacy policy</a>.
+          </span>
         </label>
 
         <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
 
         <button type="submit" class="submit" :disabled="submitting">
-          <span>{{ submitting ? 'Signing in…' : 'Sign in to your portal' }}</span>
+          <span>{{ submitting ? 'Creating account…' : primaryCtaLabel }}</span>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M3 8H13M13 8L8.5 3.5M13 8L8.5 12.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
 
         <footer class="card__foot">
-          <span class="card__foot-label">{{ registerCopy }}</span>
-          <a class="card__foot-cta" :href="registerHref">
-            <span>{{ skin ? 'Apply to join' : 'Register' }}</span>
+          <span class="card__foot-label">Already have a Torny?</span>
+          <NuxtLink class="card__foot-cta" :to="signInHref">
+            <span>Sign in instead</span>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
               <path d="M2.5 6H9.5M9.5 6L6.5 3M9.5 6L6.5 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-          </a>
+          </NuxtLink>
         </footer>
       </form>
     </main>
@@ -282,12 +290,11 @@ const stats = computed(() => {
 
 .signin__nav {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
 }
 
-/* Torny mark — matches the CRM shell: a small accent dot + wordmark. */
 .crest-col { display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
 .crest { display: inline-flex; align-items: center; gap: 8px; }
 .crest__dot {
@@ -306,7 +313,6 @@ const stats = computed(() => {
   line-height: 100%;
 }
 
-/* Tenant chip — small handoff signal below the Torny mark. */
 .tenant-chip {
   display: inline-flex;
   align-items: center;
@@ -391,7 +397,6 @@ const stats = computed(() => {
   margin: 0;
 }
 
-/* Foot — copyright + established line, replaces the tenant stats. */
 .foot { display: flex; flex-direction: column; gap: 6px; }
 .foot__label {
   font-family: var(--font-mono);
@@ -422,7 +427,7 @@ const stats = computed(() => {
 .card {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 24px;
   width: 100%;
   max-width: 420px;
   padding: 40px 36px;
@@ -432,7 +437,7 @@ const stats = computed(() => {
   box-shadow: 0 20px 40px -20px rgba(15, 23, 42, 0.06);
 }
 
-.card__head { display: flex; flex-direction: column; gap: 12px; }
+.card__head { display: flex; flex-direction: column; gap: 10px; }
 .card__from {
   display: inline-flex;
   align-items: center;
@@ -484,7 +489,6 @@ const stats = computed(() => {
 
 /* ── Fields ───────────────────────────────────────────────────── */
 .field { display: flex; flex-direction: column; gap: 8px; }
-.field__label-row { display: flex; align-items: center; justify-content: space-between; }
 .field__label {
   font-family: var(--font-mono);
   font-weight: 500;
@@ -493,15 +497,11 @@ const stats = computed(() => {
   text-transform: uppercase;
   color: var(--color-fog);
 }
-.field__hint-link {
+.field__hint {
   font-family: var(--brand-font-body);
-  font-weight: 600;
   font-size: 12px;
-  color: var(--brand-accent);
-  line-height: 100%;
-  transition: opacity 150ms ease;
+  color: var(--color-fog);
 }
-.field__hint-link:hover { opacity: 0.8; }
 
 .field input {
   width: 100%;
@@ -537,10 +537,10 @@ const stats = computed(() => {
 .field__toggle:hover { color: var(--color-ink); }
 .field__with-toggle input { padding-right: 44px; }
 
-/* ── Check row ────────────────────────────────────────────────── */
+/* ── Check row (terms) ────────────────────────────────────────── */
 .check {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   cursor: pointer;
   user-select: none;
@@ -562,14 +562,20 @@ const stats = computed(() => {
   justify-content: center;
   flex-shrink: 0;
   transition: background 120ms ease;
+  margin-top: 1px;
 }
 .check input:checked + .check__box { background: var(--color-ink); }
 .check__label {
   font-family: var(--brand-font-body);
   font-weight: 500;
   font-size: 13px;
+  color: var(--color-graphite);
+  line-height: 150%;
+}
+.check__label a {
   color: var(--color-ink);
-  line-height: 100%;
+  font-weight: 500;
+  text-decoration: underline;
 }
 
 /* ── Submit ───────────────────────────────────────────────────── */
@@ -631,6 +637,7 @@ const stats = computed(() => {
   color: var(--color-ink);
   line-height: 100%;
   transition: gap 150ms ease;
+  text-decoration: none;
 }
 .card__foot-cta:hover { gap: 10px; }
 

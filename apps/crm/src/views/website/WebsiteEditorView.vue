@@ -39,6 +39,9 @@ import type {
   EventsCalendarProps,
   HonourBoardProps,
   HonourBoardSearchProps,
+  TournamentSearchProps,
+  UpcomingTournamentsListProps,
+  UpcomingTournamentHeroProps,
   MembersSearchProps,
   MembershipJoinFormProps,
   GalleryProps,
@@ -377,6 +380,29 @@ const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
         ctaLabel: 'See the full calendar',
         ctaHref: '/events',
       }) },
+    { type: 'upcomingTournamentHero', label: 'Tournament · Hero', hint: 'Full-bleed feature of your next comp — cover, countdown, entry CTA', icon: '★',
+      defaults: (): UpcomingTournamentHeroProps => ({
+        primaryLabel: 'Enter a team',
+        secondaryLabel: 'Full details',
+      }) },
+    { type: 'upcomingTournamentsList', label: 'Upcoming tournaments', hint: 'Three-row strip of next comps with progress bars + Enter CTAs', icon: '☰',
+      defaults: (): UpcomingTournamentsListProps => ({
+        heading: 'Grab your spot.',
+        description: 'Open comps taking entries this season.',
+        limit: 3,
+        ctaLabel: 'View all tournaments',
+        ctaHref: '/tournaments',
+        scope: 'club',
+      }) },
+    { type: 'tournamentSearch', label: 'Tournaments · Search', hint: 'Full searchable finder — filter rail, featured card, list rows', icon: '⌕',
+      defaults: (): TournamentSearchProps => ({
+        heading: 'Find your next comp.',
+        description: 'Every open tournament we\'re running — filter, search, enter in a click.',
+        scope: 'club',
+        showFilterChips: true,
+        showSearch: true,
+        openOnly: false,
+      }) },
     { type: 'gallery', label: 'Gallery', hint: 'Editorial photo grid with mono caption pills', icon: '▨',
       defaults: (): GalleryProps => ({
         eyebrow: 'AROUND THE GREENS · THIS SEASON',
@@ -590,6 +616,29 @@ const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
         highlightsCount: 4,
         showIcalExport: true,
       }) },
+    { type: 'upcomingTournamentHero', label: 'Tournament · Hero', hint: 'Full-bleed feature of your next comp — cover, countdown, entry CTA', icon: '★',
+      defaults: (): UpcomingTournamentHeroProps => ({
+        primaryLabel: 'Enter a team',
+        secondaryLabel: 'Full details',
+      }) },
+    { type: 'upcomingTournamentsList', label: 'Upcoming tournaments', hint: 'Three-row strip of next comps with progress bars + Enter CTAs', icon: '☰',
+      defaults: (): UpcomingTournamentsListProps => ({
+        heading: 'Grab your spot.',
+        description: 'Open comps taking entries this season.',
+        limit: 3,
+        ctaLabel: 'View all tournaments',
+        ctaHref: '/tournaments',
+        scope: 'club',
+      }) },
+    { type: 'tournamentSearch', label: 'Tournaments · Search', hint: 'Full searchable finder — filter rail, featured card, list rows', icon: '⌕',
+      defaults: (): TournamentSearchProps => ({
+        heading: 'Find your next comp.',
+        description: 'Every open tournament we\'re running — filter, search, enter in a click.',
+        scope: 'club',
+        showFilterChips: true,
+        showSearch: true,
+        openOnly: false,
+      }) },
     { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
       defaults: (): CtaBannerProps => ({ heading: 'Want to run an event?', ctaLabel: 'Tell us more', ctaHref: '/contact', tone: 'accent' }) },
   ],
@@ -648,6 +697,9 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   eventsCalendar: 'Events · Calendar',
   honourBoard: 'Honour board',
   honourBoardSearch: 'Honour board · Search',
+  tournamentSearch: 'Tournaments · Search',
+  upcomingTournamentsList: 'Upcoming tournaments',
+  upcomingTournamentHero: 'Tournament · Hero',
   membersSearch: 'Members',
   membershipJoinForm: 'Join form',
   peopleGrid: 'People grid',
@@ -1253,6 +1305,19 @@ function blockSummary(block: Block): string {
     case 'eventsCalendar': return (block.props as EventsCalendarProps).heading || 'Events calendar'
     case 'honourBoard':   return (block.props as HonourBoardProps).heading || `Honour board — last ${(block.props as HonourBoardProps).yearsToShow ?? 10} years`
     case 'honourBoardSearch': return (block.props as HonourBoardSearchProps).heading || 'Full searchable honour board'
+    case 'tournamentSearch': {
+      const p = block.props as TournamentSearchProps
+      const scope = p.scope === 'network' ? 'whole Torny network' : 'our club'
+      return p.heading ? `${p.heading} — ${scope}` : `Tournaments — ${scope}`
+    }
+    case 'upcomingTournamentsList': {
+      const p = block.props as UpcomingTournamentsListProps
+      return `${p.heading || 'Upcoming tournaments'} — ${p.limit ?? 3}`
+    }
+    case 'upcomingTournamentHero': {
+      const p = block.props as UpcomingTournamentHeroProps
+      return p.tournamentSlug ? `Tournament hero — pinned: ${p.tournamentSlug}` : 'Tournament hero — next closing'
+    }
     case 'membersSearch': {
       const p = block.props as MembersSearchProps
       const positions = p.positions ?? []
@@ -1805,6 +1870,114 @@ const lastSavedLabel = computed(() => {
               <input v-model.number="(selectedBlock.props as HonourBoardSearchProps).pageSize" type="number" min="10" max="100" step="10" />
               <span class="field__hint">Rows per "Load older" page. 50 is a sensible default.</span>
             </label>
+          </template>
+
+          <template v-else-if="selectedBlock.type === 'tournamentSearch'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as TournamentSearchProps).eyebrow" type="text" placeholder="Leave blank for auto — 'Tournaments · N listed'" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as TournamentSearchProps).heading" type="text" placeholder="Find your next comp." />
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as TournamentSearchProps).description" rows="3" placeholder="One line above the search." />
+            </label>
+            <label class="field">
+              <span class="field__label">Scope</span>
+              <select v-model="(selectedBlock.props as TournamentSearchProps).scope">
+                <option value="club">Our club only</option>
+                <option value="network">Whole Torny network</option>
+              </select>
+              <span class="field__hint">"Club" filters to this site's tournaments. "Network" lists every open comp on Torny.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Rows per page</span>
+              <input v-model.number="(selectedBlock.props as TournamentSearchProps).pageSize" type="number" min="6" max="50" step="6" />
+            </label>
+            <div class="field">
+              <span class="field__label">Show controls</span>
+              <div class="toggle-row">
+                <button
+                  type="button"
+                  class="toggle-btn"
+                  :class="{ 'is-on': (selectedBlock.props as TournamentSearchProps).showSearch !== false }"
+                  @click="(selectedBlock.props as TournamentSearchProps).showSearch = !((selectedBlock.props as TournamentSearchProps).showSearch !== false)"
+                >Search input</button>
+                <button
+                  type="button"
+                  class="toggle-btn"
+                  :class="{ 'is-on': (selectedBlock.props as TournamentSearchProps).showFilterChips !== false }"
+                  @click="(selectedBlock.props as TournamentSearchProps).showFilterChips = !((selectedBlock.props as TournamentSearchProps).showFilterChips !== false)"
+                >Filter rail</button>
+                <button
+                  type="button"
+                  class="toggle-btn"
+                  :class="{ 'is-on': (selectedBlock.props as TournamentSearchProps).openOnly === true }"
+                  @click="(selectedBlock.props as TournamentSearchProps).openOnly = !(selectedBlock.props as TournamentSearchProps).openOnly"
+                >Open only</button>
+              </div>
+            </div>
+          </template>
+
+          <template v-else-if="selectedBlock.type === 'upcomingTournamentsList'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as UpcomingTournamentsListProps).eyebrow" type="text" placeholder="Leave blank for auto — 'N upcoming · Taking entries'" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as UpcomingTournamentsListProps).heading" type="text" placeholder="Grab your spot." />
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as UpcomingTournamentsListProps).description" rows="2" placeholder="One line above the list." />
+            </label>
+            <label class="field">
+              <span class="field__label">How many to show</span>
+              <input v-model.number="(selectedBlock.props as UpcomingTournamentsListProps).limit" type="number" min="1" max="8" />
+            </label>
+            <label class="field">
+              <span class="field__label">Scope</span>
+              <select v-model="(selectedBlock.props as UpcomingTournamentsListProps).scope">
+                <option value="club">Our club only</option>
+                <option value="network">Whole Torny network</option>
+              </select>
+            </label>
+            <div class="field-row">
+              <label class="field">
+                <span class="field__label">CTA label</span>
+                <input v-model="(selectedBlock.props as UpcomingTournamentsListProps).ctaLabel" type="text" placeholder="View all tournaments" />
+              </label>
+              <label class="field">
+                <span class="field__label">CTA href</span>
+                <input v-model="(selectedBlock.props as UpcomingTournamentsListProps).ctaHref" type="text" placeholder="/tournaments" />
+              </label>
+            </div>
+          </template>
+
+          <template v-else-if="selectedBlock.type === 'upcomingTournamentHero'">
+            <label class="field">
+              <span class="field__label">Tournament slug <span class="field__opt">optional</span></span>
+              <input v-model="(selectedBlock.props as UpcomingTournamentHeroProps).tournamentSlug" type="text" placeholder="Auto-picks your next closing comp — or paste a slug to pin one" />
+              <span class="field__hint">Leave blank to always feature the tournament closing entries next.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Description override</span>
+              <textarea v-model="(selectedBlock.props as UpcomingTournamentHeroProps).description" rows="3" placeholder="Otherwise uses the tournament's own subtitle or description." />
+            </label>
+            <div class="field-row">
+              <label class="field">
+                <span class="field__label">Primary CTA</span>
+                <input v-model="(selectedBlock.props as UpcomingTournamentHeroProps).primaryLabel" type="text" placeholder="Enter a team" />
+              </label>
+              <label class="field">
+                <span class="field__label">Secondary CTA</span>
+                <input v-model="(selectedBlock.props as UpcomingTournamentHeroProps).secondaryLabel" type="text" placeholder="Full details" />
+              </label>
+            </div>
           </template>
 
           <!-- Members — meet the club (brief 35) -->

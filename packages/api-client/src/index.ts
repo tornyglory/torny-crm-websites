@@ -55,6 +55,8 @@ export type {
   BowlsFormat,
   Event,
   PublicEvent,
+  PublicCalendarTournament,
+  CalendarSource,
   EventRsvpPreview,
 } from './types'
 export * as teams from './resources/teams'
@@ -152,6 +154,41 @@ export type {
   EnquirySettingsPatch,
   EnquiryErrorCode,
 } from './resources/enquiries'
+export * as tournaments from './resources/tournaments'
+export type {
+  TournamentFormat,
+  TournamentCategory,
+  TournamentGenderScope,
+  TournamentStatus,
+  TournamentPaymentMethod,
+  TournamentEntryUnit,
+  EntryStatus,
+  TournamentStats,
+  EntryCaptain,
+  TournamentRosterMember,
+  TournamentEntry,
+  Tournament,
+  TournamentListItem,
+  TournamentStatusCounts,
+  OffsetPagination,
+  TournamentsListResponse,
+  EntriesListResponse,
+  PublicTournamentClub,
+  PublicTournamentCard,
+  PublicTournamentDetail,
+  PublicTournamentsListResponse,
+  CreateTournamentInput,
+  UpdateTournamentInput,
+  UpdateEntryInput,
+  EnterTournamentInput,
+  EnterTournamentResult,
+  WithdrawEntryInput,
+  ListTournamentsParams,
+  ListEntriesParams,
+  PublicSort,
+  PublicListTournamentsParams,
+  TournamentErrorCode,
+} from './resources/tournaments'
 export * as applications from './resources/applications'
 export type {
   ApplicationStatus,

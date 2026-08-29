@@ -9,6 +9,7 @@ import {
   applications as applicationsApi,
   enquiries as enquiriesApi,
   events as eventsApi,
+  tournaments as tournamentsApi,
 } from '@torny/api-client'
 import { useHonourCategoriesStore } from '@/stores/honourCategories'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -151,7 +152,7 @@ const crumbTitle = computed(() => String(route.name ?? '').replace(/-/g, ' '))
 
 type NavIcon =
   | 'dashboard' | 'members' | 'applications' | 'enquiries'
-  | 'website' | 'events' | 'teams' | 'honour'
+  | 'website' | 'events' | 'teams' | 'honour' | 'tournaments'
   | 'communications' | 'site-settings' | 'settings'
 
 interface NavItem {
@@ -311,6 +312,41 @@ if (typeof window !== 'undefined') {
   onBeforeUnmount(() => window.removeEventListener('torny:events-count', onEventsCountUpdate))
 }
 
+// ── Tournaments active count (brief 47) ───────────────────────
+// "Active" = anything not in a terminal state. Cheap counts-only fetch
+// (`limit=1`) uses the backend `counts` envelope. Kept fresh by
+// TournamentsListView broadcasting `torny:tournaments-count` after its
+// own load.
+const tournamentsActiveCount = ref<number | null>(null)
+async function loadTournamentsCount(clubId: number) {
+  try {
+    const res = await tournamentsApi.list(clubId, { limit: 1 })
+    const c = res.counts
+    tournamentsActiveCount.value =
+      (c?.draft ?? 0) + (c?.published ?? 0) + (c?.entries_closed ?? 0) + (c?.in_progress ?? 0)
+  } catch {
+    tournamentsActiveCount.value = null
+  }
+}
+
+watch(
+  () => club.current?.id,
+  (id) => {
+    if (id != null && typeof id === 'number') void loadTournamentsCount(id)
+    else tournamentsActiveCount.value = null
+  },
+  { immediate: true },
+)
+
+function onTournamentsCountUpdate(e: Event) {
+  const detail = (e as CustomEvent).detail
+  if (typeof detail === 'number') tournamentsActiveCount.value = detail
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('torny:tournaments-count', onTournamentsCountUpdate)
+  onBeforeUnmount(() => window.removeEventListener('torny:tournaments-count', onTournamentsCountUpdate))
+}
+
 const manageNav = computed<NavItem[]>(() => [
   { to: '/crm/dashboard', label: 'Dashboard', icon: 'dashboard' },
   { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? '—', countTone: 'neutral' },
@@ -342,6 +378,14 @@ const contentNav = computed<NavItem[]>(() => [
       : {}),
   },
   { to: '/crm/teams', label: 'Team selections', icon: 'teams', count: 4, countTone: 'neutral' },
+  {
+    to: '/crm/tournaments',
+    label: 'Tournaments',
+    icon: 'tournaments',
+    ...(tournamentsActiveCount.value != null
+      ? { count: tournamentsActiveCount.value, countTone: tournamentsActiveCount.value > 0 ? 'accent' as const : 'neutral' as const }
+      : {}),
+  },
   {
     to: '/crm/honour-board',
     label: 'Honour board',
@@ -493,7 +537,8 @@ const bottomTabs = computed<TabItem[]>(() => [
             <svg v-if="item.icon === 'website'" width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 9h13M9 2.5c1.8 2.2 2.7 4.3 2.7 6.5s-.9 4.3-2.7 6.5C7.2 13.3 6.3 11.2 6.3 9S7.2 4.7 9 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <svg v-else-if="item.icon === 'events'" width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="4" width="13" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 7.5h13M6 2.5v3M12 2.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
             <svg v-else-if="item.icon === 'teams'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M6 3.5h6a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5z" stroke="currentColor" stroke-width="1.5"/><path d="M7 2.5h4v2H7zM7 8h4M7 11h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            <svg v-else-if="item.icon === 'honour'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M5 2.5h8v5.5a4 4 0 1 1-8 0V2.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5 4.5H3v2a2 2 0 0 0 2 2M13 4.5h2v2a2 2 0 0 1-2 2M6 15.5h6M9 11.5v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <svg v-else-if="item.icon === 'honour'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1.5L11.16 6.15L16.2 6.9L12.6 10.5L13.44 15.6L9 13.2L4.56 15.6L5.4 10.5L1.8 6.9L6.84 6.15L9 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            <svg v-else-if="item.icon === 'tournaments'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M5.5 3v1.5C5.5 6.5 7 8 9 8s3.5-1.5 3.5-3.5V3h-7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5.5 3H3v2c0 1 .5 2 2.5 2M12.5 3H15v2c0 1-.5 2-2.5 2M7 11h4l.5 3.5h-5L7 11zM9 8v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </span>
           <span class="sidebar__link-label">{{ item.label }}</span>
           <span

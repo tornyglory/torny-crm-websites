@@ -11,6 +11,7 @@
  * from the API paints the field red inline.
  */
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 import {
   events as eventsApi,
   members as membersApi,
@@ -29,6 +30,7 @@ import { useToast } from '@/composables/useToast'
 
 const clubStore = useClubStore()
 const toast = useToast()
+const router = useRouter()
 const clubId = computed(() => clubStore.current?.id ?? null)
 
 type Tab = 'upcoming' | 'past'
@@ -128,6 +130,12 @@ const formatFilterVisible = computed(
 )
 
 const TYPE_ORDER: EventType[] = ['tournament', 'pennant', 'social', 'training', 'other']
+
+/** Types an owner can pick when creating/editing an event through this
+ *  page. Tournaments are owned by the dedicated tournaments feature —
+ *  the backend still emits them into the events feed (calendar +
+ *  filters keep showing them) but they're not authored here. */
+const CREATABLE_TYPES: EventType[] = TYPE_ORDER.filter((t) => t !== 'tournament')
 
 const typeCounts = computed(() => {
   const src = byTab.value
@@ -283,7 +291,7 @@ interface EditorForm {
 function emptyForm(): EditorForm {
   return {
     title: '',
-    event_type: 'tournament',
+    event_type: 'social',
     format: 'singles',
     excerpt: '',
     description: '',
@@ -339,6 +347,17 @@ function openCreate() {
 }
 
 function openEdit(e: Event) {
+  // Tournaments are authored through the dedicated tournaments feature —
+  // route the user there instead of opening the events editor for a comp.
+  if (e.event_type === 'tournament') {
+    const tid = (e as unknown as { tournament_id?: number | string }).tournament_id
+    if (tid != null) {
+      router.push({ name: 'tournament-edit', params: { id: String(tid) } })
+    } else {
+      router.push({ name: 'tournaments' })
+    }
+    return
+  }
   editing.value = e
   editorError.value = null
   invalidHostUserId.value = null
@@ -612,7 +631,12 @@ onBeforeUnmount(() => {
       </div>
       <div class="events__actions">
         <button class="btn btn--ghost" @click="openPublicCalendar">View calendar</button>
-        <button class="btn btn--primary" @click="openCreate">+ New event</button>
+        <RouterLink
+          v-if="typeFilter === 'tournament'"
+          :to="{ name: 'tournament-new' }"
+          class="btn btn--primary"
+        >+ New tournament</RouterLink>
+        <button v-else class="btn btn--primary" @click="openCreate">+ New event</button>
       </div>
     </header>
 
@@ -765,22 +789,17 @@ onBeforeUnmount(() => {
           <span class="field__hint">Shown on the calendar tile. Up to 500 characters.</span>
         </label>
 
-        <div class="form__row" :class="{ 'form__row--three': formNeedsFormat }">
+        <div class="form__row">
           <label class="field">
             <span class="field__label">Type</span>
             <select v-model="form.event_type">
-              <option v-for="t in TYPE_ORDER" :key="t" :value="t">{{ typeLabel[t] }}</option>
+              <option v-for="t in CREATABLE_TYPES" :key="t" :value="t">{{ typeLabel[t] }}</option>
             </select>
-          </label>
-          <label v-if="formNeedsFormat" class="field">
-            <span class="field__label">Format</span>
-            <select v-model="form.format">
-              <option value="singles">Singles</option>
-              <option value="pairs">Pairs</option>
-              <option value="triples">Triples</option>
-              <option value="fours">Fours</option>
-              <option value="other">Other</option>
-            </select>
+            <span class="field__hint">
+              Running a tournament with entries + prizes? Use
+              <RouterLink :to="{ name: 'tournament-new' }" class="field__hint-link">Tournaments &rsaquo; New</RouterLink>
+              instead — that flow handles entries, payments and the draw.
+            </span>
           </label>
           <label class="field">
             <span class="field__label">Capacity (optional)</span>
@@ -997,6 +1016,8 @@ onBeforeUnmount(() => {
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
 .field__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); }
+.field__hint-link { color: var(--color-ink); font-weight: 600; text-decoration: underline; }
+.field__hint-link:hover { color: var(--color-accent-strong); }
 .field input, .field select, .field textarea { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; }
 .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--color-ink); }
 .field textarea { resize: vertical; min-height: 80px; font-family: var(--font-body); line-height: 1.5; }

@@ -28,12 +28,13 @@ interface Item {
   label: string
   hint: string
   route: string
-  icon: 'user' | 'calendar' | 'people' | 'send' | 'page' | 'inbox'
+  icon: 'user' | 'calendar' | 'people' | 'send' | 'page' | 'inbox' | 'trophy'
   shortcut?: string
 }
 const ITEMS: Item[] = [
   { key: 'member', label: 'New member', hint: 'Add manually — skips the applications flow', route: '/crm/members', icon: 'user', shortcut: 'M' },
-  { key: 'event', label: 'New event', hint: 'Roll-up, tournament, or social', route: '/crm/events', icon: 'calendar', shortcut: 'E' },
+  { key: 'tournament', label: 'New tournament', hint: 'Take entries, run brackets, collect fees', route: '/crm/tournaments/new', icon: 'trophy', shortcut: 'O' },
+  { key: 'event', label: 'New event', hint: 'Roll-up, social, or club fixture', route: '/crm/events', icon: 'calendar', shortcut: 'E' },
   { key: 'team', label: 'New team selection', hint: 'Rink assignments for a fixture', route: '/crm/teams/new', icon: 'people', shortcut: 'T' },
   { key: 'campaign', label: 'New campaign', hint: 'Email or SMS to members', route: '/crm/communications?compose=1', icon: 'send', shortcut: 'C' },
   { key: 'page', label: 'New page', hint: 'A public site page from blocks', route: '/crm/website', icon: 'page', shortcut: 'P' },
@@ -167,6 +168,10 @@ watch(
             <svg v-else-if="item.icon === 'page'" width="16" height="16" viewBox="0 0 20 20" fill="none">
               <path d="M5 3h7l4 4v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
               <path d="M12 3v4h4M7 12h6M7 9h3M7 15h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+            <svg v-else-if="item.icon === 'trophy'" width="16" height="16" viewBox="0 0 20 20" fill="none">
+              <path d="M6 3h8v4a4 4 0 0 1-8 0V3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M3 3.5h3M14 3.5h3M7 17h6M10 11v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
             </svg>
             <svg v-else width="16" height="16" viewBox="0 0 20 20" fill="none">
               <path d="M3 4.5C3 3.7 3.7 3 4.5 3h11c.8 0 1.5.7 1.5 1.5v11c0 .8-.7 1.5-1.5 1.5h-11c-.8 0-1.5-.7-1.5-1.5v-11z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>

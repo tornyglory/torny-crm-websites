@@ -171,7 +171,16 @@ export interface EventRsvpPreview {
  * Public event shape — returned by GET /public/clubs/:slug/events and
  * present on /site.events_upcoming[]. Matches brief 33 §1 exactly.
  */
+/** Whether a calendar row originated from a `club_events` record or a
+ *  first-class tournament. Both sources travel through the same
+ *  `/public/clubs/{slug}/events` endpoint under one merged array. */
+export type CalendarSource = 'event' | 'tournament'
+
 export interface PublicEvent {
+  /** Where this row came from — `event` for club_events, `tournament`
+   *  when the backend merged in a real tournament (with details on
+   *  the nested `tournament` block below). */
+  source: CalendarSource
   id: number
   slug: string
   title: string
@@ -190,6 +199,22 @@ export interface PublicEvent {
   rsvp_going_count: number
   rsvp_maybe_count: number
   rsvp_going_preview: EventRsvpPreview[]
+  /** Present only when `source === 'tournament'`. Carries the tournament-
+   *  specific extras that a plain event doesn't have. */
+  tournament?: PublicCalendarTournament
+}
+
+export interface PublicCalendarTournament {
+  status: 'published' | 'entries_closed' | 'in_progress' | 'complete'
+  category: 'open' | 'restricted' | 'championship' | 'junior' | 'veterans' | 'social'
+  gender_scope: 'mens' | 'womens' | 'mixed' | null
+  entry_fee_cents: number
+  currency: string
+  prize_pool_cents: number | null
+  entries_open_at: string | null
+  entries_close_at: string | null
+  confirmed_count: number
+  spots_remaining: number
 }
 
 /**

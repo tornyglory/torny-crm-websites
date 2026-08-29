@@ -5,6 +5,9 @@ export type BlockType =
   | 'eventsCalendar'
   | 'honourBoard'
   | 'honourBoardSearch'
+  | 'tournamentSearch'
+  | 'upcomingTournamentsList'
+  | 'upcomingTournamentHero'
   | 'membersSearch'
   | 'membershipJoinForm'
   | 'peopleGrid'
@@ -114,6 +117,62 @@ export interface HonourBoardSearchProps {
   description?: string
   /** Rows per page fetch. Defaults to 50 on server-side. */
   pageSize?: number
+}
+
+/** Searchable tournaments block — reads from brief 47's public discovery
+ *  endpoints. Two scopes:
+ *   - `club`   → filter to this site's own tournaments (uses BlockContext.clubSlug)
+ *   - `network` → everything on Torny, no host filter
+ *  The block renders a left filter rail (format / category / gender chips
+ *  + "only open" toggle) alongside an editorial main column with a
+ *  dark-ink featured card and a list of tournament rows. Falls back to a
+ *  friendly placeholder in the CRM preview where no clubSlug is injected. */
+export interface TournamentSearchProps {
+  eyebrow?: string
+  heading?: string
+  description?: string
+  /** `club` (default) restricts to the current club. `network` shows every
+   *  public tournament across Torny. */
+  scope?: 'club' | 'network'
+  /** Rows per page fetch. Defaults to 12. */
+  pageSize?: number
+  /** Show the format / status filter chip row. Default true. */
+  showFilterChips?: boolean
+  /** Show the search input. Default true. */
+  showSearch?: boolean
+  /** Only surface tournaments where entries are currently open. Default false. */
+  openOnly?: boolean
+  /** Optional CTA in the top-right — links out to the full torny.co finder. */
+  ctaLabel?: string
+  ctaHref?: string
+}
+
+/** Compact upcoming-tournaments strip for a club homepage — three-row
+ *  list with big date tile, description, and progress bar / CTA per row. */
+export interface UpcomingTournamentsListProps {
+  eyebrow?: string
+  heading?: string
+  description?: string
+  /** How many tournaments to show. Defaults to 3. */
+  limit?: number
+  /** "View all →" pill in the top-right. */
+  ctaLabel?: string
+  ctaHref?: string
+  /** `club` (default) filters to the current club. `network` shows all. */
+  scope?: 'club' | 'network'
+}
+
+/** Full-bleed statement block for one featured tournament — cover image,
+ *  big display type, glassmorphic details card with countdown + progress. */
+export interface UpcomingTournamentHeroProps {
+  /** Force a specific tournament by its slug. Leave blank to auto-pick
+   *  the next tournament closing entries. */
+  tournamentSlug?: string
+  /** Override the intro sub-paragraph — otherwise falls back to the
+   *  tournament's own subtitle / description. */
+  description?: string
+  primaryLabel?: string
+  secondaryLabel?: string
 }
 
 /** Position group used by the public members directory (brief 35). */
@@ -466,6 +525,9 @@ export type Block =
   | BlockBase<'eventsCalendar', EventsCalendarProps>
   | BlockBase<'honourBoard', HonourBoardProps>
   | BlockBase<'honourBoardSearch', HonourBoardSearchProps>
+  | BlockBase<'tournamentSearch', TournamentSearchProps>
+  | BlockBase<'upcomingTournamentsList', UpcomingTournamentsListProps>
+  | BlockBase<'upcomingTournamentHero', UpcomingTournamentHeroProps>
   | BlockBase<'membersSearch', MembersSearchProps>
   | BlockBase<'membershipJoinForm', MembershipJoinFormProps>
   | BlockBase<'peopleGrid', PeopleGridProps>

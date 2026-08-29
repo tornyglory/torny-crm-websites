@@ -51,6 +51,9 @@ const TAGS_BY_TYPE: Record<BlockType, Tag[]> = {
   eventsCalendar: ['data', 'layout'],
   honourBoard:    ['data'],
   honourBoardSearch: ['data'],
+  tournamentSearch: ['data'],
+  upcomingTournamentsList: ['data', 'layout'],
+  upcomingTournamentHero: ['data', 'layout', 'media'],
   membersSearch: ['data'],
   membershipJoinForm: ['forms', 'data'],
   peopleGrid:     ['layout', 'text'],
@@ -238,6 +241,153 @@ const BlockPreview = defineComponent({
           rect(66, 32, 118, 74, { fill: graphite, opacity: 0.05, rx: 3 }),
           rect(70, 38, 30, 3, { fill: ink }),
           ...[52, 64, 76, 88, 100].map((y) => rect(70, y, 100, 3, { fill: graphite, opacity: 0.5 })),
+        ])
+
+      case 'tournamentSearch':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          // Left filter rail
+          rect(10, 10, 54, 100, { fill: graphite, opacity: 0.06, rx: 4 }),
+          rect(16, 16, 30, 4, { fill: ink }),
+          // Filter chips inside rail
+          rect(16, 26, 14, 4, { fill: ink, opacity: 0.9, rx: 2 }),
+          rect(32, 26, 14, 4, { fill: graphite, opacity: 0.3, rx: 2 }),
+          rect(16, 34, 14, 4, { fill: graphite, opacity: 0.3, rx: 2 }),
+          rect(32, 34, 20, 4, { fill: graphite, opacity: 0.3, rx: 2 }),
+          rect(16, 46, 30, 3, { fill: graphite, opacity: 0.5, rx: 1 }),
+          rect(16, 54, 42, 3, { fill: graphite, opacity: 0.5, rx: 1 }),
+          rect(16, 62, 30, 3, { fill: graphite, opacity: 0.5, rx: 1 }),
+          rect(16, 74, 42, 2, { fill: graphite, opacity: 0.35, rx: 1 }),
+          rect(16, 84, 42, 2, { fill: graphite, opacity: 0.35, rx: 1 }),
+          rect(16, 96, 20, 4, { fill: ink }),
+          rect(38, 96, 22, 4, { fill: graphite, opacity: 0.3 }),
+          // Main column — heading
+          rect(72, 10, 60, 5, { fill: ink }),
+          rect(72, 20, 40, 3, { fill: graphite, opacity: 0.5 }),
+          // Search bar
+          rect(72, 28, 118, 8, { fill: graphite, opacity: 0.1, rx: 3 }),
+          // Featured card — dark ink with gradient rail
+          rect(72, 42, 118, 32, { fill: ink, rx: 3 }),
+          rect(72, 42, 40, 32, { fill: '#7C3AED', rx: 3 }),
+          rect(76, 46, 20, 3, { fill: '#fff', opacity: 0.8 }),
+          rect(76, 54, 32, 5, { fill: '#fff' }),
+          rect(76, 62, 22, 3, { fill: '#fff', opacity: 0.5 }),
+          rect(120, 48, 30, 3, { fill: '#fff', opacity: 0.4 }),
+          rect(120, 56, 40, 8, { fill: '#fff' }),
+          rect(120, 68, 24, 3, { fill: '#fff', opacity: 0.4 }),
+          rect(172, 66, 12, 4, { fill: '#fff', rx: 2 }),
+          // List row 1
+          rect(72, 80, 118, 12, { fill: '#fff', stroke: hairline, rx: 3, opacity: 1 }),
+          rect(72, 80, 2, 12, { fill: '#16A34A' }),
+          rect(78, 84, 8, 4, { fill: '#16A34A', rx: 1 }),
+          rect(90, 84, 40, 3, { fill: ink }),
+          rect(90, 89, 30, 2, { fill: graphite, opacity: 0.5 }),
+          rect(174, 84, 10, 4, { fill: ink, rx: 2 }),
+          // List row 2
+          rect(72, 96, 118, 12, { fill: '#fff', stroke: hairline, rx: 3, opacity: 1 }),
+          rect(72, 96, 2, 12, { fill: '#EA580C' }),
+          rect(78, 100, 8, 4, { fill: '#EA580C', rx: 1 }),
+          rect(90, 100, 40, 3, { fill: ink }),
+          rect(90, 105, 30, 2, { fill: graphite, opacity: 0.5 }),
+          rect(174, 100, 10, 4, { fill: ink, rx: 2 }),
+        ])
+
+      case 'upcomingTournamentsList':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          // Section eyebrow + heading
+          circle(18, 12, 1.5, { fill: '#16A34A' }),
+          rect(22, 10, 34, 3, { fill: '#16A34A', opacity: 0.85 }),
+          rect(16, 18, 90, 8, { fill: ink }),
+          // "View all" pill top-right
+          rect(148, 12, 40, 8, { fill: '#fff', stroke: hairline, rx: 4 }),
+          rect(152, 15, 26, 3, { fill: ink }),
+          // Three rows
+          rect(14, 34, 172, 24, { fill: '#fff', stroke: hairline, rx: 4 }),
+          // Date tile 1
+          rect(20, 40, 16, 12, { fill: 'rgba(22,163,74,0.14)', rx: 2 }),
+          rect(22, 42, 12, 2, { fill: '#16A34A' }),
+          rect(22, 45, 12, 4, { fill: '#16A34A' }),
+          rect(22, 50, 12, 1.5, { fill: '#16A34A' }),
+          rect(42, 40, 18, 3, { fill: 'rgba(22,163,74,0.14)', rx: 1 }),
+          rect(64, 40, 30, 3, { fill: graphite, opacity: 0.5 }),
+          rect(42, 46, 70, 4, { fill: ink }),
+          rect(42, 53, 50, 2, { fill: graphite, opacity: 0.5 }),
+          rect(140, 42, 22, 3, { fill: ink, opacity: 0.5 }),
+          rect(140, 47, 40, 2, { fill: hairline }),
+          rect(140, 50, 22, 2, { fill: '#16A34A' }),
+          rect(168, 52, 14, 4, { fill: ink, rx: 2 }),
+          rect(14, 62, 172, 24, { fill: '#fff', stroke: hairline, rx: 4 }),
+          rect(20, 68, 16, 12, { fill: 'rgba(234,88,12,0.14)', rx: 2 }),
+          rect(22, 70, 12, 2, { fill: '#EA580C' }),
+          rect(22, 73, 12, 4, { fill: '#EA580C' }),
+          rect(22, 78, 12, 1.5, { fill: '#EA580C' }),
+          rect(42, 68, 22, 3, { fill: 'rgba(234,88,12,0.14)', rx: 1 }),
+          rect(68, 68, 30, 3, { fill: graphite, opacity: 0.5 }),
+          rect(42, 74, 74, 4, { fill: ink }),
+          rect(42, 81, 60, 2, { fill: graphite, opacity: 0.5 }),
+          rect(140, 70, 22, 3, { fill: ink, opacity: 0.5 }),
+          rect(140, 75, 40, 2, { fill: hairline }),
+          rect(140, 78, 34, 2, { fill: '#EA580C' }),
+          rect(168, 80, 14, 4, { fill: ink, rx: 2 }),
+          rect(14, 90, 172, 24, { fill: '#fff', stroke: hairline, rx: 4 }),
+          rect(20, 96, 16, 12, { fill: 'rgba(124,58,237,0.14)', rx: 2 }),
+          rect(22, 98, 12, 2, { fill: '#7C3AED' }),
+          rect(22, 101, 12, 4, { fill: '#7C3AED' }),
+          rect(22, 106, 12, 1.5, { fill: '#7C3AED' }),
+          rect(42, 96, 22, 3, { fill: 'rgba(124,58,237,0.14)', rx: 1 }),
+          rect(68, 96, 30, 3, { fill: graphite, opacity: 0.5 }),
+          rect(42, 102, 74, 4, { fill: ink }),
+          rect(42, 109, 60, 2, { fill: graphite, opacity: 0.5 }),
+          rect(168, 108, 14, 4, { fill: ink, rx: 2 }),
+        ])
+
+      case 'upcomingTournamentHero':
+        return shell([
+          // Cover ground with gradient
+          rect(0, 0, 200, 120, { fill: 'url(#tourn-hero-grad)' }),
+          h('defs', {}, [
+            h('linearGradient', { id: 'tourn-hero-grad', x1: 0, y1: 0, x2: 1, y2: 1 }, [
+              h('stop', { offset: 0, 'stop-color': '#16A34A' }),
+              h('stop', { offset: 0.55, 'stop-color': '#0F5132' }),
+              h('stop', { offset: 1, 'stop-color': '#0A0A0B' }),
+            ]),
+            h('radialGradient', { id: 'tourn-hero-glow', cx: '78%', cy: '30%', r: '55%' }, [
+              h('stop', { offset: 0, 'stop-color': 'rgba(234,88,12,0.6)' }),
+              h('stop', { offset: 1, 'stop-color': 'rgba(234,88,12,0)' }),
+            ]),
+          ]),
+          rect(0, 0, 200, 120, { fill: 'url(#tourn-hero-glow)' }),
+          // Top pills
+          rect(10, 8, 44, 8, { fill: 'rgba(255,255,255,0.16)', rx: 4 }),
+          rect(14, 11, 26, 3, { fill: '#fff' }),
+          rect(58, 8, 46, 8, { fill: 'rgba(22,163,74,0.4)', rx: 4 }),
+          rect(62, 11, 30, 3, { fill: '#86EFAC' }),
+          // Big display title
+          rect(10, 42, 100, 10, { fill: '#fff' }),
+          rect(10, 56, 80, 10, { fill: '#fff' }),
+          // Sub description
+          rect(10, 72, 90, 2.5, { fill: '#fff', opacity: 0.6 }),
+          rect(10, 78, 76, 2.5, { fill: '#fff', opacity: 0.6 }),
+          // CTA row
+          rect(10, 92, 40, 12, { fill: '#fff', rx: 5 }),
+          rect(20, 96, 22, 4, { fill: ink }),
+          rect(54, 92, 30, 12, { fill: 'transparent', stroke: '#fff', rx: 5, opacity: 0.7 }),
+          rect(60, 96, 18, 4, { fill: '#fff', opacity: 0.8 }),
+          // Details card (glassmorphic)
+          rect(126, 34, 66, 78, { fill: 'rgba(255,255,255,0.08)', stroke: 'rgba(255,255,255,0.16)', rx: 5 }),
+          rect(132, 40, 22, 3, { fill: '#FCA5A5' }),
+          rect(132, 48, 20, 14, { fill: '#fff' }),
+          rect(156, 52, 14, 4, { fill: '#fff' }),
+          rect(156, 58, 22, 2.5, { fill: '#fff', opacity: 0.6 }),
+          rect(132, 68, 54, 1, { fill: '#fff', opacity: 0.15 }),
+          rect(132, 74, 20, 3, { fill: '#fff', opacity: 0.5 }),
+          rect(132, 80, 22, 6, { fill: '#fff' }),
+          rect(160, 74, 20, 3, { fill: '#fff', opacity: 0.5 }),
+          rect(160, 80, 22, 6, { fill: '#fff' }),
+          rect(132, 96, 54, 3, { fill: '#fff', opacity: 0.1, rx: 1.5 }),
+          rect(132, 96, 36, 3, { fill: '#86EFAC', rx: 1.5 }),
+          rect(132, 104, 30, 2, { fill: '#fff', opacity: 0.5 }),
         ])
 
       case 'membersSearch':

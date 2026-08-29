@@ -291,13 +291,37 @@ function formatShortDate(iso: string): { day: string; month: string } {
   }
 }
 
+// ── Tournament-specific helpers ────────────────────────────────
+
+function formatMoney(cents: number): string {
+  return `$${(cents / 100).toLocaleString('en-NZ', { maximumFractionDigits: 0 })}`
+}
+function tournamentClosingSoon(t: NonNullable<EventEntry['tournament']>): boolean {
+  if (!t.entries_close_at) return false
+  const daysLeft = (new Date(t.entries_close_at).getTime() - Date.now()) / 86400_000
+  return daysLeft > 0 && daysLeft <= 7
+}
+function formatCloseDay(iso: string | null): string {
+  if (!iso) return 'soon'
+  try {
+    return new Date(iso).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })
+  } catch { return 'soon' }
+}
+
 const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlug.value) : null))
 
-// ── Detail modal ───────────────────────────────────────────────
-// Click an event chip or a highlights row to open. Deep-linked URLs
-// aren't available yet (no per-event public endpoint — brief 33 §5).
+// ── Detail modal / navigation ─────────────────────────────────
+// Events → open the inline detail modal (no per-event public URL yet
+// per brief 33 §5). Tournaments → route out to `/tournaments/{slug}`
+// where the real detail page lives (brief 47 §11 public detail).
 const activeEvent = ref<EventEntry | null>(null)
-function openEvent(e: EventEntry) { activeEvent.value = e }
+function openEvent(e: EventEntry) {
+  if (e.source === 'tournament' && e.slug) {
+    if (typeof window !== 'undefined') window.location.href = `/tournaments/${e.slug}`
+    return
+  }
+  activeEvent.value = e
+}
 function closeEvent() { activeEvent.value = null }
 
 function onKey(e: KeyboardEvent) {
@@ -492,7 +516,7 @@ function spotsTaken(e: EventEntry): number {
               <div v-if="cell.day != null && eventsByDay.get(cell.day)" class="cal__events">
                 <button
                   v-for="e in eventsByDay.get(cell.day)"
-                  :key="e.id"
+                  :key="`${e.source}-${e.id}`"
                   type="button"
                   class="cal__event"
                   :style="{ background: typeColor(e.event_type) + '18', color: typeColor(e.event_type), borderLeftColor: typeColor(e.event_type) } as any"
@@ -512,7 +536,7 @@ function spotsTaken(e: EventEntry): number {
             Nothing scheduled this month.
           </div>
           <ul v-else class="side__list">
-            <li v-for="e in highlights" :key="e.id">
+            <li v-for="e in highlights" :key="`${e.source}-${e.id}`">
               <button
                 type="button"
                 class="hl"
@@ -604,7 +628,7 @@ function spotsTaken(e: EventEntry): number {
         </div>
 
         <ul v-else class="evc__list">
-          <li v-for="e in listEvents" :key="e.id">
+          <li v-for="e in listEvents" :key="`${e.source}-${e.id}`">
             <button
               type="button"
               class="lst"
@@ -639,7 +663,26 @@ function spotsTaken(e: EventEntry): number {
                     <span class="lst__sep">·</span><span>Hosted by {{ e.host_name }}</span>
                   </template>
                 </div>
-                <div v-if="e.rsvp_going_count > 0 || e.capacity" class="lst__rsvp">
+                <!-- Tournament-only detail pills -->
+                <div v-if="e.source === 'tournament' && e.tournament" class="lst__pills">
+                  <span v-if="e.tournament.entry_fee_cents > 0" class="lst__pill lst__pill--ink">
+                    {{ formatMoney(e.tournament.entry_fee_cents) }} entry
+                  </span>
+                  <span v-if="e.tournament.prize_pool_cents && e.tournament.prize_pool_cents > 0" class="lst__pill lst__pill--accent">
+                    {{ formatMoney(e.tournament.prize_pool_cents) }} prize pool
+                  </span>
+                  <span v-if="e.tournament.spots_remaining > 0 && e.tournament.spots_remaining <= 3" class="lst__pill lst__pill--warn">
+                    Only {{ e.tournament.spots_remaining }} spot{{ e.tournament.spots_remaining === 1 ? '' : 's' }} left
+                  </span>
+                  <span v-else-if="e.tournament.confirmed_count > 0" class="lst__pill">
+                    {{ e.tournament.confirmed_count }} entered
+                  </span>
+                  <span v-if="tournamentClosingSoon(e.tournament)" class="lst__pill lst__pill--warn">
+                    Closes {{ formatCloseDay(e.tournament.entries_close_at) }}
+                  </span>
+                </div>
+                <!-- Event RSVP counts (unchanged) -->
+                <div v-else-if="e.rsvp_going_count > 0 || e.capacity" class="lst__rsvp">
                   <template v-if="e.rsvp_going_count > 0">
                     <span class="lst__rsvp-num">{{ e.rsvp_going_count }}</span> going
                   </template>
@@ -820,6 +863,12 @@ function spotsTaken(e: EventEntry): number {
 .lst__sep { opacity: 0.5; margin: 0 2px; }
 .lst__rsvp { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-body); font-size: 12px; color: var(--color-graphite); margin-top: 2px; }
 .lst__rsvp-num { font-family: var(--font-display); font-weight: 700; color: var(--color-ink); }
+
+.lst__pills { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.lst__pill { padding: 3px 9px; background: var(--color-surface, #F5F5F2); color: var(--color-graphite, #2E2E33); border-radius: 999px; font-family: var(--font-body); font-size: 11px; font-weight: 500; }
+.lst__pill--ink { background: var(--color-ink, #0A0A0B); color: #FFFFFF; font-weight: 600; }
+.lst__pill--accent { background: color-mix(in srgb, var(--color-feature-mint, #16A34A) 14%, transparent); color: var(--color-feature-mint, #16A34A); font-weight: 600; }
+.lst__pill--warn { background: color-mix(in srgb, var(--color-feature-tangerine, #EA580C) 14%, transparent); color: var(--color-feature-tangerine, #EA580C); font-weight: 600; }
 .lst__chev { font-family: var(--font-display); font-size: 20px; color: var(--color-fog); line-height: 1; }
 
 /* Body: grid + side */

@@ -6,6 +6,9 @@ import EventListBlock from './blocks/EventListBlock.vue'
 import EventsCalendarBlock from './blocks/EventsCalendarBlock.vue'
 import HonourBoardBlock from './blocks/HonourBoardBlock.vue'
 import HonourBoardSearchBlock from './blocks/HonourBoardSearchBlock.vue'
+import TournamentSearchBlock from './blocks/TournamentSearchBlock.vue'
+import UpcomingTournamentsListBlock from './blocks/UpcomingTournamentsListBlock.vue'
+import UpcomingTournamentHeroBlock from './blocks/UpcomingTournamentHeroBlock.vue'
 import MembersSearchBlock from './blocks/MembersSearchBlock.vue'
 import MembershipJoinFormBlock from './blocks/MembershipJoinFormBlock.vue'
 import PeopleGridBlock from './blocks/PeopleGridBlock.vue'
@@ -36,6 +39,9 @@ defineProps<{ block: Block }>()
   <EventsCalendarBlock v-else-if="block.type === 'eventsCalendar'" v-bind="block.props" />
   <HonourBoardBlock v-else-if="block.type === 'honourBoard'" v-bind="block.props" />
   <HonourBoardSearchBlock v-else-if="block.type === 'honourBoardSearch'" v-bind="block.props" />
+  <TournamentSearchBlock v-else-if="block.type === 'tournamentSearch'" v-bind="block.props" />
+  <UpcomingTournamentsListBlock v-else-if="block.type === 'upcomingTournamentsList'" v-bind="block.props" />
+  <UpcomingTournamentHeroBlock v-else-if="block.type === 'upcomingTournamentHero'" v-bind="block.props" />
   <MembersSearchBlock v-else-if="block.type === 'membersSearch'" v-bind="block.props" />
   <MembershipJoinFormBlock v-else-if="block.type === 'membershipJoinForm'" v-bind="block.props" />
   <PeopleGridBlock v-else-if="block.type === 'peopleGrid'" v-bind="block.props" />

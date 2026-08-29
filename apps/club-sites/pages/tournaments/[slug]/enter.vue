@@ -1,20 +1,15 @@
 <script setup lang="ts">
-import { tournaments, TOKEN_STORAGE_KEY, type EnterTournamentInput, type PublicTournamentDetail, type TournamentFormat } from '@torny/api-client'
+import { tournaments, type EnterTournamentInput, type PublicTournamentDetail, type TournamentFormat } from '@torny/api-client'
 
 const route = useRoute()
 const club = useClub()
 
 // ── Auth detection ─────────────────────────────────────────────
-// SSR-safe: always guest on server, hydrates to signed-in on mount if the
-// Torny session token exists in localStorage. Custom-domain club sites can't
-// share cookies with torny.co.nz, so those visitors always look like guests
-// unless we introduce an OAuth-style handshake (out of scope for v1).
-const isSignedIn = ref(false)
-onMounted(() => {
-  if (typeof localStorage !== 'undefined' && localStorage.getItem(TOKEN_STORAGE_KEY)) {
-    isSignedIn.value = true
-  }
-})
+// Session lives at the Torny portal (torny.co) — HttpOnly cookie scoped
+// to `.torny.co` flows to `<slug>.torny.co` automatically. useMember()
+// hydrates on client mount by hitting the shared /me endpoint with
+// credentials. See composables/useMember.ts.
+const { isSignedIn } = useMember()
 
 const tournamentSlug = computed(() => (route.params.slug as string) || '')
 const clubSlug = computed(() => club.value?.slug ?? '')
@@ -170,9 +165,23 @@ function updateGuestName(idx: number, value: string) {
   }
 }
 
+// Build the "Sign in with Torny" URL: point at the Torny portal
+// (apps/torny-web) with ?club=<slug>&next=<absolute URL back to this page>.
+// The portal handles auth and redirects the visitor back once they're in.
+const config = useRuntimeConfig()
 const signInHref = computed(() => {
-  const next = encodeURIComponent(`/tournaments/${tournamentSlug.value}/enter`)
-  return `/sign-in?next=${next}`
+  const portal = (config.public.portalUrl as string || '').replace(/\/$/, '')
+  const path = `/tournaments/${tournamentSlug.value}/enter`
+  // Absolute URL so the portal can redirect back to whichever host we're on
+  // (subdomain or custom domain). Fall back to relative if we can't read the host.
+  const origin =
+    typeof window !== 'undefined'
+      ? window.location.origin
+      : (config.public.siteUrl as string || '')
+  const nextUrl = origin ? `${origin}${path}` : path
+  const params = new URLSearchParams({ next: nextUrl })
+  if (clubSlug.value) params.set('club', clubSlug.value)
+  return `${portal}/sign-in?${params.toString()}`
 })
 
 const submitting = ref(false)
@@ -265,7 +274,7 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
           <h2 class="enter__gated-title">Sign in to enter this one.</h2>
           <p class="enter__gated-sub">{{ tournament.club.name }} has restricted entries to Torny members. Sign in with your handle to see the entry form.</p>
           <div class="enter__gated-actions">
-            <NuxtLink :to="signInHref" class="btn-primary">Sign in with Torny <span class="btn-primary__arrow">→</span></NuxtLink>
+            <a :href="signInHref" class="btn-primary">Sign in with Torny <span class="btn-primary__arrow">→</span></a>
             <NuxtLink to="/tournaments" class="btn-secondary">Browse other tournaments</NuxtLink>
           </div>
         </div>
@@ -276,7 +285,7 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
         <div class="enter__body-inner">
           <div class="enter__form">
             <!-- Guest upsell banner -->
-            <NuxtLink v-if="!isSignedIn" :to="signInHref" class="upsell">
+            <a v-if="!isSignedIn" :href="signInHref" class="upsell">
               <div class="upsell__mark">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14V12H2V4Z" stroke="currentColor" stroke-width="1.4"/><path d="M2 4L8 9L14 4" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
               </div>
@@ -285,7 +294,7 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
                 <div class="upsell__sub">Captain and payment pre-fill from your profile, and you can add teammates by their Torny handle.</div>
               </div>
               <div class="upsell__cta">Sign in <span>→</span></div>
-            </NuxtLink>
+            </a>
 
             <!-- Section 1 — Your team -->
             <section class="section">

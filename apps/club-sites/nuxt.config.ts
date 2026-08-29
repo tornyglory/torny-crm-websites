@@ -13,6 +13,12 @@ export default defineNuxtConfig({
     revalidateSecret: process.env.NUXT_REVALIDATE_SECRET ?? 'dev-secret-change-me',
     public: {
       siteUrl: process.env.NUXT_PUBLIC_SITE_URL ?? 'http://localhost:3001',
+      portalUrl: process.env.NUXT_PUBLIC_PORTAL_URL ?? 'http://localhost:3002',
+      // Public API base for browser-side calls (/me, /public/*). MUST live on
+      // the same registrable domain as the site (`.torny.co`) so the HttpOnly
+      // session cookie set by the portal flows on cross-subdomain calls with
+      // `credentials: 'include'`. e.g. `https://api.torny.co`.
+      apiBaseUrl: process.env.NUXT_PUBLIC_API_BASE_URL ?? '',
     },
   },
 

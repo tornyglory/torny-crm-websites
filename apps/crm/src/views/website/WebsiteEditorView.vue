@@ -22,6 +22,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
+import { sitePreviewUrl } from '@/composables/sitePreviewUrl'
 import { useClubStore } from '@/stores/club'
 import { useOnboardingStore } from '@/stores/onboarding'
 import ImagePicker from '@/components/ImagePicker.vue'
@@ -1289,11 +1290,7 @@ async function preview(): Promise<void> {
     return
   }
   const path = previewPathFor(currentPage.value)
-  // Dev: hits the Nuxt club-sites app (port 3001, `PORT=3001 pnpm dev`).
-  // The `?host=` override lets the tenant middleware pick the right club
-  // without needing a real DNS entry. In prod this button should link to
-  // the club's live domain instead — swap when we ship staging URLs.
-  window.open(`http://localhost:3001${path}?host=${slug}.torny.club`, '_blank', 'noopener')
+  window.open(sitePreviewUrl(slug, path), '_blank', 'noopener')
 }
 
 // ── Block summary (shown in the list row) ─────────────────

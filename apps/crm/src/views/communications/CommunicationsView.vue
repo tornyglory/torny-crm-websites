@@ -12,6 +12,7 @@
  * shipped alongside the SES migration. Follow-up.
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   ApiError,
   bulkEmail as bulkEmailApi,
@@ -30,6 +31,8 @@ import { useClubStore } from '@/stores/club'
 
 const toast = useToast()
 const clubStore = useClubStore()
+const route = useRoute()
+const router = useRouter()
 
 // ── Audience presets — resolve to real filters ────────────────────
 
@@ -127,8 +130,19 @@ const variablesByCategory = computed<Record<Category, EmailVariable[]>>(() => {
   return out
 })
 
+const clubSampleOverrides = computed<Record<string, string>>(() => {
+  const c = clubStore.current
+  if (!c) return {}
+  const out: Record<string, string> = {}
+  if (c.name) out.club_name = c.name
+  if (c.logoUrl) out.club_logo_url = c.logoUrl
+  return out
+})
+
 function sampleFor(v: EmailVariable): string {
-  return emailTemplate.value?.sample_overrides[v.key] ?? v.sample
+  return clubSampleOverrides.value[v.key]
+    ?? emailTemplate.value?.sample_overrides[v.key]
+    ?? v.sample
 }
 
 function substituteTokens(html: string): string {
@@ -349,7 +363,16 @@ function fmtTime(iso: string): string {
 
 // ── Mount ─────────────────────────────────────────────────────────
 
-onMounted(loadTemplate)
+onMounted(() => {
+  void loadTemplate()
+  // Dashboard's "Send bulk email" button navigates here with ?compose=1
+  // to drop straight into the composer. Consume the flag so a manual
+  // reload doesn't keep reopening it.
+  if (route.query.compose === '1') {
+    openCompose()
+    void router.replace({ query: { ...route.query, compose: undefined } })
+  }
+})
 watch(() => clubStore.current?.id, loadTemplate)
 </script>
 

@@ -312,12 +312,13 @@ const icalUrl = computed(() => (clubSlug.value ? eventsApi.publicIcalUrl(clubSlu
 
 // ── Detail modal / navigation ─────────────────────────────────
 // Events → open the inline detail modal (no per-event public URL yet
-// per brief 33 §5). Tournaments → route out to `/tournaments/{slug}`
-// where the real detail page lives (brief 47 §11 public detail).
+// per brief 33 §5). Tournaments → route out to the tournament page
+// (currently the entry page, which doubles as the detail view until
+// a standalone view-only detail page ships).
 const activeEvent = ref<EventEntry | null>(null)
 function openEvent(e: EventEntry) {
   if (e.source === 'tournament' && e.slug) {
-    if (typeof window !== 'undefined') window.location.href = `/tournaments/${e.slug}`
+    if (typeof window !== 'undefined') window.location.href = `/tournaments/${e.slug}/enter`
     return
   }
   activeEvent.value = e

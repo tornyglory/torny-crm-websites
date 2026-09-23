@@ -11,10 +11,14 @@
  * "coming soon" state instead of the old mock.
  */
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useHonourCategoriesStore } from '@/stores/honourCategories'
+import { useOnboardingStore } from '@/stores/onboarding'
+import { useToast } from '@/composables/useToast'
+import { sitePreviewUrl } from '@/composables/sitePreviewUrl'
 import {
   members as membersApi,
   applications as applicationsApi,
@@ -30,6 +34,33 @@ const auth = useAuthStore()
 const clubStore = useClubStore()
 const notificationsStore = useNotificationsStore()
 const honourCategoriesStore = useHonourCategoriesStore()
+const onboarding = useOnboardingStore()
+const toast = useToast()
+const router = useRouter()
+
+function slugify(s: string): string {
+  return s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+async function previewSite(): Promise<void> {
+  if (!onboarding.data.subdomain && !clubStore.current?.slug) {
+    await Promise.all([onboarding.hydrate(), clubStore.hydrateFull()])
+  }
+  const slug =
+    (onboarding.data.subdomain?.trim() || null) ??
+    clubStore.current?.slug ??
+    (clubStore.current?.name ? slugify(clubStore.current.name) : null)
+  if (!slug) {
+    toast.error("Couldn't get this club's slug — try refreshing.")
+    return
+  }
+  window.open(sitePreviewUrl(slug, '/'), '_blank', 'noopener')
+}
+
+function openBulkEmail(): void {
+  router.push({ name: 'communications', query: { compose: '1' } })
+}
 
 const now = new Date()
 const greeting = computed(() => {
@@ -326,13 +357,13 @@ const iconTone: Record<SignalIcon, { bg: string; fg: string }> = {
         <p class="dash__sub">{{ attentionSummary }}</p>
       </div>
       <div class="dash__actions">
-        <button class="btn btn--ghost">
+        <button class="btn btn--ghost" @click="previewSite">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
             <path d="M7 17 17 7" /><path d="M7 7h10v10" />
           </svg>
           Preview site
         </button>
-        <button class="btn btn--primary">+ Send bulk email</button>
+        <button class="btn btn--primary" @click="openBulkEmail">+ Send bulk email</button>
       </div>
     </header>
 

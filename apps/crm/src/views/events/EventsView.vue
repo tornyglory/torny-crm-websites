@@ -25,6 +25,7 @@ import {
 import CrmModal from '@/components/modals/CrmModal.vue'
 import { useClubStore } from '@/stores/club'
 import { useToast } from '@/composables/useToast'
+import { sitePreviewUrl } from '@/composables/sitePreviewUrl'
 
 // ── Stores + helpers ──────────────────────────────────────────
 
@@ -575,7 +576,7 @@ function openPublicCalendar() {
     toast.error("Couldn't get this club's slug — try refreshing.")
     return
   }
-  window.open(`http://localhost:3001/events?host=${slug}.torny.club`, '_blank', 'noopener')
+  window.open(sitePreviewUrl(slug, '/events'), '_blank', 'noopener')
 }
 
 // ── Error helper ──────────────────────────────────────────────

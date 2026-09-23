@@ -61,7 +61,6 @@ const footerColumns: FooterNavColumn[] = [
       { label: 'Coaching', href: '/coaching' },
       { label: 'Function hire', href: '/venue-hire' },
       { label: 'Sponsors', href: '/sponsors' },
-      { label: 'Members sign in', href: '/sign-in' },
     ],
   },
 ]
@@ -91,7 +90,6 @@ const legalLinks: NavLink[] = [
       :nav-links="navLinks"
       :current-path="route.path"
       :primary-cta="primaryCta"
-      sign-in-href="/sign-in"
       :drawer-open="drawerOpen"
       @toggle-drawer="drawerOpen = !drawerOpen"
     />
@@ -102,7 +100,6 @@ const legalLinks: NavLink[] = [
       :nav-links="navLinks"
       :current-path="route.path"
       :primary-cta="primaryCta"
-      sign-in-href="/sign-in"
       @close="drawerOpen = false"
     />
 

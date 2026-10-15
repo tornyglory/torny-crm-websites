@@ -283,9 +283,36 @@ function goingLabel(e: EventEntry): string {
 @media (max-width: 1023px) {
   .evh__grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile (≤640px).
+   Tighten the 48px gutter down to 24px, compact hero, chips wrap
+   with smaller rail padding, CTA stretches full-width. Keeps the
+   width:100vw full-bleed trick.
+───────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .evh__grid { grid-template-columns: 1fr; }
-  .evh__head { flex-direction: column; align-items: stretch; }
-  .evh__cta { align-self: flex-start; }
+  .evh {
+    padding: 32px 24px 40px;
+    gap: 20px;
+    overflow-x: hidden;
+  }
+
+  .evh__head { flex-direction: column; align-items: stretch; gap: 14px; }
+  .evh__head-text { gap: 10px; max-width: none; }
+  .evh__eyebrow { font-size: 10px; letter-spacing: 0.08em; }
+  .evh__heading { font-size: 36px; letter-spacing: -0.02em; line-height: 100%; }
+  .evh__sub { font-size: 14px; max-width: none; }
+  .evh__cta {
+    align-self: stretch;
+    justify-content: center;
+    height: 48px;
+    padding: 0 20px;
+    font-size: 14px;
+  }
+
+  .evh__chips { gap: 6px; }
+  .evh__chip { font-size: 12px; padding: 7px 12px; }
+
+  .evh__grid { grid-template-columns: 1fr; gap: 12px; }
 }
 </style>

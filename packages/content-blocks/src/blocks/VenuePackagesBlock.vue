@@ -207,7 +207,7 @@ const hasFooter = computed(() =>
    simple stacked card with Rachel's avatar + email/call CTAs.
 ───────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .vp { padding: 28px 24px 32px; gap: 20px; overflow-x: hidden; }
+  .vp { padding: 28px 20px 32px; gap: 20px; overflow-x: hidden; }
 
   .vp__head { gap: 6px; max-width: none; }
   .vp__eyebrow { font-size: 10px; letter-spacing: 0.08em; }

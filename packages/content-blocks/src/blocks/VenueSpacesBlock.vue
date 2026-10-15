@@ -176,7 +176,7 @@ function slabStyle(space: VenueSpaceItem, index: number): Record<string, string>
    + book button inline on the same row.
 ───────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .vs { padding: 28px 24px 24px; gap: 20px; overflow-x: hidden; }
+  .vs { padding: 28px 20px 24px; gap: 20px; overflow-x: hidden; }
 
   .vs__head { gap: 12px; padding-bottom: 0; border-bottom: 0; }
   .vs__head-copy { gap: 4px; }

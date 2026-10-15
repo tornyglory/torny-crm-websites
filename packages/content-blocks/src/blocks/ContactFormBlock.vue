@@ -476,7 +476,7 @@ function enquiryErrorMessage(err: unknown): string {
 .cf__encrypted { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--color-mute); text-transform: uppercase; }
 
 /* Success */
-.cf__success { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: 96px 24px; }
+.cf__success { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: 96px 20px; }
 .cf__success-eyebrow { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--color-fog); text-transform: uppercase; }
 .cf__success-title { font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); font-weight: 700; letter-spacing: -0.02em; margin: 0; }
 .cf__success-body { font-family: var(--font-body); font-size: 16px; line-height: 150%; color: var(--color-fog); max-width: 520px; margin: 0; }
@@ -494,6 +494,6 @@ function enquiryErrorMessage(err: unknown): string {
    fills the viewport minus a 24px editorial padding, matching the
    Paper mobile artboards. */
 @media (max-width: 640px) {
-  .cf { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+  .cf { padding-left: 20px; padding-right: 20px; overflow-x: hidden; }
 }
 </style>

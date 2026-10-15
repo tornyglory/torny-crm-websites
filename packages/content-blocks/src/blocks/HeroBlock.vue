@@ -416,6 +416,6 @@ function initialsFor(name: string, initials?: string): string {
    fills the viewport minus a 24px editorial padding, matching the
    Paper mobile artboards. */
 @media (max-width: 640px) {
-  .hero { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+  .hero { padding-left: 20px; padding-right: 20px; overflow-x: hidden; }
 }
 </style>

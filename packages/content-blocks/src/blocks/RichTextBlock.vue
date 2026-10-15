@@ -13,5 +13,5 @@ defineProps<RichTextProps>()
 .rich-text :deep(h3) { font-family: var(--font-display); font-size: 20px; font-weight: 600; margin: 24px 0 8px; }
 .rich-text :deep(p) { margin: 0 0 16px; }
 .rich-text :deep(a) { color: var(--color-accent); text-decoration: underline; }
-.rich-text :deep(ul), .rich-text :deep(ol) { padding-left: 24px; margin: 0 0 16px; }
+.rich-text :deep(ul), .rich-text :deep(ol) { padding-left: 20px; margin: 0 0 16px; }
 </style>

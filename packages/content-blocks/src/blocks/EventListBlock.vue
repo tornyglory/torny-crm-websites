@@ -292,7 +292,7 @@ function goingLabel(e: EventEntry): string {
 ───────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .evh {
-    padding: 32px 24px 40px;
+    padding: 32px 20px 40px;
     gap: 20px;
     overflow-x: hidden;
   }

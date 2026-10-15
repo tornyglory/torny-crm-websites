@@ -95,7 +95,7 @@ const cadenceLabel = (c: string | null): string =>
 @media (max-width: 640px) {
   .membership {
     gap: 20px;
-    padding: 32px 24px 48px;
+    padding: 32px 20px 48px;
     width: 100%;
     max-width: 100vw;
     box-sizing: border-box;
@@ -174,7 +174,7 @@ const cadenceLabel = (c: string | null): string =>
   }
 
   /* Empty state */
-  .empty { padding: 32px 24px; font-size: 14px; }
+  .empty { padding: 32px 20px; font-size: 14px; }
   .empty__title { font-size: 17px; }
 }
 </style>

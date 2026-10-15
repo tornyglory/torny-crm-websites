@@ -184,7 +184,7 @@ function initialsFor(name: string, initials?: string): string {
    so block fills the viewport past PageRenderer's gutter.
 ───────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .vhh { padding: 32px 24px 24px; overflow-x: hidden; }
+  .vhh { padding: 32px 20px 24px; overflow-x: hidden; }
 
   .vhh__grid { gap: 20px; min-height: 0; }
 

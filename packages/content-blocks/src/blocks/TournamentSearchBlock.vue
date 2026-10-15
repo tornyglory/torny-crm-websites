@@ -486,7 +486,7 @@ function href(t: PublicTournamentCard): string {
 .tsx__row-enter { padding: 6px 14px; background: var(--site-ink, #0A0A0B); color: #FFFFFF; border-radius: 999px; font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 12px; font-weight: 600; }
 
 @media (max-width: 1023px) {
-  .tsx { padding: 56px 24px; }
+  .tsx { padding: 56px 20px; }
   .tsx__inner { grid-template-columns: 1fr; gap: 24px; }
   .tsx__rail { position: static; }
   .tsx__feature { grid-template-columns: 1fr; }
@@ -501,7 +501,7 @@ function href(t: PublicTournamentCard): string {
    row, result rows become stacked cards with a full-width enter CTA.
 ───────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .tsx { padding: 32px 24px 48px; gap: 20px; }
+  .tsx { padding: 32px 20px 48px; gap: 20px; }
   .tsx__head { gap: 10px; margin-bottom: 8px; }
   .tsx__heading { font-size: 40px; line-height: 100%; }
   .tsx__desc { font-size: 14px; }

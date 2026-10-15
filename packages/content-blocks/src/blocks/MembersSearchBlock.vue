@@ -353,6 +353,6 @@ function avatarPalette(m: PublicMember) {
    fills the viewport minus a 24px editorial padding, matching the
    Paper mobile artboards. */
 @media (max-width: 640px) {
-  .mem { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+  .mem { padding-left: 20px; padding-right: 20px; overflow-x: hidden; }
 }
 </style>

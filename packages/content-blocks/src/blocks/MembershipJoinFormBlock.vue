@@ -718,7 +718,7 @@ function joinFormErrorMessage(err: unknown): string {
 .jf__encrypted { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--color-mute); text-transform: uppercase; }
 
 /* Success state */
-.jf__success { display: flex; flex-direction: column; gap: 16px; align-items: center; text-align: center; padding: 96px 24px; }
+.jf__success { display: flex; flex-direction: column; gap: 16px; align-items: center; text-align: center; padding: 96px 20px; }
 .jf__success-eyebrow { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--color-fog); text-transform: uppercase; }
 .jf__success-title { font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); font-weight: 700; letter-spacing: -0.02em; margin: 0; }
 .jf__success-body { font-family: var(--font-body); font-size: 16px; line-height: 150%; color: var(--color-fog); max-width: 520px; margin: 0; }
@@ -745,7 +745,7 @@ function joinFormErrorMessage(err: unknown): string {
 ───────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .jf {
-    padding: 32px 24px 48px;
+    padding: 32px 20px 48px;
     gap: 24px;
     /* Keep the desktop width:100vw + negative-margin break-out so the
        block fills the viewport, bypassing PageRenderer's 48px gutter.

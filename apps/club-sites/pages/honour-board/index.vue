@@ -364,7 +364,7 @@ function loadMore() {
 
 /* Results */
 .results { min-width: 0; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; overflow: hidden; }
-.results__head { padding: 20px 24px 16px; border-bottom: 1px solid var(--color-hairline); }
+.results__head { padding: 20px 20px 16px; border-bottom: 1px solid var(--color-hairline); }
 .results__eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; margin-bottom: 8px; }
 .results__title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .results__title { font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; }
@@ -395,10 +395,10 @@ function loadMore() {
 .col-score { font-family: var(--font-mono); font-weight: 600; color: var(--color-graphite); width: 100px; }
 .col-awarded { font-family: var(--font-mono); font-size: 12px; color: var(--color-fog); width: 130px; white-space: nowrap; }
 
-.results__loading, .results__empty { padding: 48px 24px; text-align: center; color: var(--color-fog); font-family: var(--font-body); }
+.results__loading, .results__empty { padding: 48px 20px; text-align: center; color: var(--color-fog); font-family: var(--font-body); }
 .results__empty-title { font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--color-ink); margin-bottom: 6px; }
 
-.results__foot { padding: 16px 24px; border-top: 1px solid var(--color-hairline); display: flex; justify-content: center; }
+.results__foot { padding: 16px 20px; border-top: 1px solid var(--color-hairline); display: flex; justify-content: center; }
 .results__load { padding: 10px 20px; background: var(--color-ink); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
 .results__load:hover:not(:disabled) { background: var(--color-graphite); }
 .results__load:disabled { opacity: 0.5; cursor: default; }
@@ -426,7 +426,7 @@ function loadMore() {
 @media (max-width: 640px) {
   .hb {
     gap: 20px;
-    padding: 32px 24px 48px;
+    padding: 32px 20px 48px;
     width: 100%;
     max-width: 100vw;
     box-sizing: border-box;

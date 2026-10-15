@@ -163,6 +163,6 @@ function toneStyle(p: PeopleGridPerson, index: number): { background: string; co
    fills the viewport minus a 24px editorial padding, matching the
    Paper mobile artboards. */
 @media (max-width: 640px) {
-  .pg { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+  .pg { padding-left: 20px; padding-right: 20px; overflow-x: hidden; }
 }
 </style>

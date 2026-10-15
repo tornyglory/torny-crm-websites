@@ -682,7 +682,7 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
 ───────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   /* Hero */
-  .enter__hero-inner { padding: 28px 24px 24px; gap: 16px; }
+  .enter__hero-inner { padding: 28px 20px 24px; gap: 16px; }
   .enter__breadcrumb { font-size: 10px; letter-spacing: 0.08em; }
   .enter__crumb { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw; }
   .enter__hero-body { flex-direction: column; align-items: stretch; gap: 20px; }
@@ -716,12 +716,12 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
   .enter__closes-date { font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; }
 
   /* Members-only gate */
-  .enter__gated { padding: 48px 24px; }
+  .enter__gated { padding: 48px 20px; }
   .enter__gated-title { font-size: 32px; }
   .enter__gated-sub { font-size: 14px; }
 
   /* Body */
-  .enter__body-inner { padding: 28px 24px 32px; gap: 28px; }
+  .enter__body-inner { padding: 28px 20px 32px; gap: 28px; }
   .enter__form { gap: 28px; }
 
   /* Guest upsell banner */
@@ -793,7 +793,7 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
   .btn-primary {
     width: 100%;
     justify-content: center;
-    padding: 16px 24px;
+    padding: 16px 20px;
     font-size: 15px;
   }
   .btn-secondary {
@@ -805,7 +805,7 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
   }
 
   /* Missing / loading states */
-  .enter__loading, .enter__missing { padding: 60px 24px; }
+  .enter__loading, .enter__missing { padding: 60px 20px; }
   .enter__missing-title { font-size: 32px; }
 }
 </style>

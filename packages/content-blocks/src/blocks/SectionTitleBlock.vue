@@ -100,6 +100,6 @@ const alignClass = computed(() => (props.align === 'left' ? 'st--left' : 'st--ce
    fills the viewport minus a 24px editorial padding, matching the
    Paper mobile artboards. */
 @media (max-width: 640px) {
-  .st { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+  .st { padding-left: 20px; padding-right: 20px; overflow-x: hidden; }
 }
 </style>

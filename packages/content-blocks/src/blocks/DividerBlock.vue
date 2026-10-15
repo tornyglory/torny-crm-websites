@@ -90,6 +90,6 @@ const spacerStyle = computed(() => ({ height: `${props.height}px` }))
 }
 
 @media (max-width: 640px) {
-  .dv { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+  .dv { padding-left: 20px; padding-right: 20px; overflow-x: hidden; }
 }
 </style>

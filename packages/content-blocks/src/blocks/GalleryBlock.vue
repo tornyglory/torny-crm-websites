@@ -165,6 +165,6 @@ function tileStyle(img: GalleryImage, index: number): Record<string, string> {
    fills the viewport minus a 24px editorial padding, matching the
    Paper mobile artboards. */
 @media (max-width: 640px) {
-  .gal { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+  .gal { padding-left: 20px; padding-right: 20px; overflow-x: hidden; }
 }
 </style>

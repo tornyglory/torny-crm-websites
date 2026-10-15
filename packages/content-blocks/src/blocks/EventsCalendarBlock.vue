@@ -846,7 +846,7 @@ function spotsTaken(e: EventEntry): number {
 
 /* List rows */
 .evc__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
-.evc__list-empty { padding: 40px 24px; text-align: center; background: var(--color-surface); border: 1px dashed var(--color-hairline); border-radius: 14px; color: var(--color-fog); font-family: var(--font-body); }
+.evc__list-empty { padding: 40px 20px; text-align: center; background: var(--color-surface); border: 1px dashed var(--color-hairline); border-radius: 14px; color: var(--color-fog); font-family: var(--font-body); }
 .evc__list-empty-title { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--color-ink); margin-bottom: 4px; }
 .evc__list-empty p { margin: 0; font-size: 13px; }
 
@@ -942,7 +942,7 @@ function spotsTaken(e: EventEntry): number {
 @media (max-width: 640px) {
   .evc {
     gap: 20px;
-    padding: 32px 24px 48px;
+    padding: 32px 20px 48px;
   }
   .evc__head { gap: 10px; }
   .evc__title { font-size: 40px; line-height: 100%; }

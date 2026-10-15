@@ -154,6 +154,6 @@ function toneClass(tone: string | undefined): string {
    fills the viewport minus a 24px editorial padding, matching the
    Paper mobile artboards. */
 @media (max-width: 640px) {
-  .tc { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+  .tc { padding-left: 20px; padding-right: 20px; overflow-x: hidden; }
 }
 </style>

@@ -1,0 +1,53 @@
+name: Deploy CRM to Azure SWA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/crm/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/crm-azure-swa.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/crm/**'
+      - 'packages/**'
+  workflow_dispatch: {}
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build CRM
+        run: pnpm --filter @torny/crm build
+        env:
+          VITE_SAM_BASE_URL: ${{ secrets.VITE_SAM_BASE_URL }}
+          VITE_CRM_BASE_URL: ${{ secrets.VITE_CRM_BASE_URL }}
+          VITE_MEDIA_BASE_URL: ${{ secrets.VITE_MEDIA_BASE_URL }}
+          VITE_SITES_ORIGIN: ${{ secrets.VITE_SITES_ORIGIN }}
+          VITE_SITES_HOST_SUFFIX: ${{ secrets.VITE_SITES_HOST_SUFFIX }}
+
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_SWA_API_TOKEN_CRM }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: apps/crm/dist
+          output_location: ""
+          skip_app_build: true
+          skip_api_build: true

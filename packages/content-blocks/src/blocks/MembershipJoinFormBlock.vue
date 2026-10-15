@@ -747,8 +747,10 @@ function joinFormErrorMessage(err: unknown): string {
   .jf {
     padding: 32px 24px 48px;
     gap: 24px;
-    width: 100%;
-    max-width: 100vw;
+    /* Keep the desktop width:100vw + negative-margin break-out so the
+       block fills the viewport, bypassing PageRenderer's 48px gutter.
+       Overriding to width:100% was the bug — it leashed the block back
+       to the padded parent, leaving ~45px of dead right margin. */
     overflow-x: hidden;
   }
 

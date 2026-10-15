@@ -29,18 +29,13 @@ export default defineNuxtConfig({
     },
   },
 
-  routeRules: process.env.NODE_ENV === 'production'
-    ? {
-        '/': { swr: 300 },
-        '/events/**': { swr: 60 },
-        '/honour-board/**': { swr: 3600 },
-        '/membership': { swr: 300 },
-        '/contact': { swr: 3600 },
-        '/api/**': { cache: false },
-      }
-    : {
-        '/api/**': { cache: false },
-      },
+  // SWR response caching disabled — Nitro's SWR keys responses by pathname
+  // only, which cross-contaminates tenants (melbourne.torny.co and
+  // nae-nae.torny.co would share a `/` cache entry). Re-enable once we move
+  // to a host-aware cache key via defineCachedEventHandler on the renderer.
+  routeRules: {
+    '/api/**': { cache: false },
+  },
 
   app: {
     head: {

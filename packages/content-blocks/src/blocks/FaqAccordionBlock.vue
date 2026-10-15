@@ -240,5 +240,9 @@ function pad(n: number): string {
    Paper mobile artboards. */
 @media (max-width: 640px) {
   .faq { padding-left: 20px; padding-right: 20px; overflow-x: hidden; }
+  /* Flatten the desktop 66px/28px answer indent — on mobile the answer
+     should sit flush with the content column, not under a 66px question
+     number lane. */
+  .faq__answer { padding: 0 0 20px; }
 }
 </style>

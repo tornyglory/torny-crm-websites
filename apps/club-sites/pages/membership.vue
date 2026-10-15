@@ -83,4 +83,98 @@ const cadenceLabel = (c: string | null): string =>
 .btn--primary { background: var(--brand); color: #fff; border: 0; }
 .btn--ghost { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 .btn--ghost:hover { background: var(--color-surface); }
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile (≤640px).
+   See Paper mobile artboard "Membership · Mobile".
+   Hero compacts, discount banner reshapes to a full-width card,
+   tier grid collapses to a single stacked column. The default tier
+   gets an inverted ink card treatment to stand out as the hero
+   choice without a hovering "Most popular" badge that'd clip.
+───────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .membership {
+    gap: 20px;
+    padding: 32px 24px 48px;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+
+  .page-head__eyebrow { font-size: 10px; letter-spacing: 0.08em; }
+  .page-head__title { font-size: 40px; margin: 10px 0 10px; letter-spacing: -0.02em; line-height: 100%; }
+  .page-head__sub { font-size: 14px; line-height: 150%; }
+
+  /* First-year discount: pill → full-width card with icon */
+  .banner {
+    align-self: stretch;
+    padding: 14px 16px;
+    border-radius: 14px;
+    font-size: 13px;
+    line-height: 150%;
+  }
+  .banner__dot { width: 10px; height: 10px; flex-shrink: 0; }
+
+  /* Single column stack; default tier breaks the pattern */
+  .tiers {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .tier {
+    padding: 20px;
+    border-radius: 16px;
+    gap: 12px;
+  }
+  .tier--default {
+    background: var(--color-ink, #0A0A0B);
+    color: #FFFFFF;
+    border-color: var(--color-ink, #0A0A0B);
+    box-shadow: none;
+  }
+  .tier--default .tier__name { color: #FFFFFF; }
+  .tier--default .tier__desc { color: #D4D4D8; }
+  .tier--default .tier__price-amount { color: #FFFFFF; }
+  .tier--default .tier__price-currency { color: var(--color-mute); }
+  .tier--default .tier__price-cadence { color: var(--color-mute); }
+  .tier--default .tier__flag {
+    background: var(--brand, #2563EB);
+    color: #FFFFFF;
+    letter-spacing: 0.08em;
+  }
+
+  .tier__name { font-size: 22px; letter-spacing: -0.02em; }
+  .tier__price-amount { font-size: 40px; letter-spacing: -0.02em; line-height: 90%; }
+  .tier--default .tier__price-amount { font-size: 56px; letter-spacing: -0.03em; }
+  .tier__price-currency { font-size: 14px; }
+  .tier--default .tier__price-currency { font-size: 16px; }
+  .tier__price-cadence { font-size: 12px; }
+  .tier__desc { font-size: 13px; line-height: 150%; }
+
+  .tier__cta { padding-top: 8px; }
+  .btn {
+    width: 100%;
+    justify-content: center;
+    padding: 14px 20px;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+  .tier--default .btn--ghost {
+    background: #FFFFFF;
+    color: var(--color-ink, #0A0A0B);
+    border-color: #FFFFFF;
+    padding: 16px 20px;
+    font-size: 15px;
+  }
+  .tier:not(.tier--default) .btn--primary {
+    background: var(--color-ground, #FFFFFF);
+    color: var(--color-ink, #0A0A0B);
+    border: 1px solid var(--color-hairline);
+  }
+
+  /* Empty state */
+  .empty { padding: 32px 24px; font-size: 14px; }
+  .empty__title { font-size: 17px; }
+}
 </style>

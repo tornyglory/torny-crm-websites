@@ -140,7 +140,11 @@ const activeType = ref<FilterEventType>('all')
 
 // ── View mode ──────────────────────────────────────────────────
 type ViewMode = 'calendar' | 'list'
-const viewMode = ref<ViewMode>('calendar')
+// Default to list view on narrow screens — the month grid is too dense
+// for a 390px canvas. SSR-safe guard: `window` is undefined server-side.
+const viewMode = ref<ViewMode>(
+  typeof window !== 'undefined' && window.innerWidth <= 640 ? 'list' : 'calendar',
+)
 
 // ── List-view search + format filter (calendar mode ignores these) ─
 const listSearch = ref('')
@@ -929,13 +933,68 @@ function spotsTaken(e: EventEntry): number {
   .cal__cell { min-height: 72px; padding: 6px; }
   .cal__event { font-size: 9px; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile (≤640px) — defaults to list view (viewMode is forced to
+   'list' in script setup when the window is this narrow).
+   See Paper mobile artboard "Events · Full page · Mobile".
+───────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .evc__toolbar { flex-direction: column; align-items: stretch; }
+  .evc {
+    gap: 20px;
+    padding: 32px 24px 48px;
+  }
+  .evc__head { gap: 10px; }
+  .evc__title { font-size: 40px; line-height: 100%; }
+  .evc__sub { font-size: 14px; }
+
+  .evc__toolbar { flex-direction: column; align-items: stretch; gap: 12px; }
+
+  /* Hide the Calendar view-mode button; viewMode is forced to 'list'
+     via the ref initializer so the toggle is informational only. */
+  .evc__view-toggle { align-self: flex-start; }
+  .evc__view-btn[aria-selected="false"]:first-child { display: none; }
+
+  /* Calendar grid cells (visible briefly if the user resizes from a
+     wider viewport) — compacted so nothing clips. */
   .cal__wday { font-size: 9px; padding: 8px 4px; }
   .cal__cell { min-height: 56px; padding: 4px; }
   .cal__day { width: 18px; height: 18px; font-size: 10px; }
   .cal__event { display: none; }
   .cal__cell:has(.cal__events) .cal__day { background: var(--brand); color: #fff; }
+
+  /* List view: toolbar stacks, search is full-width, format chips
+     scroll horizontally in a single row. */
+  .evc__list-toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .evc__search-input { height: 44px; }
+  .evc__format-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .evc__format-chips::-webkit-scrollbar { display: none; }
+  .evc__chip { flex-shrink: 0; }
+
+  /* Event cards: shrink the top accent bar to a dot, hide the chevron
+     (whole card is tappable), stack title + tags so long titles don't
+     wrap awkwardly next to pill badges. */
+  .evc__list { gap: 10px; }
+  .lst {
+    grid-template-columns: 56px 1fr;
+    gap: 14px;
+    padding: 16px;
+    border-radius: 14px;
+  }
+  .lst__chev { display: none; }
+  .lst__title-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .lst__title { font-size: 16px; letter-spacing: -0.01em; font-family: var(--font-body); font-weight: 600; }
+  .lst__excerpt { font-size: 13px; }
+  .lst__meta { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-fog); }
+
+  /* Monthly stats block — tighter padding on narrow */
+  .stats { padding: 18px 20px; }
+  .stats__num { font-size: 32px; }
 }
 
 /* ── Event detail modal ─────────────────────────────────────── */

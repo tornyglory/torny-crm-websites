@@ -291,6 +291,17 @@ function loadMore() {
                       <div v-if="e.note" class="row__note">{{ e.note }}</div>
                     </div>
                   </div>
+                  <!-- Mobile-only combined meta row: score · runner-up · awarded. Hidden on desktop
+                       where these live in their own columns. -->
+                  <div class="row__meta-mobile">
+                    <template v-if="e.score || e.runner_up">
+                      <span v-if="e.score">{{ e.score }}</span>
+                      <span v-if="e.score && e.runner_up"> vs </span>
+                      <span v-if="e.runner_up">{{ e.runner_up }}</span>
+                      <span class="row__meta-mobile-sep" v-if="(e.score || e.runner_up) && e.awarded_at"> · </span>
+                    </template>
+                    <span v-if="e.awarded_at">{{ formatAwarded(e.awarded_at) }}</span>
+                  </div>
                 </td>
                 <td class="col-runner">{{ e.runner_up || '—' }}</td>
                 <td class="col-score">{{ e.score || '—' }}</td>
@@ -378,6 +389,8 @@ function loadMore() {
 .row__positions { font-family: var(--font-mono); font-size: 10px; color: var(--color-fog); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 3px; display: flex; gap: 6px; flex-wrap: wrap; }
 .row__positions-sep { opacity: 0.5; }
 .row__note { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 4px; font-style: italic; }
+.row__meta-mobile { display: none; font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); margin-top: 4px; padding-left: 44px; }
+.row__meta-mobile-sep { color: var(--color-mute); }
 .col-runner { color: var(--color-graphite); min-width: 140px; }
 .col-score { font-family: var(--font-mono); font-weight: 600; color: var(--color-graphite); width: 100px; }
 .col-awarded { font-family: var(--font-mono); font-size: 12px; color: var(--color-fog); width: 130px; white-space: nowrap; }
@@ -404,11 +417,150 @@ function loadMore() {
   .col-runner { display: none; }
   .col-awarded { display: none; }
 }
-@media (max-width: 600px) {
-  .hb__toolbar { flex-direction: column; align-items: stretch; }
-  .hb__filters { justify-content: space-between; }
-  .results__table td { padding: 10px 12px; font-size: 13px; }
-  .col-score { display: none; }
-  .col-year { width: 70px; }
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile (≤640px) — stacked list, no sidebar rail, combined meta.
+   Mirrors the HonourBoardSearchBlock mobile breakpoint so the
+   dedicated /honour-board route matches the Paper mobile artboard.
+───────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .hb {
+    gap: 20px;
+    padding: 32px 24px 48px;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+  /* Guard against any descendant element causing horizontal scroll. */
+  .hb * { max-width: 100%; }
+  .hb__head { gap: 10px; }
+  .hb__title { font-size: 40px; line-height: 100%; }
+  .hb__sub { font-size: 14px; }
+
+  .hb__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .hb__search {
+    min-width: 0;
+    flex: none;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .hb__search-input {
+    width: 100%;
+    max-width: 100%;
+    height: 44px;
+    padding: 0 44px 0 42px;
+    border-radius: 10px;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+  .hb__filters {
+    gap: 8px;
+    display: flex;
+    flex-wrap: nowrap;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .hb__select {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 100%;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-radius: 999px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .hb__select select {
+    min-width: 0;
+    max-width: 100%;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  /* Hide the horizontal category chip rail — use the dropdown instead. */
+  .rail { display: none; }
+
+  /* Flatten the results card. */
+  .results {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+  }
+  .results__head {
+    padding: 20px 0 10px;
+    border-bottom: 0;
+  }
+  .results__eyebrow { font-size: 10px; margin-bottom: 2px; }
+  .results__title-row { flex-direction: row; align-items: flex-end; gap: 10px; }
+  .results__title { font-size: 28px; letter-spacing: -0.02em; }
+
+  /* Table → stacked rows. Specificity-prefixed to beat the generic
+     `.results__table td` cascade. */
+  .results__table { border-collapse: separate; border-spacing: 0; display: block; }
+  .results__table thead { display: none; }
+  .results__table tbody { display: block; }
+  .results__table tbody tr {
+    display: flex;
+    gap: 14px;
+    padding: 14px 0;
+    border-top: 1px solid var(--color-hairline);
+    border-bottom: 0;
+    align-items: flex-start;
+  }
+  .results__table tbody tr:first-child { border-top: 0; }
+
+  .results__table .col-year {
+    display: block;
+    width: 58px;
+    flex-shrink: 0;
+    flex-grow: 0;
+    padding: 0;
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--color-ink);
+    align-self: center;
+  }
+  .results__table .col-year .row__cat {
+    margin-top: 2px;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+    color: var(--color-fog);
+    font-weight: 500;
+  }
+  .results__table .col-champ {
+    display: block;
+    padding: 0;
+    min-width: 0;
+    flex: 1 1 auto;
+    width: auto;
+  }
+  .row__avatar { width: 28px; height: 28px; font-size: 10px; }
+  .row__champ { gap: 10px; }
+  .row__name { font-family: var(--font-body); font-size: 15px; font-weight: 500; letter-spacing: -0.005em; }
+  .results__table .col-runner,
+  .results__table .col-score,
+  .results__table .col-awarded { display: none; }
+
+  .row__meta-mobile { display: block; }
+
+  /* Load-more sits inline. */
+  .results__foot { padding: 20px 0 0; }
+  .results__load { height: 44px; padding: 0 20px; font-size: 14px; }
 }
 </style>

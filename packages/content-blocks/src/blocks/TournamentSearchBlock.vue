@@ -493,4 +493,80 @@ function href(t: PublicTournamentCard): string {
   .tsx__row { flex-wrap: wrap; }
   .tsx__row-actions { padding: 0 22px 18px 22px; text-align: left; align-items: flex-start; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile (≤640px).
+   See Paper mobile artboard "Tournaments · Search · Mobile".
+   Hero collapses, filter rail becomes a collapsed card with a chip
+   row, result rows become stacked cards with a full-width enter CTA.
+───────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .tsx { padding: 32px 24px 48px; gap: 20px; }
+  .tsx__head { gap: 10px; margin-bottom: 8px; }
+  .tsx__heading { font-size: 40px; line-height: 100%; }
+  .tsx__desc { font-size: 14px; }
+
+  /* Filter card: compact spacing, shrink group gaps */
+  .tsx__card { padding: 16px; gap: 14px; border-radius: 14px; }
+  .tsx__card-title { font-size: 14px; }
+  .tsx__group { gap: 6px; }
+  .tsx__group-label { font-size: 10px; }
+  .tsx__chips { gap: 6px; }
+  .tsx__chip { padding: 6px 12px; font-size: 12px; }
+
+  /* Featured hero (top tournament card) */
+  .tsx__feature-left,
+  .tsx__feature-right { padding: 20px 20px; }
+  .tsx__feature-title { font-size: 26px; }
+  .tsx__feature-prize-val { font-size: 48px; }
+
+  /* Result rows → stacked cards:
+     - row wraps so actions become a full-width footer
+     - avatar shrinks to 48px (matches date-tag feel on mobile)
+     - CTA stretches full width, inverted (ink) for tap affordance
+     - row title compresses to 17px body (readable at a glance) */
+  .tsx__row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+    padding: 0;
+  }
+  .tsx__row:hover { transform: none; box-shadow: none; }
+  .tsx__row-rail { width: 100%; height: 4px; align-self: auto; }
+  .tsx__row-avatar {
+    width: 48px;
+    height: 48px;
+    font-size: 13px;
+    margin: 16px 0 16px 16px;
+    border-radius: 10px;
+  }
+  .tsx__row-body { padding: 16px 16px 4px; min-width: 0; flex: 1 1 calc(100% - 90px); }
+  .tsx__row-meta { gap: 6px; margin-bottom: 6px; }
+  .tsx__row-meta-text { font-size: 10px; letter-spacing: 0.06em; }
+  .tsx__row-pill { font-size: 9px; letter-spacing: 0.08em; }
+  .tsx__row-title {
+    font-size: 17px;
+    font-family: var(--site-font-body, 'Inter', system-ui, sans-serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 120%;
+    margin-bottom: 4px;
+  }
+  .tsx__row-sub { font-size: 11px; font-family: var(--site-font-mono, 'JetBrains Mono', monospace); letter-spacing: 0.04em; text-transform: uppercase; }
+  .tsx__row-actions {
+    width: 100%;
+    padding: 0 16px 16px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .tsx__row-close { font-size: 10px; letter-spacing: 0.08em; }
+  .tsx__row-enter {
+    padding: 10px 18px;
+    font-size: 13px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+}
 </style>

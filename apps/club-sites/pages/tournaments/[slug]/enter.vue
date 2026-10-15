@@ -671,4 +671,141 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
   .slot { flex-wrap: wrap; }
   .slot__actions { padding: 0 20px 18px; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile (≤640px).
+   See Paper mobile artboard "Tournament · Detail + Enter · Mobile".
+   Hero stacks: breadcrumb → pills → title → desc → full-width cover
+   image → urgency card. Sidebar rail is hidden — the inline confirm
+   section does the submit. Section titles compact, roster slots
+   become stacked cards with inline position labels.
+───────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  /* Hero */
+  .enter__hero-inner { padding: 28px 24px 24px; gap: 16px; }
+  .enter__breadcrumb { font-size: 10px; letter-spacing: 0.08em; }
+  .enter__crumb { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw; }
+  .enter__hero-body { flex-direction: column; align-items: stretch; gap: 20px; }
+  .enter__hero-main {
+    flex-direction: column-reverse; /* thumbnail below the text block */
+    gap: 20px;
+    align-items: stretch;
+  }
+  .enter__thumb {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 10;
+    border-radius: 14px;
+  }
+  .enter__thumb-date { bottom: 14px; left: 14px; font-size: 10px; }
+  .enter__hero-text { gap: 10px; }
+  .enter__hero-title { font-size: 36px; letter-spacing: -0.02em; line-height: 100%; }
+  .enter__hero-desc { font-size: 14px; }
+
+  /* "Entries close" promoted to a full-width urgency card */
+  .enter__closes {
+    padding: 16px 18px;
+    background: #FEF2F2;
+    border: 1px solid #FEE2E2;
+    border-radius: 14px;
+    gap: 6px;
+  }
+  .enter__closes-label { font-size: 10px; letter-spacing: 0.08em; color: #991B1B; }
+  .enter__closes-value { font-size: 30px; letter-spacing: -0.02em; }
+  .enter__closes-value--urgent { color: #991B1B; }
+  .enter__closes-date { font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; }
+
+  /* Members-only gate */
+  .enter__gated { padding: 48px 24px; }
+  .enter__gated-title { font-size: 32px; }
+  .enter__gated-sub { font-size: 14px; }
+
+  /* Body */
+  .enter__body-inner { padding: 28px 24px 32px; gap: 28px; }
+  .enter__form { gap: 28px; }
+
+  /* Guest upsell banner */
+  .upsell { flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px 16px; }
+  .upsell__cta { align-self: flex-start; }
+
+  /* Section heads */
+  .section { gap: 16px; }
+  .section__title { font-size: 28px; }
+  .section__sub { font-size: 13px; }
+
+  /* Fields */
+  .field__input { padding: 12px 14px; font-size: 15px; border-radius: 10px; }
+  .field__textarea { padding: 12px 14px; font-size: 14px; border-radius: 10px; min-height: 110px; }
+
+  /* Roster slots — collapse into stacked cards with inline position label */
+  .roster { gap: 10px; }
+  .slot {
+    flex-direction: column;
+    align-items: stretch;
+    border-radius: 14px;
+  }
+  .slot__rail { width: 100%; height: 4px; }
+  .slot__pos {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px 0;
+    border-right: 0;
+  }
+  .slot__pos-name { font-size: 15px; }
+  .slot__body {
+    padding: 10px 16px 14px;
+    gap: 12px;
+  }
+  .slot__body--guest { padding: 10px 16px 14px; }
+  .slot__avatar { width: 40px; height: 40px; font-size: 13px; border-radius: 10px; }
+  .slot__avatar--empty { font-size: 18px; }
+  .slot__input { font-size: 15px; padding: 6px 0; }
+  .slot__player-name { font-size: 15px; }
+  .slot__actions {
+    padding: 0 16px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .btn-chip { flex: 1; justify-content: center; font-size: 13px; padding: 10px 12px; }
+  .btn-chip--ghost { flex: 0; }
+
+  /* Hide the sticky sidebar — its primary action lives in .confirm,
+     which already renders the fee inline on the CTA button. */
+  .rail { display: none; }
+
+  /* Confirm bar — make it the primary call to action */
+  .confirm { gap: 12px; padding-top: 20px; }
+  .confirm__legal { font-size: 12px; }
+  .confirm__row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .confirm__step {
+    margin-left: 0;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--color-mute);
+  }
+  .btn-primary {
+    width: 100%;
+    justify-content: center;
+    padding: 16px 24px;
+    font-size: 15px;
+  }
+  .btn-secondary {
+    width: 100%;
+    padding: 14px 22px;
+    font-size: 14px;
+    text-align: center;
+    box-sizing: border-box;
+  }
+
+  /* Missing / loading states */
+  .enter__loading, .enter__missing { padding: 60px 24px; }
+  .enter__missing-title { font-size: 32px; }
+}
 </style>

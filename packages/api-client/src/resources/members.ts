@@ -82,6 +82,12 @@ export interface RosterMember {
   public_visible: boolean
   /** Member-authored bio shown on the public player profile. */
   bio: string | null
+  /** Preferred bowls position. May be null on legacy roster rows that
+   *  haven't been touched since the field was added. */
+  preferred_position: PreferredPosition | null
+  /** Club-assigned playing grade. Null for members who haven't been
+   *  graded or play social-only. */
+  playing_level: PlayingLevel | null
   membership: RosterMembership | null
 }
 

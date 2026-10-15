@@ -352,8 +352,8 @@ function openEdit() {
     position_group:     m.position_group ?? 'member',
     public_visible:     m.public_visible ?? true,
     bio:                m.bio ?? '',
-    preferred_position: '',   // not currently on RosterMember — admin fills fresh
-    playing_level:      '',   // same
+    preferred_position: m.preferred_position ?? '',
+    playing_level:      m.playing_level ?? '',
     membership_type_id: m.membership?.type_id ?? null,
     status:             m.membership?.status ?? '',
     joined_date:        toDateInput(m.joined_at),
@@ -626,6 +626,111 @@ async function submitEdit() {
             <div class="member-detail__owing-sub">{{ standing.sub }}</div>
           </div>
         </section>
+
+        <!-- Profile card — always visible across tabs so the full
+             identity + roster + billing record is a glance away. -->
+        <article class="member-detail__profile">
+          <header class="member-detail__profile-head">
+            <div class="member-detail__card-label">Member profile</div>
+            <button v-if="callerCanEdit" type="button" class="btn btn--outline btn--sm" @click="openEdit">Edit</button>
+          </header>
+
+          <div class="profile-group">
+            <div class="profile-group__eyebrow">Identity</div>
+            <dl class="profile-grid">
+              <div class="profile-cell">
+                <dt>Email</dt>
+                <dd>{{ member.email || '—' }}</dd>
+              </div>
+              <div class="profile-cell">
+                <dt>Phone</dt>
+                <dd>{{ member.phone || '—' }}</dd>
+              </div>
+              <div class="profile-cell">
+                <dt>Date of birth</dt>
+                <dd>{{ member.dob ? fmtShort(member.dob) : '—' }}</dd>
+              </div>
+              <div class="profile-cell profile-cell--full">
+                <dt>Address</dt>
+                <dd>{{ member.address || '—' }}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="profile-group">
+            <div class="profile-group__eyebrow">Roster</div>
+            <dl class="profile-grid">
+              <div class="profile-cell">
+                <dt>Role</dt>
+                <dd class="profile-cap">{{ member.club_role }}</dd>
+              </div>
+              <div class="profile-cell">
+                <dt>Title</dt>
+                <dd>{{ member.title || '—' }}</dd>
+              </div>
+              <div class="profile-cell">
+                <dt>Position group</dt>
+                <dd class="profile-cap">{{ member.position_group }}</dd>
+              </div>
+              <div class="profile-cell">
+                <dt>Playing level</dt>
+                <dd>{{ member.playing_level ? `Grade ${member.playing_level}` : '—' }}</dd>
+              </div>
+              <div class="profile-cell">
+                <dt>Preferred position</dt>
+                <dd>{{ member.preferred_position || '—' }}</dd>
+              </div>
+              <div class="profile-cell">
+                <dt>Public directory</dt>
+                <dd>
+                  <span class="profile-chip" :class="member.public_visible ? 'profile-chip--on' : 'profile-chip--off'">
+                    {{ member.public_visible ? 'Visible' : 'Hidden' }}
+                  </span>
+                </dd>
+              </div>
+              <div v-if="member.bio" class="profile-cell profile-cell--full">
+                <dt>Bio</dt>
+                <dd class="profile-bio">{{ member.bio }}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="profile-group">
+            <div class="profile-group__eyebrow">Membership</div>
+            <dl class="profile-grid">
+              <div class="profile-cell">
+                <dt>Tier</dt>
+                <dd>{{ member.membership?.type_name || '—' }}</dd>
+              </div>
+              <div class="profile-cell">
+                <dt>Status</dt>
+                <dd class="profile-cap">{{ member.membership?.status || '—' }}</dd>
+              </div>
+              <div class="profile-cell">
+                <dt>Joined date</dt>
+                <dd>{{ member.joined_at ? fmtShort(member.joined_at) : '—' }}</dd>
+              </div>
+              <div class="profile-cell">
+                <dt>Payment due</dt>
+                <dd>{{ member.membership?.payment_due_date ? fmtShort(member.membership.payment_due_date) : '—' }}</dd>
+              </div>
+              <div class="profile-cell">
+                <dt>Last payment</dt>
+                <dd>
+                  <template v-if="member.membership?.last_payment_date">
+                    {{ fmtShort(member.membership.last_payment_date) }}<template v-if="member.membership.last_payment_amount">
+                      · ${{ member.membership.last_payment_amount }}</template>
+                  </template>
+                  <template v-else>—</template>
+                </dd>
+              </div>
+              <div class="profile-cell">
+                <dt>Payment status</dt>
+                <dd class="profile-cap">{{ member.membership?.payment_status || '—' }}</dd>
+              </div>
+            </dl>
+          </div>
+        </article>
 
         <!-- Two-column: main + rail -->
         <div class="member-detail__cols">
@@ -1059,6 +1164,88 @@ async function submitEdit() {
   .member-detail__hero-line { flex-direction: column; align-items: flex-start; gap: 8px; }
   .member-detail__name { font-size: 24px; }
   .pay-table th:nth-child(2), .pay-table td:nth-child(2) { display: none; }
+}
+
+/* ── Member profile card ─────────────────────────────────────── */
+.member-detail__profile {
+  background: #fff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 14px;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+.member-detail__profile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.profile-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-hairline);
+}
+.profile-group:first-of-type { padding-top: 0; border-top: 0; }
+.profile-group__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--color-fog);
+  text-transform: uppercase;
+}
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  margin: 0;
+}
+.profile-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.profile-cell--full { grid-column: span 2; }
+.profile-cell dt {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-fog);
+  margin: 0;
+}
+.profile-cell dd {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-ink);
+  margin: 0;
+  word-break: break-word;
+}
+.profile-cap { text-transform: capitalize; }
+.profile-bio { line-height: 150%; font-size: 13px; color: var(--color-graphite); }
+.profile-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.profile-chip--on { background: #DCFCE7; color: #166534; }
+.profile-chip--off { background: var(--color-surface); color: var(--color-fog); }
+
+@media (max-width: 640px) {
+  .profile-grid { grid-template-columns: 1fr; }
+  .profile-cell--full { grid-column: auto; }
 }
 
 /* ── Edit modal ──────────────────────────────────────────────── */

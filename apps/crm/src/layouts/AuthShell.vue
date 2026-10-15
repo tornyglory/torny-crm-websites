@@ -26,8 +26,8 @@ function signOut() {
         </span>
       </div>
       <nav class="auth-shell__utility">
-        <a href="mailto:hello@torny.club" class="auth-shell__link">Need help?</a>
-        <a v-if="!auth.user" href="https://torny.club" class="auth-shell__link auth-shell__link--strong">
+        <a href="mailto:hello@torny.co" class="auth-shell__link">Need help?</a>
+        <a v-if="!auth.user" href="https://torny.co" class="auth-shell__link auth-shell__link--strong">
           Player app
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
             <path d="M7 17 17 7" /><path d="M7 7h10v10" />

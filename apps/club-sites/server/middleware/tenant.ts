@@ -5,7 +5,7 @@ import { resolveClubForHost } from '../utils/tornyApi'
 // off event.context.club for downstream handlers / composables.
 //
 // Dev tenant override:
-// - `?host=<slug>.torny.club` picks the tenant and gets stored in a cookie
+// - `?host=<slug>.torny.co` picks the tenant and gets stored in a cookie
 //   (`torny.dev.host`), so internal links (`/membership`, `/events`, …) don't
 //   need to carry the query param.
 // - The cookie is dev-only (skipped when the real Host header matches a club),

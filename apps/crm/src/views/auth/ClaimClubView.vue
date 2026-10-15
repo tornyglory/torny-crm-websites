@@ -120,7 +120,7 @@ function submitErrorCopy(err: ApiError): string {
     case 'claim_pending_exists':
       return "You've already got a pending claim for this club — check your existing claim below."
     case 'club_already_claimed':
-      return 'Someone else has already claimed this club. If that\'s a mistake, get in touch with hello@torny.club.'
+      return 'Someone else has already claimed this club. If that\'s a mistake, get in touch with hello@torny.co.'
     case 'unknown_club':
       return "That club isn't in the Torny directory. Try another search."
     case 'evidence_too_short':
@@ -346,7 +346,7 @@ onUnmounted(() => {
                 Register a new club — we'll verify it against Bowls NZ and add it to the directory within one working day.
               </p>
             </div>
-            <a href="mailto:hello@torny.club?subject=Register new club" class="empty__cta">
+            <a href="mailto:hello@torny.co?subject=Register new club" class="empty__cta">
               Register new club
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
             </a>
@@ -359,7 +359,7 @@ onUnmounted(() => {
             <div class="add-cta__heading">Can't find your club?</div>
             <p class="add-cta__text">Register a new club — we'll verify it against Bowls NZ and add it to the directory within one working day.</p>
           </div>
-          <a href="mailto:hello@torny.club?subject=Register new club" class="add-cta__btn">
+          <a href="mailto:hello@torny.co?subject=Register new club" class="add-cta__btn">
             Register new club
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
           </a>

@@ -80,7 +80,7 @@ function enterDashboard() {
       <h1 class="hero__title">{{ clubName }} is on Torny.</h1>
       <p class="hero__lede">
         Your site is publishing to
-        <span class="hero__code">{{ subdomain }}.torny.club</span>
+        <span class="hero__code">{{ subdomain }}.torny.co</span>
         &mdash; usually ready within a minute. Here's where to go next.
       </p>
       <div v-if="finalizeError" class="hero__error">{{ finalizeError }}</div>
@@ -110,7 +110,7 @@ function enterDashboard() {
         Enter dashboard
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M5 12h14M13 5l7 7-7 7" /></svg>
       </button>
-      <a :href="`https://${subdomain}.torny.club`" target="_blank" rel="noopener" class="actions__ghost">View live site</a>
+      <a :href="`https://${subdomain}.torny.co`" target="_blank" rel="noopener" class="actions__ghost">View live site</a>
     </div>
 
     <p class="foot">Everything you just set is editable from <RouterLink :to="{ name: 'settings' }">Settings</RouterLink> anytime.</p>

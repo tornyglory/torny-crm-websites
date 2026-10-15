@@ -155,7 +155,7 @@ async function submit(e: Event) {
         <p v-if="error" class="alert">{{ error }}</p>
 
         <p class="card__terms">
-          By continuing you agree to Torny's <a href="https://torny.club/terms" class="card__link">terms</a> and <a href="https://torny.club/privacy" class="card__link">privacy notice</a>.
+          By continuing you agree to Torny's <a href="https://torny.co/terms" class="card__link">terms</a> and <a href="https://torny.co/privacy" class="card__link">privacy notice</a>.
         </p>
       </form>
     </section>

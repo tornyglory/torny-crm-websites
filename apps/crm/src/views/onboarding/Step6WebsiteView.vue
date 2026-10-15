@@ -132,7 +132,7 @@ async function publish() {
             maxlength="30"
             @input="onboarding.data.subdomain = ($event.target as HTMLInputElement).value.toLowerCase().replace(/[^a-z0-9-]/g, '')"
           />
-          <span class="dom__suffix">.torny.club</span>
+          <span class="dom__suffix">.torny.co</span>
         </div>
         <div v-if="availabilityHint" class="dom-hint" :class="{ 'dom-hint--danger': ['taken','reserved','invalid','error'].includes(subdomainState) }">{{ availabilityHint }}</div>
       </div>
@@ -177,7 +177,7 @@ async function publish() {
           <div class="preview__title">Not published yet</div>
           <div class="preview__desc">
             Nothing is public until you hit <b>Publish site</b>. When you do, your address will be
-            <span class="preview__code">{{ onboarding.data.subdomain || 'yourclub' }}.torny.club</span>.
+            <span class="preview__code">{{ onboarding.data.subdomain || 'yourclub' }}.torny.co</span>.
           </div>
         </div>
         <span class="pill pill--dark">Preview only</span>

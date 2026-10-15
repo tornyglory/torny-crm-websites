@@ -16,16 +16,16 @@ pnpm --filter @torny/club-sites preview
 Env vars (`.env.local` or `.dev.vars`):
 
 ```
-NUXT_TORNY_API_BASE_URL=https://api.torny.club
+NUXT_TORNY_API_BASE_URL=https://byi59x19m4.execute-api.ap-southeast-2.amazonaws.com/Prod
 NUXT_REVALIDATE_SECRET=change-me
-NUXT_PUBLIC_SITE_URL=https://sites.torny.club
+NUXT_PUBLIC_SITE_URL=https://sites.torny.co
 ```
 
 ## Multi-tenant architecture
 
 - **Host resolution**: `server/middleware/tenant.ts` reads the `Host` header on every request and looks up the club via `/clubs/resolve?host=…`. For production, hot-path this to Workers KV.
 - **Custom domains**: owner enters `mybowlsclub.co.nz` in the CRM → CRM calls the Cloudflare API (`POST /zones/:id/custom_hostnames`) → CF issues SSL via SNI → same Nuxt project handles the request.
-- **Fallback subdomain**: every club also gets `<slug>.sites.torny.club` (or your chosen root domain), routed via a single wildcard record.
+- **Fallback subdomain**: every club gets `<slug>.torny.co`, registered against the Pages project by the backend on onboarding (per brief 42). No wildcard DNS — each subdomain is a per-tenant custom-domain entry.
 
 ## Publish + revalidate flow
 

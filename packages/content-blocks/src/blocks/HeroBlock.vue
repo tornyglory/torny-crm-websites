@@ -399,7 +399,8 @@ function initialsFor(name: string, initials?: string): string {
 
 /* Mobile: tighter padding + smaller display heading. */
 @media (max-width: 639px) {
-  .hero__split { padding: 32px 20px; gap: 20px; }
+  /* Horizontal padding lives on .hero (20px, set below) — don't double up here. */
+  .hero__split { padding: 32px 0; gap: 20px; }
   .hero__col--media { min-height: 240px; padding: 20px; border-radius: 20px; }
   .hero__col--text { gap: 20px; }
   .hero__heading { font-size: 40px; }

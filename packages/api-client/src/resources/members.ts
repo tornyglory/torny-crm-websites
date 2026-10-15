@@ -32,6 +32,9 @@ export interface RosterMembership {
   membership_id: number | null
   type_id: number | null
   type_name: string | null
+  /** Human-readable slug — e.g. `student-member`. Regenerated when the tier
+   *  is renamed. Use for URL params, filter chips, and admin deep links. */
+  type_slug: string | null
   cadence: MembershipCadence | null
   tone: MembershipTone | null
   fee: number | null
@@ -130,6 +133,11 @@ interface Envelope<T> {
 
 // ── Query params ──────────────────────────────────────────────────
 
+/** Membership-type filter: a single id, a list, the sentinel `'none'` for
+ *  members with no active membership, or a mix. Serialised as a comma-list. */
+export type MembershipTypeFilter = number | 'none' | Array<number | 'none'>
+export type MembershipSlugFilter = string | Array<string>
+
 export interface ListRosterParams {
   search?: string
   /** Server clamps to 200. Use 10 for typeahead. */
@@ -138,6 +146,17 @@ export interface ListRosterParams {
   status?: 'all' | MemberStatus
   role?: MemberRole
   include_invites?: boolean
+  /** Filter by tier id(s). Pass `'none'` (or include it in a list) to
+   *  match members with no active membership row. */
+  membership_type_id?: MembershipTypeFilter
+  /** Same as `membership_type_id` but by slug (e.g. `student-member`).
+   *  Both filters union when combined. */
+  membership_type_slug?: MembershipSlugFilter
+}
+
+function serialiseFilter(value: MembershipTypeFilter | MembershipSlugFilter): string {
+  if (Array.isArray(value)) return value.map((v) => String(v)).join(',')
+  return String(value)
 }
 
 // ── Endpoints ─────────────────────────────────────────────────────
@@ -162,6 +181,14 @@ export async function listRoster(
   if (params.status && params.status !== 'all') qs.set('status', params.status)
   if (params.role) qs.set('role', params.role)
   if (params.include_invites === false) qs.set('include_invites', 'false')
+  if (params.membership_type_id != null) {
+    const v = serialiseFilter(params.membership_type_id)
+    if (v.length > 0) qs.set('membership_type_id', v)
+  }
+  if (params.membership_type_slug != null) {
+    const v = serialiseFilter(params.membership_type_slug)
+    if (v.length > 0) qs.set('membership_type_slug', v)
+  }
 
   const url = qs.toString().length > 0
     ? `${CRM_BASE}/clubs/${clubId}/members?${qs.toString()}`
@@ -368,6 +395,7 @@ export interface AddMemberInput {
   first_name?: string
   last_name?: string
   phone?: string
+  /** `YYYY-MM-DD` only. Malformed values → 400 `invalid_dob`. Omitted leaves it null. */
   dob?: string
   role?: 'committee' | 'player'
   title?: string
@@ -375,6 +403,15 @@ export interface AddMemberInput {
   membership_type?: string
   send_invite?: boolean
 }
+
+/** Error codes POST /clubs/:clubId/members can return. */
+export type AddMemberErrorCode =
+  | 'invalid_email'
+  | 'invalid_dob'
+  | 'invalid_role'
+  | 'invalid_title'
+  | 'unknown_type'
+  | 'email_in_use'
 
 export interface AddMemberResult {
   resolution: AddMemberResolution
@@ -388,27 +425,11 @@ export interface AddMemberResult {
   expires_in_days?: number
 }
 
-export interface UpdateMemberInput {
-  role?: 'admin' | 'committee' | 'player'
-  title?: string | null
-  /** Admin-only free-text notes visible on the roster. Send `null` to clear. */
-  notes?: string | null
-  type_id?: number | null
-}
-
-export interface UpdateMemberResult {
-  club_id: number
-  user_id: number
-  role: MemberRole
-  title: string | null
-  updated_at: string
-  membership: {
-    type_id: number | null
-    type_name: string | null
-    cadence: MembershipCadence | null
-    fee: number | null
-  } | null
-}
+// `UpdateMemberInput` + `UpdateMemberResult` were the pre-brief-35 shapes
+// (role / title / notes / type_id only). They've been superseded by the
+// `UpdateMemberPatch` / `UpdateMemberResponse` pair further down, which
+// covers the full 12-field Member Detail form (identity + roster + billing).
+// Nothing in the app calls them any more.
 
 export interface RemoveMemberResult {
   club_id: number
@@ -452,19 +473,8 @@ export async function add(
   return res.data
 }
 
-/** PATCH /clubs/:clubId/members/:userId — change role / title / tier. */
-export async function update(
-  clubId: number,
-  userId: number,
-  patch: UpdateMemberInput,
-  opts: { signal?: AbortSignal } = {},
-): Promise<UpdateMemberResult> {
-  const res = await authedFetch<Envelope<UpdateMemberResult>>(
-    `${CRM_BASE}/clubs/${clubId}/members/${userId}`,
-    { method: 'PATCH', body: JSON.stringify(patch), signal: opts.signal },
-  )
-  return res.data
-}
+// `update()` → see `patchMember()` further down. Removed to force callers
+// onto the full-shape endpoint.
 
 /** DELETE /clubs/:clubId/members/:userId — soft-remove. */
 export async function remove(
@@ -612,28 +622,98 @@ export async function publicPlayer(
 
 // ── PATCH extensions (brief 35 §3) ─────────────────────────────────
 
-/** Extended PATCH body — adds position_group / public_visible / bio. */
+/** Preferred bowls position on the public player profile. */
+export type PreferredPosition = 'Lead' | 'Second' | 'Third' | 'Skip' | 'Singles'
+/** Club-assigned playing grade. */
+export type PlayingLevel = 'A' | 'B' | 'C'
+
+/**
+ * Full PATCH body for the Member Detail form. All fields optional; send
+ * only what changed. Writes atomically across the three underlying tables
+ * (identity → `users`, roster → `club_members`, billing → `club_memberships`).
+ *
+ * Billing fields (`status`, `joined_date`, `payment_due_date`) require either
+ * an existing `club_memberships` row OR a `membership_type_id` in the same
+ * PATCH — see error code `no_membership_row`.
+ */
 export interface UpdateMemberPatch {
+  // ── Identity (→ users) ────────────────────────────────────────────
+  name?: string
+  email?: string
+  /** Null clears. */
+  phone?: string | null
+  /** Null clears. */
+  address?: string | null
+  /** `YYYY-MM-DD`, or null to clear. */
+  dob?: string | null
+
+  // ── Roster (→ club_members) ───────────────────────────────────────
   role?: MemberRole
   title?: string | null
   notes?: string | null
-  membership_type_id?: number | null
   position_group?: PositionGroup
   public_visible?: boolean
   bio?: string | null
+  preferred_position?: PreferredPosition | null
+  playing_level?: PlayingLevel | null
+
+  // ── Billing (→ club_memberships) ─────────────────────────────────
+  membership_type_id?: number | null
+  status?: MembershipStatus
+  /** `YYYY-MM-DD` — start of the current period; null clears. */
+  joined_date?: string | null
+  /** `YYYY-MM-DD` — end of the current period; null clears. */
+  payment_due_date?: string | null
 }
 
 export interface UpdateMemberResponse {
   club_id: number
   user_id: number
+  // Identity echoed back
+  name: string
+  email: string | null
+  phone: string | null
+  address: string | null
+  dob: string | null
+  // Roster
   role: MemberRole
   title: string | null
   position_group: PositionGroup
   public_visible: boolean
   bio: string | null
+  preferred_position: PreferredPosition | null
+  playing_level: PlayingLevel | null
   updated_at: string
+  // Full billing block
   membership: RosterMembership | null
 }
+
+/**
+ * Error codes the PATCH endpoint can return. Includes both the pre-brief-35
+ * roster codes and the brief 36 / member-management extensions.
+ */
+export type UpdateMemberErrorCode =
+  // Identity validation (brief 36)
+  | 'invalid_name'
+  | 'invalid_email'
+  | 'invalid_phone'
+  | 'invalid_address'
+  | 'invalid_dob'
+  // Billing validation (brief 36)
+  | 'invalid_status'
+  | 'invalid_joined_date'
+  | 'invalid_payment_due_date'
+  | 'no_membership_row'
+  // Pre-existing roster codes
+  | 'invalid_role'
+  | 'invalid_title'
+  | 'invalid_type_id'
+  | 'unknown_type'
+  | 'member_revoked'
+  | 'owner_immutable'
+  | 'owner_via_transfer'
+  // Conflict
+  | 'email_in_use'
 
 /** PATCH /clubs/:clubId/members/:userId — partial update. */
 export async function patchMember(

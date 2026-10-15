@@ -84,10 +84,15 @@ const {
   status: 'all',
   limit: 20,
   includeInvites: false,
+  // Server-side tier filter so chip + typeahead agree.
+  membershipTypeSlug: () => (membershipFilter.value === 'all' ? null : membershipFilter.value),
 })
 
 const statusFilter = ref<'all' | MemberStatus>('all')
-const membershipFilter = ref<'all' | MembershipType>('all')
+/** Tier slug (`student-member`), `'none'` (members with no active
+ *  membership), or `'all'` (no filter). Backend-side via
+ *  `membership_type_slug=` on `/clubs/:id/members`. */
+const membershipFilter = ref<'all' | 'none' | string>('all')
 const duesFilter = ref<'all' | DuesStatus>('all')
 const MIN_SEARCH_CHARS = 2
 const isSearching = computed(() => search.value.trim().length >= MIN_SEARCH_CHARS)
@@ -244,9 +249,11 @@ async function loadRoster() {
   rosterLoading.value = true
   rosterError.value = null
   try {
+    const slug = membershipFilter.value === 'all' ? null : membershipFilter.value
     const res = await membersApi.listRoster(cid, {
       limit: 200,
       include_invites: false,
+      ...(slug ? { membership_type_slug: slug } : {}),
     })
     members.value = res.members.map(rosterToView)
     rosterCounts.value = { total: res.counts.total, active: res.counts.active }
@@ -271,6 +278,9 @@ async function loadAll() {
 onMounted(loadAll)
 // Reload when the active club changes (e.g. via the club switcher).
 watch(() => clubStore.current?.id, loadAll)
+// Server-side tier filter: refetch roster when the chip changes so the
+// backend returns the pre-filtered list (counts stay on the client view).
+watch(membershipFilter, () => { void loadRoster() })
 
 const visibleSource = computed<Member[]>(() =>
   isSearching.value ? apiResults.value.map(rosterToView) : members.value,
@@ -283,27 +293,27 @@ const counts = computed(() => ({
   Lapsed: visibleSource.value.filter((m) => m.status === 'Lapsed').length,
 }))
 
+// Tier filter happens server-side via `membership_type_slug=` — no client
+// branch needed. Status + dues stay client-side (lightweight, no refetch).
 const filtered = computed(() =>
   visibleSource.value.filter((m) => {
     if (statusFilter.value !== 'all' && m.status !== statusFilter.value) return false
-    if (membershipFilter.value !== 'all' && m.membership !== membershipFilter.value) return false
     if (duesFilter.value !== 'all' && m.duesStatus !== duesFilter.value) return false
     return true
   }),
 )
 
-/** Union of membership types across the roster + any current search
- *  results, so the dropdown offers every value the user might see. */
-const membershipOptions = computed<MembershipType[]>(() => {
-  const set = new Set<MembershipType>()
-  for (const m of members.value) if (m.membership) set.add(m.membership)
-  if (isSearching.value) {
-    for (const r of apiResults.value) {
-      const t = r.membership?.type_name
-      if (t) set.add(t)
-    }
-  }
-  return Array.from(set).sort((a, b) => a.localeCompare(b))
+/** Tier dropdown — sourced from the club's current tier list (one fetch
+ *  on mount via `loadTiers`), not the roster. Each option carries the
+ *  slug used for the backend filter and the display name. Includes a
+ *  `none` sentinel so admins can isolate members with no active tier. */
+const membershipOptions = computed<Array<{ slug: string; label: string }>>(() => {
+  const opts: Array<{ slug: string; label: string }> = availableTiers.value
+    .filter((t) => t.slug != null)
+    .map((t) => ({ slug: t.slug as string, label: t.type_name }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+  opts.push({ slug: 'none', label: 'No tier assigned' })
+  return opts
 })
 
 function initials(m: Member) {
@@ -1085,7 +1095,7 @@ async function submit() {
           <span class="filter-select__label">Membership</span>
           <select v-model="membershipFilter">
             <option value="all">All</option>
-            <option v-for="opt in membershipOptions" :key="opt" :value="opt">{{ opt }}</option>
+            <option v-for="opt in membershipOptions" :key="opt.slug" :value="opt.slug">{{ opt.label }}</option>
           </select>
         </label>
         <label class="filter-select">

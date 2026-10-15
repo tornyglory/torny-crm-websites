@@ -32,6 +32,13 @@ export interface UseMemberSearchOptions {
    * that read `pending_invites`. Default: false (typeahead usage).
    */
   includeInvites?: boolean
+  /**
+   * Filter by membership-type slug. Pass a getter so a reactive filter
+   * dropdown re-fires the search when it changes. Return `null` for no
+   * filter, `'none'` to match members with no active membership, or a
+   * single slug / comma-list.
+   */
+  membershipTypeSlug?: () => string | 'none' | null
 }
 
 export interface UseMemberSearch {
@@ -56,6 +63,7 @@ export function useMemberSearch(
     debounceMs = 300,
     minChars = 2,
     includeInvites = false,
+    membershipTypeSlug,
   } = options
 
   const query = ref('')
@@ -82,6 +90,7 @@ export function useMemberSearch(
     error.value = null
     loading.value = true
     try {
+      const slug = membershipTypeSlug?.()
       const res = await membersApi.listRoster(
         cid,
         {
@@ -90,6 +99,7 @@ export function useMemberSearch(
           status,
           role,
           include_invites: includeInvites,
+          ...(slug ? { membership_type_slug: slug } : {}),
         },
         { signal: controller.signal },
       )

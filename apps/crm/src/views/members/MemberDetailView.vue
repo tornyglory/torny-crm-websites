@@ -10,12 +10,25 @@
  *
  * BEM block: `member-detail`.
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { members as membersApi, ApiError, type RosterMember } from '@torny/api-client'
+import {
+  members as membersApi,
+  ApiError,
+  type RosterMember,
+  type MemberRole,
+  type MembershipStatus,
+  type MembershipTierListItem,
+  type PlayingLevel,
+  type PositionGroup,
+  type PreferredPosition,
+  type UpdateMemberPatch,
+  type UpdateMemberErrorCode,
+} from '@torny/api-client'
 import { useClubStore } from '@/stores/club'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import CrmModal from '@/components/modals/CrmModal.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
 import CrmEmptyState from '@/components/CrmEmptyState.vue'
 
@@ -257,6 +270,227 @@ const TABS: { value: Tab; label: string; count?: number }[] = [
   { value: 'notes', label: 'Notes' },
   { value: 'settings', label: 'Settings' },
 ]
+
+// ── Edit modal ────────────────────────────────────────────────────
+// One PATCH posts the whole 12-field Member Detail form. Fields split
+// into Identity (users), Roster (club_members), Billing (club_memberships).
+
+const editOpen = ref(false)
+const editSaving = ref(false)
+const editErrorBanner = ref<string | null>(null)
+/** Inline per-field errors — surfaced near each input on 400/409. */
+const editFieldErrors = reactive<Record<string, string | null>>({
+  email: null,
+  dob: null,
+  joined_date: null,
+  payment_due_date: null,
+})
+
+const PREFERRED_POSITIONS: PreferredPosition[] = ['Lead', 'Second', 'Third', 'Skip', 'Singles']
+const PLAYING_LEVELS: PlayingLevel[] = ['A', 'B', 'C']
+const POSITION_GROUPS: PositionGroup[] = ['board', 'staff', 'committee', 'member']
+const MEMBERSHIP_STATUSES: MembershipStatus[] = ['active', 'inactive', 'suspended', 'expired', 'pending_payment']
+
+const tiers = ref<MembershipTierListItem[]>([])
+async function loadTiers() {
+  const cid = clubStore.current?.id
+  if (cid == null) { tiers.value = []; return }
+  try {
+    const res = await membersApi.listTiers(cid)
+    tiers.value = res.tiers
+  } catch {
+    tiers.value = []
+  }
+}
+
+interface EditForm {
+  name: string
+  email: string
+  phone: string
+  address: string
+  dob: string
+  role: MemberRole
+  title: string
+  position_group: PositionGroup
+  public_visible: boolean
+  bio: string
+  preferred_position: PreferredPosition | ''
+  playing_level: PlayingLevel | ''
+  membership_type_id: number | null
+  status: MembershipStatus | ''
+  joined_date: string
+  payment_due_date: string
+}
+
+const editForm = reactive<EditForm>({
+  name: '', email: '', phone: '', address: '', dob: '',
+  role: 'player', title: '', position_group: 'member', public_visible: true, bio: '',
+  preferred_position: '', playing_level: '',
+  membership_type_id: null, status: '', joined_date: '', payment_due_date: '',
+})
+
+/** Snapshot of the form at modal-open — used to compute the PATCH diff. */
+let editOriginal: EditForm | null = null
+
+function toDateInput(iso: string | null | undefined): string {
+  if (!iso) return ''
+  // Backend returns full ISO ("1988-04-12T00:00:00.000Z") or `YYYY-MM-DD`.
+  return iso.slice(0, 10)
+}
+
+function openEdit() {
+  const m = member.value
+  if (!m) return
+  Object.assign(editForm, {
+    name:               m.name,
+    email:              m.email ?? '',
+    phone:              m.phone ?? '',
+    address:            m.address ?? '',
+    dob:                toDateInput(m.dob),
+    role:               m.club_role === 'owner' ? 'owner' : m.club_role,
+    title:              m.title ?? '',
+    position_group:     m.position_group ?? 'member',
+    public_visible:     m.public_visible ?? true,
+    bio:                m.bio ?? '',
+    preferred_position: '',   // not currently on RosterMember — admin fills fresh
+    playing_level:      '',   // same
+    membership_type_id: m.membership?.type_id ?? null,
+    status:             m.membership?.status ?? '',
+    joined_date:        toDateInput(m.joined_at),
+    payment_due_date:   toDateInput(m.membership?.payment_due_date),
+  })
+  editOriginal = { ...editForm }
+  editErrorBanner.value = null
+  Object.keys(editFieldErrors).forEach((k) => { editFieldErrors[k] = null })
+  if (tiers.value.length === 0) void loadTiers()
+  editOpen.value = true
+}
+
+function closeEdit() {
+  editOpen.value = false
+}
+
+/** Diff + null-handling. Only sends fields the admin actually changed. */
+function buildPatchDiff(): UpdateMemberPatch {
+  if (!editOriginal) return {}
+  const patch: UpdateMemberPatch = {}
+  const o = editOriginal
+  const f = editForm
+  // Identity — empty string clears nullable fields; `name` + `email` can't be null
+  if (f.name !== o.name) patch.name = f.name.trim()
+  if (f.email !== o.email) patch.email = f.email.trim()
+  if (f.phone !== o.phone) patch.phone = f.phone.trim() === '' ? null : f.phone.trim()
+  if (f.address !== o.address) patch.address = f.address.trim() === '' ? null : f.address.trim()
+  if (f.dob !== o.dob) patch.dob = f.dob === '' ? null : f.dob
+  // Roster
+  if (f.role !== o.role) patch.role = f.role
+  if (f.title !== o.title) patch.title = f.title.trim() === '' ? null : f.title.trim()
+  if (f.position_group !== o.position_group) patch.position_group = f.position_group
+  if (f.public_visible !== o.public_visible) patch.public_visible = f.public_visible
+  if (f.bio !== o.bio) patch.bio = f.bio.trim() === '' ? null : f.bio.trim()
+  if (f.preferred_position !== o.preferred_position) {
+    patch.preferred_position = f.preferred_position === '' ? null : f.preferred_position
+  }
+  if (f.playing_level !== o.playing_level) {
+    patch.playing_level = f.playing_level === '' ? null : f.playing_level
+  }
+  // Billing
+  if (f.membership_type_id !== o.membership_type_id) patch.membership_type_id = f.membership_type_id
+  if (f.status !== o.status && f.status !== '') patch.status = f.status
+  if (f.joined_date !== o.joined_date) patch.joined_date = f.joined_date === '' ? null : f.joined_date
+  if (f.payment_due_date !== o.payment_due_date) patch.payment_due_date = f.payment_due_date === '' ? null : f.payment_due_date
+  return patch
+}
+
+/** `no_membership_row` fires if we touch billing fields without an existing
+ *  row and no `membership_type_id` to create one. Backfill the tier id if
+ *  the user set it earlier via the dropdown but didn't change it this time. */
+function ensureBillingHasTier(patch: UpdateMemberPatch) {
+  const touchesBilling =
+    patch.status !== undefined ||
+    patch.joined_date !== undefined ||
+    patch.payment_due_date !== undefined
+  if (!touchesBilling) return
+  const hasRow = member.value?.membership != null
+  if (hasRow) return
+  if (patch.membership_type_id == null && editForm.membership_type_id != null) {
+    patch.membership_type_id = editForm.membership_type_id
+  }
+}
+
+async function submitEdit() {
+  const cid = clubStore.current?.id
+  const uid = member.value?.user_id
+  if (cid == null || uid == null) return
+  const patch = buildPatchDiff()
+  if (Object.keys(patch).length === 0) {
+    closeEdit()
+    return
+  }
+  ensureBillingHasTier(patch)
+  editErrorBanner.value = null
+  Object.keys(editFieldErrors).forEach((k) => { editFieldErrors[k] = null })
+  editSaving.value = true
+  try {
+    const res = await membersApi.patchMember(cid, uid, patch)
+    // Merge the full echoed state back onto the local roster entry so
+    // the page re-renders without a round-trip. The backend returns a
+    // flat UpdateMemberResponse that lines up with RosterMember on the
+    // fields that overlap — the ones that don't (handle, avatar, etc.)
+    // weren't touched by the PATCH.
+    const idx = roster.value.findIndex((m) => m.user_id === uid)
+    if (idx >= 0) {
+      roster.value[idx] = {
+        ...roster.value[idx]!,
+        name:             res.name,
+        email:            res.email,
+        phone:            res.phone,
+        address:          res.address,
+        dob:              res.dob,
+        club_role:        res.role,
+        title:            res.title,
+        position_group:   res.position_group,
+        public_visible:   res.public_visible,
+        bio:              res.bio,
+        membership:       res.membership,
+      }
+    }
+    toast.success('Member updated.')
+    closeEdit()
+  } catch (err) {
+    const code = err instanceof ApiError ? (err.code as UpdateMemberErrorCode | undefined) : undefined
+    switch (code) {
+      case 'email_in_use':
+        editFieldErrors.email = 'That email is already in use.'
+        break
+      case 'invalid_email':
+        editFieldErrors.email = 'That email format is invalid.'
+        break
+      case 'invalid_dob':
+        editFieldErrors.dob = 'Date of birth must be a valid date.'
+        break
+      case 'invalid_joined_date':
+        editFieldErrors.joined_date = 'Joined date must be a valid date.'
+        break
+      case 'invalid_payment_due_date':
+        editFieldErrors.payment_due_date = 'Payment due date must be a valid date.'
+        break
+      case 'no_membership_row':
+        editErrorBanner.value = 'Pick a membership tier before setting status, join date, or payment due date.'
+        break
+      case 'owner_immutable':
+        editErrorBanner.value = "The club owner's role can only be changed via Transfer ownership."
+        break
+      case 'member_revoked':
+        editErrorBanner.value = 'This member has been removed from the club.'
+        break
+      default:
+        editErrorBanner.value = err instanceof Error ? err.message : 'Could not save changes.'
+    }
+  } finally {
+    editSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -304,6 +538,16 @@ const TABS: { value: Tab; label: string; count?: number }[] = [
         <button type="button" class="btn btn--outline" :disabled="!member?.email" @click="sendEmail">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M2.5 4.5 8 9l5.5-4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Send email
+        </button>
+        <button
+          v-if="callerCanEdit"
+          type="button"
+          class="btn btn--outline"
+          :disabled="!member"
+          @click="openEdit"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11 2.5l2.5 2.5-8 8-3 .5.5-3 8-8z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          Edit
         </button>
         <button
           v-if="callerCanEdit"
@@ -512,6 +756,148 @@ const TABS: { value: Tab; label: string; count?: number }[] = [
         </div>
       </template>
     </div>
+
+    <CrmModal
+      :open="editOpen"
+      eyebrow="Edit member"
+      :title="member?.name ?? 'Member'"
+      width="lg"
+      @close="closeEdit"
+    >
+      <div v-if="editErrorBanner" class="edit-banner">{{ editErrorBanner }}</div>
+
+      <section class="edit-section">
+        <div class="edit-section__eyebrow">IDENTITY</div>
+        <div class="edit-section__grid">
+          <label class="edit-field">
+            <span class="edit-field__label">Full name</span>
+            <input v-model="editForm.name" type="text" class="edit-field__input" placeholder="Lisa Bentham" />
+          </label>
+          <label class="edit-field">
+            <span class="edit-field__label">Email</span>
+            <input
+              v-model="editForm.email"
+              type="email"
+              class="edit-field__input"
+              :class="{ 'edit-field__input--error': editFieldErrors.email }"
+              placeholder="lisa@example.com"
+            />
+            <div v-if="editFieldErrors.email" class="edit-field__error">{{ editFieldErrors.email }}</div>
+          </label>
+          <label class="edit-field">
+            <span class="edit-field__label">Phone</span>
+            <input v-model="editForm.phone" type="tel" class="edit-field__input" placeholder="+64 21 …" />
+          </label>
+          <label class="edit-field">
+            <span class="edit-field__label">Date of birth</span>
+            <input
+              v-model="editForm.dob"
+              type="date"
+              class="edit-field__input"
+              :class="{ 'edit-field__input--error': editFieldErrors.dob }"
+            />
+            <div v-if="editFieldErrors.dob" class="edit-field__error">{{ editFieldErrors.dob }}</div>
+          </label>
+          <label class="edit-field edit-field--full">
+            <span class="edit-field__label">Address</span>
+            <input v-model="editForm.address" type="text" class="edit-field__input" placeholder="12 Main St, Wellington" />
+          </label>
+        </div>
+      </section>
+
+      <section class="edit-section">
+        <div class="edit-section__eyebrow">ROSTER</div>
+        <div class="edit-section__grid">
+          <label class="edit-field">
+            <span class="edit-field__label">Role</span>
+            <select v-model="editForm.role" class="edit-field__input">
+              <option value="player">Player</option>
+              <option value="committee">Committee</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <label class="edit-field">
+            <span class="edit-field__label">Title</span>
+            <input v-model="editForm.title" type="text" class="edit-field__input" placeholder="Secretary" />
+          </label>
+          <label class="edit-field">
+            <span class="edit-field__label">Position group</span>
+            <select v-model="editForm.position_group" class="edit-field__input">
+              <option v-for="g in POSITION_GROUPS" :key="g" :value="g">{{ g }}</option>
+            </select>
+          </label>
+          <label class="edit-field">
+            <span class="edit-field__label">Playing level</span>
+            <select v-model="editForm.playing_level" class="edit-field__input">
+              <option value="">—</option>
+              <option v-for="l in PLAYING_LEVELS" :key="l" :value="l">{{ l }}</option>
+            </select>
+          </label>
+          <label class="edit-field">
+            <span class="edit-field__label">Preferred position</span>
+            <select v-model="editForm.preferred_position" class="edit-field__input">
+              <option value="">—</option>
+              <option v-for="p in PREFERRED_POSITIONS" :key="p" :value="p">{{ p }}</option>
+            </select>
+          </label>
+          <label class="edit-field edit-check">
+            <input v-model="editForm.public_visible" type="checkbox" />
+            <span>Show on the public directory</span>
+          </label>
+          <label class="edit-field edit-field--full">
+            <span class="edit-field__label">Bio</span>
+            <textarea v-model="editForm.bio" class="edit-field__input edit-field__textarea" rows="3" maxlength="500" placeholder="Public bio shown on the player profile." />
+          </label>
+        </div>
+      </section>
+
+      <section class="edit-section">
+        <div class="edit-section__eyebrow">BILLING</div>
+        <div class="edit-section__grid">
+          <label class="edit-field">
+            <span class="edit-field__label">Membership tier</span>
+            <select v-model.number="editForm.membership_type_id" class="edit-field__input">
+              <option :value="null">No tier assigned</option>
+              <option v-for="t in tiers" :key="t.id" :value="t.id">{{ t.type_name }}</option>
+            </select>
+          </label>
+          <label class="edit-field">
+            <span class="edit-field__label">Status</span>
+            <select v-model="editForm.status" class="edit-field__input">
+              <option value="">—</option>
+              <option v-for="s in MEMBERSHIP_STATUSES" :key="s" :value="s">{{ s }}</option>
+            </select>
+          </label>
+          <label class="edit-field">
+            <span class="edit-field__label">Joined date</span>
+            <input
+              v-model="editForm.joined_date"
+              type="date"
+              class="edit-field__input"
+              :class="{ 'edit-field__input--error': editFieldErrors.joined_date }"
+            />
+            <div v-if="editFieldErrors.joined_date" class="edit-field__error">{{ editFieldErrors.joined_date }}</div>
+          </label>
+          <label class="edit-field">
+            <span class="edit-field__label">Payment due date</span>
+            <input
+              v-model="editForm.payment_due_date"
+              type="date"
+              class="edit-field__input"
+              :class="{ 'edit-field__input--error': editFieldErrors.payment_due_date }"
+            />
+            <div v-if="editFieldErrors.payment_due_date" class="edit-field__error">{{ editFieldErrors.payment_due_date }}</div>
+          </label>
+        </div>
+      </section>
+
+      <template #footer>
+        <button type="button" class="btn btn--outline" :disabled="editSaving" @click="closeEdit">Cancel</button>
+        <button type="button" class="btn btn--primary" :disabled="editSaving" @click="submitEdit">
+          {{ editSaving ? 'Saving…' : 'Save changes' }}
+        </button>
+      </template>
+    </CrmModal>
   </div>
 </template>
 
@@ -673,5 +1059,87 @@ const TABS: { value: Tab; label: string; count?: number }[] = [
   .member-detail__hero-line { flex-direction: column; align-items: flex-start; gap: 8px; }
   .member-detail__name { font-size: 24px; }
   .pay-table th:nth-child(2), .pay-table td:nth-child(2) { display: none; }
+}
+
+/* ── Edit modal ──────────────────────────────────────────────── */
+.edit-banner {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  background: #FEF2F2;
+  border: 1px solid #FEE2E2;
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: #991B1B;
+}
+.edit-section { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+.edit-section:last-of-type { margin-bottom: 0; }
+.edit-section__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--color-fog);
+  text-transform: uppercase;
+}
+.edit-section__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+.edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.edit-field--full { grid-column: span 2; }
+.edit-field__label {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.edit-field__input {
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-ink);
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.edit-field__input:focus { border-color: var(--color-ink); }
+.edit-field__input--error { border-color: var(--color-danger, #DC2F3B); }
+.edit-field__textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 150%;
+  font-size: 13px;
+}
+.edit-field__error {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--color-danger, #DC2F3B);
+}
+.edit-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  grid-column: span 2;
+}
+.edit-check input { width: 16px; height: 16px; }
+.edit-check span {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-ink);
+}
+
+@media (max-width: 640px) {
+  .edit-section__grid { grid-template-columns: 1fr; }
+  .edit-field--full { grid-column: auto; }
+  .edit-check { grid-column: auto; }
 }
 </style>

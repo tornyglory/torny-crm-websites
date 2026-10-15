@@ -118,6 +118,8 @@ export interface NavItem {
 export interface ClubNavigation {
   header: NavItem[]
   footer: NavItem[]
+  /** When true, the public site header stays pinned to the viewport on scroll. */
+  headerSticky?: boolean
 }
 
 /**

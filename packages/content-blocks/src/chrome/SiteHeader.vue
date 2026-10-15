@@ -77,7 +77,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header class="site-header">
+  <header class="site-header" :class="{ 'site-header--sticky': sticky }">
     <a class="site-header__brand" :href="'/'">
       <span v-if="club.logoUrl" class="site-header__logo-wrap">
         <img :src="club.logoUrl" :alt="`${club.name} logo`" class="site-header__logo" />
@@ -175,6 +175,12 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--color-hairline);
   background: var(--color-ground);
   font-family: var(--font-body);
+}
+
+.site-header--sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 .site-header__brand {

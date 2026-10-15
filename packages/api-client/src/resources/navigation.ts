@@ -10,12 +10,14 @@ export type { NavItem } from '../types'
 export interface UpdateNavigationInput {
   header?: NavItem[] | null
   footer?: NavItem[] | null
+  headerSticky?: boolean | null
 }
 
 export interface UpdateNavigationResponse {
   clubId: number
   header: NavItem[] | null
   footer: NavItem[] | null
+  headerSticky: boolean
 }
 
 interface Envelope<T> {

@@ -76,6 +76,7 @@ export interface SiteNavItem {
 export interface SiteNavigation {
   header: SiteNavItem[]
   footer: SiteNavItem[]
+  headerSticky?: boolean
 }
 
 export interface SiteClub {

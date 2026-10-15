@@ -674,6 +674,8 @@ export interface SiteHeaderProps {
   primaryCta?: { label: string; href: string }
   /** When true, the mobile hamburger button appears pressed / drawer is open. */
   drawerOpen?: boolean
+  /** When true, the header stays pinned to the top of the viewport on scroll. */
+  sticky?: boolean
 }
 
 export interface SocialLink {

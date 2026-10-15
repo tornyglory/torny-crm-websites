@@ -129,6 +129,7 @@ const DEFAULT_FOOTER: NavItem[] = [
 // Working copies. Populated from the store on mount + whenever it changes.
 const navHeader = ref<NavItem[]>(cloneNav(clubStore.current?.navigation?.header ?? DEFAULT_HEADER))
 const navFooter = ref<NavItem[]>(cloneNav(clubStore.current?.navigation?.footer ?? DEFAULT_FOOTER))
+const headerSticky = ref<boolean>(Boolean(clubStore.current?.navigation?.headerSticky))
 const navDirty = ref(false)
 const navSaving = ref(false)
 
@@ -147,6 +148,7 @@ watch(
     if (navDirty.value) return  // don't clobber a mid-edit user
     navHeader.value = cloneNav(nav?.header ?? DEFAULT_HEADER)
     navFooter.value = cloneNav(nav?.footer ?? DEFAULT_FOOTER)
+    headerSticky.value = Boolean(nav?.headerSticky)
   },
   { deep: true },
 )
@@ -196,12 +198,14 @@ async function saveNavigation() {
   const payload = {
     header: cloneNav(navHeader.value),
     footer: cloneNav(navFooter.value),
+    headerSticky: headerSticky.value,
   }
   try {
     const res = await navigationApi.updateForClub(clubId, payload)
     clubStore.setNavigation({
       header: res.header ?? DEFAULT_HEADER,
       footer: res.footer ?? DEFAULT_FOOTER,
+      headerSticky: res.headerSticky,
     })
     navDirty.value = false
     toast.success('Navigation saved.')
@@ -215,7 +219,13 @@ async function saveNavigation() {
 function resetNavigation() {
   navHeader.value = cloneNav(clubStore.current?.navigation?.header ?? DEFAULT_HEADER)
   navFooter.value = cloneNav(clubStore.current?.navigation?.footer ?? DEFAULT_FOOTER)
+  headerSticky.value = Boolean(clubStore.current?.navigation?.headerSticky)
   navDirty.value = false
+}
+
+function toggleHeaderSticky() {
+  headerSticky.value = !headerSticky.value
+  markDirty()
 }
 
 const forms = ref([
@@ -439,6 +449,17 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 
       <div class="ws-card">
         <div class="ws-card__eyebrow">Header navigation</div>
+
+        <div class="ws-row-switch ws-row-switch--inline">
+          <div>
+            <h3>Sticky header</h3>
+            <p>Keep the header pinned to the top of the viewport as visitors scroll.</p>
+          </div>
+          <button class="ws-switch" :class="{ 'is-on': headerSticky }" @click="toggleHeaderSticky">
+            <span class="ws-switch__knob" />
+          </button>
+        </div>
+
         <ul class="ws-nav-list">
           <li v-for="(item, i) in navHeader" :key="i" class="ws-nav-item">
             <div class="ws-nav-row">
@@ -623,6 +644,7 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 .ws-link:hover { text-decoration: underline; }
 
 .ws-row-switch { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; }
+.ws-row-switch--inline { padding: 0 0 16px; margin-bottom: 12px; border-bottom: 1px solid var(--color-hairline); }
 .ws-row-switch h3 { font-family: var(--font-body); font-size: 14px; font-weight: 600; margin: 0 0 2px; color: var(--color-ink); }
 .ws-row-switch p { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin: 0; }
 .ws-switch { width: 40px; height: 24px; padding: 3px; border-radius: 999px; background: var(--color-hairline); border: 0; display: flex; cursor: pointer; flex-shrink: 0; }

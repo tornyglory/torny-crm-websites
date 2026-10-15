@@ -33,6 +33,8 @@ const navLinks = computed<NavLink[]>(() => {
   return header && header.length > 0 ? (header as NavLink[]) : FALLBACK_HEADER
 })
 
+const headerSticky = computed<boolean>(() => Boolean(site.value?.club?.navigation?.headerSticky))
+
 const chromeClub = computed<SiteChromeClub>(() => ({
   name: club.value?.name ?? 'Torny',
   logoUrl: club.value?.logo_url ?? null,
@@ -91,6 +93,7 @@ const legalLinks: NavLink[] = [
       :current-path="route.path"
       :primary-cta="primaryCta"
       :drawer-open="drawerOpen"
+      :sticky="headerSticky"
       @toggle-drawer="drawerOpen = !drawerOpen"
     />
 

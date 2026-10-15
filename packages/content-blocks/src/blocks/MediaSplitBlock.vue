@@ -284,4 +284,11 @@ const bgClass = computed(() => (props.background === 'surface' ? 'ms--bg-surface
   .ms__heading { font-size: 30px; }
   .ms__body { font-size: 16px; }
 }
+
+/* Mobile (≤640px) — tighten the 48px desktop gutter so the block
+   fills the viewport minus a 24px editorial padding, matching the
+   Paper mobile artboards. */
+@media (max-width: 640px) {
+  .ms { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+}
 </style>

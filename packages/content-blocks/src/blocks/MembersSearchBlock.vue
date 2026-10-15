@@ -348,4 +348,11 @@ function avatarPalette(m: PublicMember) {
 @media (max-width: 420px) {
   .mem__grid { grid-template-columns: 1fr; }
 }
+
+/* Mobile (≤640px) — tighten the 48px desktop gutter so the block
+   fills the viewport minus a 24px editorial padding, matching the
+   Paper mobile artboards. */
+@media (max-width: 640px) {
+  .mem { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+}
 </style>

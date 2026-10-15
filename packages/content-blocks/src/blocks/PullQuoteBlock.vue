@@ -137,4 +137,11 @@ const showAuthor = computed(() => Boolean(props.authorName || props.authorRole))
   .pq__inner { gap: 24px; }
   .pq__quote { font-size: 28px; line-height: 130%; }
 }
+
+/* Mobile (≤640px) — tighten the 48px desktop gutter so the block
+   fills the viewport minus a 24px editorial padding, matching the
+   Paper mobile artboards. */
+@media (max-width: 640px) {
+  .pq { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+}
 </style>

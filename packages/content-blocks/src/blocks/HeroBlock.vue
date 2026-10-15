@@ -411,4 +411,11 @@ function initialsFor(name: string, initials?: string): string {
   .hero__stats { gap: 20px; padding-top: 24px; margin-top: 8px; }
   .hero__stat-value { font-size: 24px; }
 }
+
+/* Mobile (≤640px) — tighten the 48px desktop gutter so the block
+   fills the viewport minus a 24px editorial padding, matching the
+   Paper mobile artboards. */
+@media (max-width: 640px) {
+  .hero { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+}
 </style>

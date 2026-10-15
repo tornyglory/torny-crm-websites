@@ -95,4 +95,11 @@ const alignClass = computed(() => (props.align === 'left' ? 'st--left' : 'st--ce
   .st__heading { font-size: 36px; line-height: 105%; }
   .st__body { font-size: 16px; }
 }
+
+/* Mobile (≤640px) — tighten the 48px desktop gutter so the block
+   fills the viewport minus a 24px editorial padding, matching the
+   Paper mobile artboards. */
+@media (max-width: 640px) {
+  .st { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+}
 </style>

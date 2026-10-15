@@ -551,4 +551,11 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
   .hb__recent-head { flex-direction: column; align-items: flex-start; gap: 8px; }
   .hb__recent-title-text { font-size: 24px; }
 }
+
+/* Mobile (≤640px) — tighten the 48px desktop gutter so the block
+   fills the viewport minus a 24px editorial padding, matching the
+   Paper mobile artboards. */
+@media (max-width: 640px) {
+  .hb { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+}
 </style>

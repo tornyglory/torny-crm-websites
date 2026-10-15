@@ -220,4 +220,11 @@ function yearToneClass(tone: string | undefined): string {
   .tl__row--highlight { padding: 20px; }
   .tl__title { font-size: 20px; line-height: 26px; }
 }
+
+/* Mobile (≤640px) — tighten the 48px desktop gutter so the block
+   fills the viewport minus a 24px editorial padding, matching the
+   Paper mobile artboards. */
+@media (max-width: 640px) {
+  .tl { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+}
 </style>

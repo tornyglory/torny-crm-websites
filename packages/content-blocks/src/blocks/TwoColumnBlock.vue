@@ -149,4 +149,11 @@ function toneClass(tone: string | undefined): string {
   .tc { padding: 48px 20px; }
   .tc__heading { font-size: 28px; }
 }
+
+/* Mobile (≤640px) — tighten the 48px desktop gutter so the block
+   fills the viewport minus a 24px editorial padding, matching the
+   Paper mobile artboards. */
+@media (max-width: 640px) {
+  .tc { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+}
 </style>

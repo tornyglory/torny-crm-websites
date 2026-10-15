@@ -489,4 +489,11 @@ function enquiryErrorMessage(err: unknown): string {
   .cf__actions { flex-wrap: wrap; }
   .cf__encrypted { margin-left: 0; }
 }
+
+/* Mobile (≤640px) — tighten the 48px desktop gutter so the block
+   fills the viewport minus a 24px editorial padding, matching the
+   Paper mobile artboards. */
+@media (max-width: 640px) {
+  .cf { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+}
 </style>

@@ -201,4 +201,11 @@ const gridStyle = computed(() => ({
   .fg__grid { grid-template-columns: 1fr !important; }
   .fg__card { padding: 24px; }
 }
+
+/* Mobile (≤640px) — tighten the 48px desktop gutter so the block
+   fills the viewport minus a 24px editorial padding, matching the
+   Paper mobile artboards. */
+@media (max-width: 640px) {
+  .fg { padding-left: 24px; padding-right: 24px; overflow-x: hidden; }
+}
 </style>

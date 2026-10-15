@@ -167,4 +167,50 @@ function slabStyle(space: VenueSpaceItem, index: number): Record<string, string>
 @media (max-width: 599px) {
   .vs__grid { grid-template-columns: 1fr; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile (≤640px).
+   See Paper mobile artboard "Venue Hire · Mobile" (spaces section).
+   Compact section head, cards get a wider 16:10 cover (not 4:3),
+   facts become right-aligned rows (label left · value right), price
+   + book button inline on the same row.
+───────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .vs { padding: 28px 24px 24px; gap: 20px; overflow-x: hidden; }
+
+  .vs__head { gap: 12px; padding-bottom: 0; border-bottom: 0; }
+  .vs__head-copy { gap: 4px; }
+  .vs__eyebrow { font-size: 10px; letter-spacing: 0.08em; }
+  .vs__title { font-size: 28px; letter-spacing: -0.02em; line-height: 100%; }
+  .vs__cta { align-self: flex-start; }
+
+  .vs__grid { gap: 12px; }
+  .vs__card { border-radius: 16px; }
+  .vs__slab { aspect-ratio: 16 / 10; padding: 14px; }
+  .vs__badge { padding: 4px 10px; font-size: 10px; letter-spacing: 0.08em; }
+
+  .vs__body { padding: 18px 20px 20px; gap: 12px; }
+  .vs__name { font-size: 22px; letter-spacing: -0.02em; line-height: 100%; }
+  .vs__desc { font-size: 13px; line-height: 150%; }
+
+  /* Facts: label left, value right, border between rows */
+  .vs__facts { padding: 4px 0; border-top: 1px solid var(--color-hairline); border-bottom: 1px solid var(--color-hairline); }
+  .vs__fact {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-top: 1px solid var(--color-hairline);
+    grid-template-columns: none;
+  }
+  .vs__fact:first-child { border-top: 0; padding-top: 10px; }
+  .vs__fact dt { font-size: 10px; letter-spacing: 0.08em; }
+  .vs__fact dd { font-size: 13px; font-weight: 600; letter-spacing: -0.005em; text-align: right; }
+
+  /* Price + book inline, no top border (facts list already divides) */
+  .vs__foot { padding-top: 0; border-top: 0; flex-wrap: nowrap; }
+  .vs__price-value { font-size: 26px; letter-spacing: -0.02em; line-height: 100%; }
+  .vs__price-unit { font-size: 12px; }
+  .vs__book { height: 40px; padding: 0 18px; font-size: 13px; }
+}
 </style>

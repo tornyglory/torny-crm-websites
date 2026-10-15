@@ -174,4 +174,60 @@ function initialsFor(name: string, initials?: string): string {
   .vhh__card { min-height: 360px; }
   .vhh__stats { flex-wrap: wrap; gap: 24px; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile (≤640px).
+   See Paper mobile artboard "Venue Hire · Mobile".
+   Hero stacks tightly, stats condense into a single row with thin
+   dividers, actions become full-width tap targets, testimonial card
+   shrinks and loses the fixed min-height. Keeps width:100vw break-out
+   so block fills the viewport past PageRenderer's gutter.
+───────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .vhh { padding: 32px 24px 24px; overflow-x: hidden; }
+
+  .vhh__grid { gap: 20px; min-height: 0; }
+
+  .vhh__copy { gap: 14px; }
+  .vhh__eyebrow { font-size: 10px; letter-spacing: 0.08em; }
+  .vhh__title { font-size: 40px; letter-spacing: -0.02em; line-height: 100%; max-width: none; }
+  .vhh__desc { font-size: 14px; line-height: 150%; max-width: none; }
+
+  /* Stats row: 3 columns separated by thin dividers, scaled down */
+  .vhh__stats {
+    padding: 14px 0;
+    gap: 0;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+  }
+  .vhh__stat { flex: 1; align-items: flex-start; gap: 2px; padding: 0 10px; border-left: 1px solid var(--color-hairline); }
+  .vhh__stat:first-child { padding-left: 0; border-left: 0; }
+  .vhh__stat-value { font-size: 28px; letter-spacing: -0.02em; line-height: 100%; }
+  .vhh__stat-label { font-size: 10px; letter-spacing: 0.08em; }
+
+  /* Actions stack full-width */
+  .vhh__actions { flex-direction: column; align-items: stretch; gap: 10px; margin-top: 4px; }
+  .vhh__primary { justify-content: center; height: 52px; padding: 0 20px; font-size: 15px; }
+  .vhh__secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    padding: 0 20px;
+    background: var(--color-ground);
+    color: var(--color-ink);
+    border: 1px solid var(--color-hairline);
+    border-radius: 999px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  /* Testimonial card: tighter padding, shorter min-height, quote wraps edge-to-edge */
+  .vhh__card { padding: 20px; min-height: 0; border-radius: 16px; }
+  .vhh__card-head { gap: 10px; }
+  .vhh__card-eyebrow { font-size: 9px; letter-spacing: 0.08em; padding: 4px 10px; }
+  .vhh__card-badge { font-size: 9px; letter-spacing: 0.08em; padding: 4px 10px; }
+  .vhh__quote { max-width: none; padding: 14px 16px; gap: 10px; align-self: stretch; }
+  .vhh__quote-body { font-size: 15px; line-height: 140%; font-family: var(--font-display); font-weight: 600; letter-spacing: -0.01em; }
+}
 </style>

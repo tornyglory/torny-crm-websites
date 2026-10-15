@@ -198,4 +198,58 @@ const hasFooter = computed(() =>
   .vp__footer { flex-direction: column; align-items: stretch; }
   .vp__footer-actions { flex-wrap: wrap; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile (≤640px).
+   See Paper mobile artboard "Venue Hire · Mobile" (packages section).
+   Section head compacts, package cards stack with featured flipped
+   to the big inverted ink card (56px price). Footer collapses to a
+   simple stacked card with Rachel's avatar + email/call CTAs.
+───────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .vp { padding: 28px 24px 32px; gap: 20px; overflow-x: hidden; }
+
+  .vp__head { gap: 6px; max-width: none; }
+  .vp__eyebrow { font-size: 10px; letter-spacing: 0.08em; }
+  .vp__title { font-size: 28px; letter-spacing: -0.02em; line-height: 100%; }
+  .vp__desc { font-size: 13px; line-height: 150%; }
+
+  .vp__grid { gap: 12px; }
+  .vp__card { padding: 20px; border-radius: 16px; gap: 12px; }
+  .vp__card-head { gap: 8px; flex-wrap: wrap; }
+  .vp__card-eyebrow { font-size: 9px; letter-spacing: 0.08em; padding: 3px 8px; }
+  .vp__card-badge { font-size: 9px; letter-spacing: 0.08em; padding: 3px 8px; }
+  .vp__card-name { font-size: 22px; letter-spacing: -0.02em; line-height: 100%; }
+
+  .vp__card-price { padding: 10px 0; gap: 6px; }
+  .vp__card-price-value { font-size: 40px; letter-spacing: -0.02em; line-height: 90%; }
+  .vp__card--featured .vp__card-price-value { font-size: 56px; letter-spacing: -0.03em; }
+  .vp__card-price-suffix { font-size: 12px; }
+
+  .vp__includes { gap: 8px; }
+  .vp__includes li { font-size: 13px; gap: 10px; }
+  .vp__check { margin-top: 3px; width: 12px; height: 12px; }
+
+  .vp__small-print { font-size: 11px; padding-top: 10px; }
+
+  .vp__book { padding: 14px 20px; font-size: 14px; }
+  .vp__card--featured .vp__book { padding: 16px 20px; font-size: 15px; }
+
+  /* Footer: stacked, generous padding, Rachel avatar + CTAs */
+  .vp__footer { padding: 20px; border-radius: 16px; gap: 14px; }
+  .vp__footer-copy { gap: 8px; }
+  .vp__footer-eyebrow { font-size: 10px; letter-spacing: 0.08em; }
+  .vp__footer-text { font-size: 13px; line-height: 150%; }
+  .vp__footer-actions { flex-direction: column-reverse; align-items: stretch; gap: 12px; }
+  .vp__footer-cta {
+    justify-content: center;
+    height: 44px;
+    padding: 0 20px;
+    font-size: 13px;
+  }
+  .vp__footer-person { gap: 12px; align-items: center; }
+  .vp__footer-avatar { width: 44px; height: 44px; font-size: 13px; }
+  .vp__footer-name { font-size: 14px; letter-spacing: -0.005em; }
+  .vp__footer-role { font-size: 10px; letter-spacing: 0.08em; }
+}
 </style>

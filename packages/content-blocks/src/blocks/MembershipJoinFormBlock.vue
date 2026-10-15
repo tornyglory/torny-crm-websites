@@ -771,21 +771,33 @@ function joinFormErrorMessage(err: unknown): string {
   .jf__body { gap: 24px; }
   .jf__form { gap: 32px; }
 
-  /* Section heads collapse: number inline above the heading */
+  /* Section heads: stack so the heading sits flush left — don't let a
+     32px gutter column push the title into a narrower lane than the
+     hero above. */
   .jf__section { gap: 16px; padding-top: 24px; }
-  .jf__section-head { flex-direction: row; align-items: center; gap: 10px; }
+  .jf__section-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
   .jf__section-no {
     width: auto;
     font-size: 10px;
     letter-spacing: 0.08em;
-    padding: 4px 8px;
+    padding: 4px 10px;
     border-radius: 999px;
     background: var(--color-surface);
     color: var(--color-ink);
     font-weight: 600;
+    align-self: flex-start;
   }
-  .jf__section-copy h2 { font-size: 24px; letter-spacing: -0.02em; line-height: 105%; }
-  .jf__section-copy p { font-size: 13px; }
+  .jf__section-copy { gap: 6px; }
+  .jf__section-copy h2 {
+    font-size: 28px;
+    letter-spacing: -0.02em;
+    line-height: 100%;
+  }
+  .jf__section-copy p { font-size: 13px; line-height: 150%; }
 
   /* Tier grid: stacked cards */
   .jf__tier-grid { grid-template-columns: 1fr; padding-left: 0; gap: 12px; }

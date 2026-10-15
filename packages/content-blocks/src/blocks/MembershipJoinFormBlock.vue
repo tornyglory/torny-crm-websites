@@ -734,4 +734,93 @@ function joinFormErrorMessage(err: unknown): string {
   .jf__row { flex-direction: column; }
   .jf__field--narrow { flex-basis: auto; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile (≤640px).
+   See Paper mobile artboard "Membership · Mobile".
+   Hero left-aligns and compacts; tier cards stack with the default
+   tier flipping to an inverted ink card at a scaled-up Space Grotesk
+   price. Sidebar rail hides on mobile; summary is implicit from the
+   big ink card. Section heads collapse to a single stacked block.
+───────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .jf {
+    padding: 32px 24px 48px;
+    gap: 24px;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  /* Hero: left-aligned, 40px display */
+  .jf__head {
+    align-items: flex-start;
+    text-align: left;
+    gap: 12px;
+    padding-bottom: 20px;
+  }
+  .jf__eyebrow { font-size: 10px; letter-spacing: 0.08em; }
+  .jf__title { font-size: 40px; line-height: 100%; letter-spacing: -0.02em; }
+  .jf__sub { font-size: 14px; max-width: none; }
+
+  /* Hide the sticky summary rail — the inverted ink tier card already
+     signals the recommended pick on mobile, and keeping the rail would
+     push the form two viewports down the page. */
+  .jf__rail { display: none; }
+
+  .jf__body { gap: 24px; }
+  .jf__form { gap: 32px; }
+
+  /* Section heads collapse: number inline above the heading */
+  .jf__section { gap: 16px; padding-top: 24px; }
+  .jf__section-head { flex-direction: row; align-items: center; gap: 10px; }
+  .jf__section-no {
+    width: auto;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+  .jf__section-copy h2 { font-size: 24px; letter-spacing: -0.02em; line-height: 105%; }
+  .jf__section-copy p { font-size: 13px; }
+
+  /* Tier grid: stacked cards */
+  .jf__tier-grid { grid-template-columns: 1fr; padding-left: 0; gap: 12px; }
+  .jf__tier {
+    padding: 20px;
+    border-radius: 16px;
+    gap: 10px;
+  }
+
+  /* Default tier → inverted ink card (matches Paper design) */
+  .jf__tier--selected,
+  .jf__tier:has(input:checked) {
+    background: var(--color-ink);
+    color: #FFFFFF;
+    border-color: var(--color-ink);
+    box-shadow: none;
+  }
+  .jf__tier--selected .jf__tier-name,
+  .jf__tier:has(input:checked) .jf__tier-name { color: #FFFFFF; }
+  .jf__tier--selected .jf__tier-price,
+  .jf__tier:has(input:checked) .jf__tier-price { color: #FFFFFF; font-size: 48px; letter-spacing: -0.03em; }
+
+  .jf__tier-head { align-items: center; }
+  .jf__tier-eyebrow { font-size: 9px; letter-spacing: 0.08em; padding: 3px 8px; }
+  .jf__tier-name { font-size: 20px; line-height: 100%; }
+  .jf__tier-price { font-size: 36px; line-height: 90%; }
+  .jf__tier-unit { font-size: 12px; }
+  .jf__tier-desc { font-size: 12px; line-height: 150%; }
+
+  /* Fields: stack rows, bigger inputs for touch */
+  .jf__fields { gap: 20px; }
+  .jf__row { gap: 14px; }
+  .jf__field > span { font-size: 12px; }
+  .jf__field input,
+  .jf__field select,
+  .jf__field textarea { font-size: 15px; padding: 12px 14px; border-radius: 10px; }
+}
 </style>

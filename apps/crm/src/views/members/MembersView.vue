@@ -380,15 +380,16 @@ const duesTone: Record<DuesStatus, string> = {
  * Dues + Status pair. One tone, one label, plus a natural-language
  * sub-line telling the story (last payment, next due, etc.).
  *
- * Precedence:
+ * Precedence (financial-first — the Standing column is for billing, not
+ * invite state; a pending invite still falls through to its tier/payment
+ * story so admins see "Due · $260" instead of "Invited"):
  *   1. Lapsed          → "No active membership"
- *   2. Pending invite  → "Invite sent · resend"
- *   3. Waived fees     → "Fees waived"
- *   4. Overdue         → "Overdue since {date}"
- *   5. Partial payment → "$X of $Y paid"
- *   6. Due soon        → "Due {date}"
- *   7. Paid up         → "Last paid {date}"
- *   8. No tier         → "No membership"
+ *   2. Waived fees     → "Fees waived"
+ *   3. Overdue         → "Overdue since {date}"
+ *   4. Partial payment → "$X of $Y paid"
+ *   5. Due soon        → "Due {date}"
+ *   6. Paid up         → "Last paid {date}"
+ *   7. No tier         → "No membership"
  */
 type StandingTone = 'paid' | 'due' | 'overdue' | 'waived' | 'partial' | 'invited' | 'lapsed' | 'none'
 interface Standing {
@@ -411,9 +412,6 @@ function standing(m: Member): Standing {
   if (m.status === 'Lapsed') {
     const on = formatShortDate(m.revokedAt)
     return { tone: 'lapsed', label: 'Lapsed', sub: on ? `Left ${on}` : 'No active membership' }
-  }
-  if (m.status === 'Pending' && (m.paymentStatus == null || m.paymentStatus === 'unpaid')) {
-    return { tone: 'invited', label: 'Invited', sub: 'Invite sent · resend' }
   }
   if (m.paymentStatus === 'waived') {
     return { tone: 'waived', label: 'Waived', sub: 'Fees waived' }
@@ -1129,7 +1127,7 @@ async function submit() {
             <div class="row__name-inner">
               <div
                 class="row__avatar"
-                :class="{ 'row__avatar--image': hasRealAvatar(m), 'row__avatar--invited': standing(m).tone === 'invited' }"
+                :class="{ 'row__avatar--image': hasRealAvatar(m), 'row__avatar--invited': m.status === 'Pending' }"
               >
                 <img v-if="hasRealAvatar(m)" :src="m.avatarUrl!" :alt="m.name" />
                 <template v-else>{{ initials(m) }}</template>
@@ -1228,7 +1226,7 @@ async function submit() {
       <li v-for="m in filtered" :key="m.id" class="card" :class="{ 'card--lapsed': m.status === 'Lapsed' }" tabindex="0" @click="openDetail(m)" @keydown.enter="openDetail(m)">
         <div
           class="card__avatar"
-          :class="{ 'card__avatar--image': hasRealAvatar(m), 'card__avatar--invited': standing(m).tone === 'invited' }"
+          :class="{ 'card__avatar--image': hasRealAvatar(m), 'card__avatar--invited': m.status === 'Pending' }"
         >
           <img v-if="hasRealAvatar(m)" :src="m.avatarUrl!" :alt="m.name" />
           <template v-else>{{ initials(m) }}</template>

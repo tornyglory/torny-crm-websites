@@ -288,8 +288,21 @@ const editFieldErrors = reactive<Record<string, string | null>>({
 
 const PREFERRED_POSITIONS: PreferredPosition[] = ['Lead', 'Second', 'Third', 'Skip', 'Singles']
 const PLAYING_LEVELS: PlayingLevel[] = ['A', 'B', 'C']
-const POSITION_GROUPS: PositionGroup[] = ['board', 'staff', 'committee', 'member']
-const MEMBERSHIP_STATUSES: MembershipStatus[] = ['active', 'inactive', 'suspended', 'expired', 'pending_payment']
+// Labelled option arrays — API values stay lowercase to match the backend
+// enum, but the UI shows capitalised, humanised labels in the dropdowns.
+const POSITION_GROUP_OPTIONS: { value: PositionGroup; label: string }[] = [
+  { value: 'board',     label: 'Board' },
+  { value: 'staff',     label: 'Staff' },
+  { value: 'committee', label: 'Committee' },
+  { value: 'member',    label: 'Member' },
+]
+const MEMBERSHIP_STATUS_OPTIONS: { value: MembershipStatus; label: string }[] = [
+  { value: 'active',          label: 'Active' },
+  { value: 'inactive',        label: 'Inactive' },
+  { value: 'suspended',       label: 'Suspended' },
+  { value: 'expired',         label: 'Expired' },
+  { value: 'pending_payment', label: 'Pending payment' },
+]
 
 const tiers = ref<MembershipTierListItem[]>([])
 async function loadTiers() {
@@ -432,32 +445,24 @@ async function submitEdit() {
   Object.keys(editFieldErrors).forEach((k) => { editFieldErrors[k] = null })
   editSaving.value = true
   try {
-    const res = await membersApi.patchMember(cid, uid, patch)
-    // Merge the full echoed state back onto the local roster entry so
-    // the page re-renders without a round-trip. The backend returns a
-    // flat UpdateMemberResponse that lines up with RosterMember on the
-    // fields that overlap — the ones that don't (handle, avatar, etc.)
-    // weren't touched by the PATCH.
-    const idx = roster.value.findIndex((m) => m.user_id === uid)
-    if (idx >= 0) {
-      roster.value[idx] = {
-        ...roster.value[idx]!,
-        name:             res.name,
-        email:            res.email,
-        phone:            res.phone,
-        address:          res.address,
-        dob:              res.dob,
-        club_role:        res.role,
-        title:            res.title,
-        position_group:   res.position_group,
-        public_visible:   res.public_visible,
-        bio:              res.bio,
-        membership:       res.membership,
-      }
-    }
+    await membersApi.patchMember(cid, uid, patch)
+    // Pull the full roster back from the server so derived billing fields
+    // (last payment, tier name, balance) stay accurate. The PATCH echo is
+    // too shallow to merge safely — it drops the computed billing snapshot
+    // that `paymentHistory` and the hero tier chip depend on.
+    await loadRoster()
     toast.success('Member updated.')
     closeEdit()
   } catch (err) {
+    // 404 — the PATCH endpoint can't find a `club_members` row for this
+    // user. Happens for self-declared / pending roster entries that were
+    // never formally added to the club, so re-sync the roster so the UI
+    // reflects whatever the server actually has.
+    if (err instanceof ApiError && err.status === 404) {
+      editErrorBanner.value = "This member isn't linked to the club yet — add them from Members → Add member first."
+      void loadRoster()
+      return
+    }
     const code = err instanceof ApiError ? (err.code as UpdateMemberErrorCode | undefined) : undefined
     switch (code) {
       case 'email_in_use':
@@ -608,12 +613,18 @@ async function submitEdit() {
             </div>
             <div class="member-detail__hero-meta">
               <span v-if="member.membership?.type_name" class="member-detail__tier">{{ member.membership.type_name }}</span>
-              <span v-if="feeLabel" class="member-detail__meta-dot">·</span>
-              <span v-if="feeLabel" class="member-detail__fee">{{ feeLabel }}</span>
-              <span v-if="member.joined_at" class="member-detail__meta-dot">·</span>
-              <span v-if="member.joined_at">Joined {{ fmtMonthYear(member.joined_at) }}</span>
-              <span v-if="member.member_number != null" class="member-detail__meta-dot">·</span>
-              <span v-if="member.member_number != null" class="member-detail__member-no">#{{ member.member_number }}</span>
+              <template v-if="feeLabel">
+                <span v-if="member.membership?.type_name" class="member-detail__meta-dot">·</span>
+                <span class="member-detail__fee">{{ feeLabel }}</span>
+              </template>
+              <template v-if="member.joined_at">
+                <span v-if="member.membership?.type_name || feeLabel" class="member-detail__meta-dot">·</span>
+                <span>Joined {{ fmtMonthYear(member.joined_at) }}</span>
+              </template>
+              <template v-if="member.member_number != null">
+                <span v-if="member.membership?.type_name || feeLabel || member.joined_at" class="member-detail__meta-dot">·</span>
+                <span class="member-detail__member-no">#{{ member.member_number }}</span>
+              </template>
             </div>
           </div>
           <div class="member-detail__owing" v-if="owingAmount != null">
@@ -627,110 +638,24 @@ async function submitEdit() {
           </div>
         </section>
 
-        <!-- Profile card — always visible across tabs so the full
-             identity + roster + billing record is a glance away. -->
-        <article class="member-detail__profile">
-          <header class="member-detail__profile-head">
-            <div class="member-detail__card-label">Member profile</div>
-            <button v-if="callerCanEdit" type="button" class="btn btn--outline btn--sm" @click="openEdit">Edit</button>
-          </header>
-
-          <div class="profile-group">
-            <div class="profile-group__eyebrow">Identity</div>
-            <dl class="profile-grid">
-              <div class="profile-cell">
-                <dt>Email</dt>
-                <dd>{{ member.email || '—' }}</dd>
-              </div>
-              <div class="profile-cell">
-                <dt>Phone</dt>
-                <dd>{{ member.phone || '—' }}</dd>
-              </div>
-              <div class="profile-cell">
-                <dt>Date of birth</dt>
-                <dd>{{ member.dob ? fmtShort(member.dob) : '—' }}</dd>
-              </div>
-              <div class="profile-cell profile-cell--full">
-                <dt>Address</dt>
-                <dd>{{ member.address || '—' }}</dd>
-              </div>
-            </dl>
+        <!-- Owing banner — mobile only; pulls the primary action above the fold. -->
+        <section v-if="owingAmount != null && owingAmount > 0" class="member-detail__owing-banner">
+          <div class="owing-banner__col">
+            <div class="owing-banner__label">Owing</div>
+            <div class="owing-banner__value">${{ owingAmount }}</div>
+            <div class="owing-banner__sub">{{ standing.sub }}</div>
           </div>
-
-          <div class="profile-group">
-            <div class="profile-group__eyebrow">Roster</div>
-            <dl class="profile-grid">
-              <div class="profile-cell">
-                <dt>Role</dt>
-                <dd class="profile-cap">{{ member.club_role }}</dd>
-              </div>
-              <div class="profile-cell">
-                <dt>Title</dt>
-                <dd>{{ member.title || '—' }}</dd>
-              </div>
-              <div class="profile-cell">
-                <dt>Position group</dt>
-                <dd class="profile-cap">{{ member.position_group }}</dd>
-              </div>
-              <div class="profile-cell">
-                <dt>Playing level</dt>
-                <dd>{{ member.playing_level ? `Grade ${member.playing_level}` : '—' }}</dd>
-              </div>
-              <div class="profile-cell">
-                <dt>Preferred position</dt>
-                <dd>{{ member.preferred_position || '—' }}</dd>
-              </div>
-              <div class="profile-cell">
-                <dt>Public directory</dt>
-                <dd>
-                  <span class="profile-chip" :class="member.public_visible ? 'profile-chip--on' : 'profile-chip--off'">
-                    {{ member.public_visible ? 'Visible' : 'Hidden' }}
-                  </span>
-                </dd>
-              </div>
-              <div v-if="member.bio" class="profile-cell profile-cell--full">
-                <dt>Bio</dt>
-                <dd class="profile-bio">{{ member.bio }}</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div class="profile-group">
-            <div class="profile-group__eyebrow">Membership</div>
-            <dl class="profile-grid">
-              <div class="profile-cell">
-                <dt>Tier</dt>
-                <dd>{{ member.membership?.type_name || '—' }}</dd>
-              </div>
-              <div class="profile-cell">
-                <dt>Status</dt>
-                <dd class="profile-cap">{{ member.membership?.status || '—' }}</dd>
-              </div>
-              <div class="profile-cell">
-                <dt>Joined date</dt>
-                <dd>{{ member.joined_at ? fmtShort(member.joined_at) : '—' }}</dd>
-              </div>
-              <div class="profile-cell">
-                <dt>Payment due</dt>
-                <dd>{{ member.membership?.payment_due_date ? fmtShort(member.membership.payment_due_date) : '—' }}</dd>
-              </div>
-              <div class="profile-cell">
-                <dt>Last payment</dt>
-                <dd>
-                  <template v-if="member.membership?.last_payment_date">
-                    {{ fmtShort(member.membership.last_payment_date) }}<template v-if="member.membership.last_payment_amount">
-                      · ${{ member.membership.last_payment_amount }}</template>
-                  </template>
-                  <template v-else>—</template>
-                </dd>
-              </div>
-              <div class="profile-cell">
-                <dt>Payment status</dt>
-                <dd class="profile-cap">{{ member.membership?.payment_status || '—' }}</dd>
-              </div>
-            </dl>
-          </div>
-        </article>
+          <button
+            v-if="callerCanEdit && member.membership?.fee"
+            type="button"
+            class="owing-banner__cta"
+            :disabled="markingPaid"
+            @click="markPaid"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 4L6 11l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            {{ markingPaid ? 'Recording…' : 'Mark paid' }}
+          </button>
+        </section>
 
         <!-- Two-column: main + rail -->
         <div class="member-detail__cols">
@@ -766,37 +691,61 @@ async function submitEdit() {
                 />
               </div>
 
-              <table v-else class="pay-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Description</th>
-                    <th class="pay-table__amount">Amount</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="p in paymentHistory" :key="p.id" class="pay-table__row">
-                    <td class="pay-table__date">{{ p.date }}</td>
-                    <td>{{ p.description }}</td>
-                    <td class="pay-table__amount">${{ p.amount.toFixed(2) }}</td>
-                    <td>
+              <template v-else>
+                <!-- Desktop/tablet table -->
+                <table class="pay-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Description</th>
+                      <th class="pay-table__amount">Amount</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="p in paymentHistory" :key="p.id" class="pay-table__row">
+                      <td class="pay-table__date">{{ p.date }}</td>
+                      <td>{{ p.description }}</td>
+                      <td class="pay-table__amount">${{ p.amount.toFixed(2) }}</td>
+                      <td>
+                        <span v-if="p.status === 'paid'" class="pay-pill pay-pill--paid">Paid<template v-if="p.method"> · {{ p.method }}</template></span>
+                        <span v-else-if="p.status === 'overdue'" class="pay-pill pay-pill--overdue">Overdue</span>
+                        <span v-else-if="p.status === 'waived'" class="pay-pill pay-pill--waived">Waived</span>
+                        <span v-else class="pay-pill pay-pill--due">Due</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                  <tfoot v-if="totalCollected > 0">
+                    <tr class="pay-table__foot-row">
+                      <td colspan="4" class="pay-table__foot-cell">
+                        <span class="pay-table__foot-label">Total collected</span>
+                        <span class="pay-table__foot-total">${{ totalCollected.toFixed(2) }}</span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+
+                <!-- Mobile card list -->
+                <ul class="pay-list">
+                  <li v-for="p in paymentHistory" :key="p.id" class="pay-list__item">
+                    <div class="pay-list__top">
+                      <div class="pay-list__desc">{{ p.description }}</div>
+                      <div class="pay-list__amount">${{ p.amount.toFixed(2) }}</div>
+                    </div>
+                    <div class="pay-list__meta">
+                      <span class="pay-list__date">{{ p.date }}</span>
                       <span v-if="p.status === 'paid'" class="pay-pill pay-pill--paid">Paid<template v-if="p.method"> · {{ p.method }}</template></span>
                       <span v-else-if="p.status === 'overdue'" class="pay-pill pay-pill--overdue">Overdue</span>
                       <span v-else-if="p.status === 'waived'" class="pay-pill pay-pill--waived">Waived</span>
                       <span v-else class="pay-pill pay-pill--due">Due</span>
-                    </td>
-                  </tr>
-                </tbody>
-                <tfoot v-if="totalCollected > 0">
-                  <tr class="pay-table__foot-row">
-                    <td colspan="4" class="pay-table__foot-cell">
-                      <span class="pay-table__foot-label">Total collected</span>
-                      <span class="pay-table__foot-total">${{ totalCollected.toFixed(2) }}</span>
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                    </div>
+                  </li>
+                  <li v-if="totalCollected > 0" class="pay-list__total">
+                    <span class="pay-list__total-label">Total collected</span>
+                    <span class="pay-list__total-value">${{ totalCollected.toFixed(2) }}</span>
+                  </li>
+                </ul>
+              </template>
             </article>
 
             <!-- Communications -->
@@ -829,32 +778,108 @@ async function submitEdit() {
             </article>
           </section>
 
-          <!-- Right rail -->
+          <!-- Right rail — sticky Profile summary that travels with every tab. -->
           <aside class="member-detail__rail">
-            <article class="member-detail__card">
-              <header class="member-detail__card-head">
-                <div class="member-detail__card-label">Communications</div>
-                <button type="button" class="member-detail__view-all" disabled>View all →</button>
+            <article class="member-detail__profile">
+              <header class="member-detail__profile-head">
+                <div class="member-detail__card-label">Profile</div>
+                <button v-if="callerCanEdit" type="button" class="btn btn--outline btn--sm" @click="openEdit">Edit</button>
               </header>
-              <div class="member-detail__rail-empty">
-                <div class="member-detail__rail-empty-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2.5 4a1.5 1.5 0 0 1 1.5-1.5h10a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5H7l-3.5 3v-3H4A1.5 1.5 0 0 1 2.5 11V4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-                </div>
-                <div class="member-detail__rail-empty-title">Nothing yet</div>
-                <div class="member-detail__rail-empty-sub">Sent emails, calls, and notes will show here.</div>
-              </div>
-            </article>
 
-            <article class="member-detail__card">
-              <header class="member-detail__card-head">
-                <div class="member-detail__card-label">Admin notes</div>
-                <span class="member-detail__card-hint">Private</span>
-              </header>
-              <div class="member-detail__notes-empty">
-                <div class="member-detail__notes-empty-body">
-                  Add context, quirks, or history other admins should know.
-                </div>
-                <button type="button" class="member-detail__add-note" :disabled="!callerCanEdit" @click="logNote">+ Add note</button>
+              <div class="profile-group">
+                <div class="profile-group__eyebrow">Identity</div>
+                <dl class="profile-grid">
+                  <div class="profile-cell">
+                    <dt>Email</dt>
+                    <dd>{{ member.email || '—' }}</dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Phone</dt>
+                    <dd>{{ member.phone || '—' }}</dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Date of birth</dt>
+                    <dd>{{ member.dob ? fmtShort(member.dob) : '—' }}</dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Address</dt>
+                    <dd>{{ member.address || '—' }}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div class="profile-group">
+                <div class="profile-group__eyebrow">Roster</div>
+                <dl class="profile-grid">
+                  <div class="profile-cell">
+                    <dt>Role</dt>
+                    <dd class="profile-cap">{{ member.club_role }}</dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Title</dt>
+                    <dd>{{ member.title || '—' }}</dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Position group</dt>
+                    <dd class="profile-cap">{{ member.position_group }}</dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Playing level</dt>
+                    <dd>{{ member.playing_level ? `Grade ${member.playing_level}` : '—' }}</dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Preferred position</dt>
+                    <dd>{{ member.preferred_position || '—' }}</dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Public directory</dt>
+                    <dd>
+                      <span class="profile-chip" :class="member.public_visible ? 'profile-chip--on' : 'profile-chip--off'">
+                        {{ member.public_visible ? 'Visible' : 'Hidden' }}
+                      </span>
+                    </dd>
+                  </div>
+                  <div v-if="member.bio" class="profile-cell profile-cell--full">
+                    <dt>Bio</dt>
+                    <dd class="profile-bio">{{ member.bio }}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div class="profile-group">
+                <div class="profile-group__eyebrow">Membership</div>
+                <dl class="profile-grid">
+                  <div class="profile-cell">
+                    <dt>Tier</dt>
+                    <dd>{{ member.membership?.type_name || '—' }}</dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Status</dt>
+                    <dd class="profile-cap">{{ member.membership?.status || '—' }}</dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Joined date</dt>
+                    <dd>{{ member.joined_at ? fmtShort(member.joined_at) : '—' }}</dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Payment due</dt>
+                    <dd>{{ member.membership?.payment_due_date ? fmtShort(member.membership.payment_due_date) : '—' }}</dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Last payment</dt>
+                    <dd>
+                      <template v-if="member.membership?.last_payment_date">
+                        {{ fmtShort(member.membership.last_payment_date) }}<template v-if="member.membership.last_payment_amount">
+                          · ${{ member.membership.last_payment_amount }}</template>
+                      </template>
+                      <template v-else>—</template>
+                    </dd>
+                  </div>
+                  <div class="profile-cell">
+                    <dt>Payment status</dt>
+                    <dd class="profile-cap">{{ member.membership?.payment_status || '—' }}</dd>
+                  </div>
+                </dl>
               </div>
             </article>
           </aside>
@@ -928,7 +953,7 @@ async function submitEdit() {
           <label class="edit-field">
             <span class="edit-field__label">Position group</span>
             <select v-model="editForm.position_group" class="edit-field__input">
-              <option v-for="g in POSITION_GROUPS" :key="g" :value="g">{{ g }}</option>
+              <option v-for="g in POSITION_GROUP_OPTIONS" :key="g.value" :value="g.value">{{ g.label }}</option>
             </select>
           </label>
           <label class="edit-field">
@@ -970,7 +995,7 @@ async function submitEdit() {
             <span class="edit-field__label">Status</span>
             <select v-model="editForm.status" class="edit-field__input">
               <option value="">—</option>
-              <option v-for="s in MEMBERSHIP_STATUSES" :key="s" :value="s">{{ s }}</option>
+              <option v-for="s in MEMBERSHIP_STATUS_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
             </select>
           </label>
           <label class="edit-field">
@@ -1007,7 +1032,7 @@ async function submitEdit() {
 </template>
 
 <style scoped>
-.member-detail { display: flex; flex-direction: column; max-width: 1280px; }
+.member-detail { display: flex; flex-direction: column; width: 100%; max-width: 1280px; min-width: 0; }
 
 /* Sub-header — sticky under the app shell topbar. */
 .member-detail__topbar {
@@ -1095,9 +1120,9 @@ async function submitEdit() {
 .standing-pill--none    { background: var(--color-surface); color: var(--color-mute); border: 1px dashed var(--color-hairline); }
 
 /* Body columns */
-.member-detail__cols { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: flex-start; }
-.member-detail__main { display: flex; flex-direction: column; gap: 16px; }
-.member-detail__rail { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 96px; }
+.member-detail__cols { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: flex-start; min-width: 0; }
+.member-detail__main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.member-detail__rail { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 96px; min-width: 0; }
 
 /* Tabs */
 .member-detail__tabs { display: inline-flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--color-hairline); padding: 0 4px; }
@@ -1149,24 +1174,76 @@ async function submitEdit() {
 
 .member-detail__nomatch { max-width: 480px; }
 
+/* ── Owing banner (mobile) + payment list (mobile) ───────────── */
+.member-detail__owing-banner { display: none; }
+.pay-list { display: none; }
+
 /* Responsive */
 @media (max-width: 1023px) {
   .member-detail__cols { grid-template-columns: 1fr; }
-  .member-detail__rail { position: static; top: auto; }
+  /* Push the Profile summary above the Payments/Tabs column at narrow widths
+     so it stays as a glance-away reference and doesn't drop to the bottom. */
+  .member-detail__rail { position: static; top: auto; order: -1; }
 }
 @media (max-width: 767px) {
   .member-detail__topbar { flex-wrap: wrap; gap: 12px; padding: 12px 4px; }
-  .member-detail__actions { width: 100%; }
-  .btn { flex: 1; justify-content: center; }
-  .member-detail__hero { flex-direction: column; padding: 20px; }
-  .member-detail__owing { border-left: 0; padding-left: 0; padding-top: 16px; border-top: 1px solid var(--color-hairline); width: 100%; text-align: left; align-items: flex-start; }
-  .member-detail__owing-value { font-size: 32px; }
+  /* Hide the heavy actions row — Mark paid lives in the Owing banner,
+     Edit lives in the Profile card header. Secondary actions move to
+     a dedicated action sheet in a later pass. */
+  .member-detail__actions { display: none; }
+
+  .member-detail__hero { flex-direction: column; padding: 20px; gap: 14px; }
+  /* Shrink the hero to match Paper design 33b — tighter avatar + name. */
+  .member-detail__avatar { width: 56px; height: 56px; font-size: 20px; }
+  /* Hide the inline owing block — it moves to its own dark banner below. */
+  .member-detail__owing { display: none; }
   .member-detail__hero-line { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .member-detail__name { font-size: 24px; }
-  .pay-table th:nth-child(2), .pay-table td:nth-child(2) { display: none; }
+  .member-detail__name { font-size: 22px; }
+
+  /* Dark owing banner — pulls Mark paid above the fold. */
+  .member-detail__owing-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 16px 20px;
+    background: var(--color-ink); color: var(--color-ground);
+    border-radius: 16px;
+  }
+  .owing-banner__col { display: flex; flex-direction: column; gap: 4px; }
+  .owing-banner__label { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-mute); }
+  .owing-banner__value { font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -0.01em; color: var(--color-ground); line-height: 1; }
+  .owing-banner__sub { font-family: var(--font-body); font-size: 12px; color: var(--color-mute); }
+  .owing-banner__cta {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 16px; border: 0; border-radius: 999px;
+    background: #16A34A; color: #fff;
+    font-family: var(--font-body); font-size: 14px; font-weight: 600;
+    cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  }
+  .owing-banner__cta:hover:not(:disabled) { background: #15803D; }
+  .owing-banner__cta:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  /* Tighter card padding on mobile so values aren't crammed against the edge. */
+  .member-detail__profile { padding: 18px 18px; }
+  .member-detail__card { padding: 18px 18px; }
+  /* Let tabs scroll horizontally rather than pushing container width. */
+  .member-detail__tabs { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .member-detail__tabs::-webkit-scrollbar { display: none; }
+  .member-detail__tab { flex-shrink: 0; }
+
+  /* Payment history — swap table for a card list. */
+  .pay-table { display: none; }
+  .pay-list { display: flex; flex-direction: column; gap: 10px; list-style: none; margin: 0; padding: 0; }
+  .pay-list__item { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--color-hairline); border-radius: 12px; }
+  .pay-list__top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .pay-list__desc { font-family: var(--font-body); font-size: 15px; font-weight: 600; color: var(--color-ink); line-height: 1.3; }
+  .pay-list__amount { font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: var(--color-ink); white-space: nowrap; flex-shrink: 0; }
+  .pay-list__meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .pay-list__date { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
+  .pay-list__total { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; border-top: 1px solid var(--color-hairline); }
+  .pay-list__total-label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
+  .pay-list__total-value { font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--color-ink); }
 }
 
-/* ── Member profile card ─────────────────────────────────────── */
+/* ── Member profile card (rail) ──────────────────────────────── */
 .member-detail__profile {
   background: #fff;
   border: 1px solid var(--color-hairline);
@@ -1175,7 +1252,6 @@ async function submitEdit() {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  margin-bottom: 16px;
 }
 .member-detail__profile-head {
   display: flex;
@@ -1199,19 +1275,21 @@ async function submitEdit() {
   color: var(--color-fog);
   text-transform: uppercase;
 }
+/* Label-left / value-right rows — matches Paper design 33 (rail profile). */
 .profile-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin: 0;
 }
 .profile-cell {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
   min-width: 0;
 }
-.profile-cell--full { grid-column: span 2; }
 .profile-cell dt {
   font-family: var(--font-body);
   font-size: 11px;
@@ -1220,14 +1298,23 @@ async function submitEdit() {
   text-transform: uppercase;
   color: var(--color-fog);
   margin: 0;
+  flex-shrink: 0;
 }
 .profile-cell dd {
   font-family: var(--font-body);
   font-size: 14px;
   color: var(--color-ink);
   margin: 0;
-  word-break: break-word;
+  text-align: right;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
+.profile-cell--full {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.profile-cell--full dd { text-align: left; }
 .profile-cap { text-transform: capitalize; }
 .profile-bio { line-height: 150%; font-size: 13px; color: var(--color-graphite); }
 .profile-chip {
@@ -1242,11 +1329,6 @@ async function submitEdit() {
 }
 .profile-chip--on { background: #DCFCE7; color: #166534; }
 .profile-chip--off { background: var(--color-surface); color: var(--color-fog); }
-
-@media (max-width: 640px) {
-  .profile-grid { grid-template-columns: 1fr; }
-  .profile-cell--full { grid-column: auto; }
-}
 
 /* ── Edit modal ──────────────────────────────────────────────── */
 .edit-banner {

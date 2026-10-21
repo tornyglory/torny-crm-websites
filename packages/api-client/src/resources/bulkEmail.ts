@@ -6,10 +6,10 @@
 // message in the club's saved header/footer from the email-template resource
 // and substitutes {{tokens}} per recipient.
 //
-// URL host: primary CDK API (the one MEDIA_BASE points at). Not the SAM /
-// CRM APIs. Uses the same JWT.
+// URL host: bulk-email migrated to the CRM API host ahead of the rest of
+// the media stack, so it rides on its own base (BULK_EMAIL_BASE). Same JWT.
 
-import { MEDIA_BASE } from '../config'
+import { BULK_EMAIL_BASE } from '../config'
 import { authedFetch } from '../http'
 
 // ── Recipient selection ───────────────────────────────────────────
@@ -86,7 +86,7 @@ export async function send(
   opts: { signal?: AbortSignal } = {},
 ): Promise<BulkEmailResult> {
   const res = await authedFetch<Envelope<BulkEmailResult>>(
-    `${MEDIA_BASE}/clubs/${clubId}/members/bulk-email`,
+    `${BULK_EMAIL_BASE}/clubs/${clubId}/members/bulk-email`,
     { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
   )
   return res.data

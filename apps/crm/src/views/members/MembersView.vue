@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch, watchEffect } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import CrmEmptyState from '@/components/CrmEmptyState.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
+import SendEmailModal, { type EmailRecipient } from '@/components/modals/SendEmailModal.vue'
 import { useToast } from '@/composables/useToast'
 import { useMemberSearch } from '@/composables/useMemberSearch'
 import { useClubStore } from '@/stores/club'
@@ -230,6 +231,27 @@ const rosterLoading = ref(false)
 const rosterError = ref<string | null>(null)
 const rosterCounts = ref<{ total: number; active: number } | null>(null)
 
+// ── Multi-select for bulk actions ──────────────────────────────────
+// Selection lives on the view (not on `Member`) so we can keep ticks
+// across filter/search changes — admins routinely refine a search to
+// confirm a shortlist before firing the email. Cleared only via the
+// "Clear" button or after a successful send.
+const selectedIds = ref<Set<string>>(new Set())
+function isSelected(m: Member): boolean { return selectedIds.value.has(m.id) }
+function toggleSelected(m: Member) {
+  const next = new Set(selectedIds.value)
+  if (next.has(m.id)) next.delete(m.id)
+  else next.add(m.id)
+  selectedIds.value = next
+}
+function clearSelection() { selectedIds.value = new Set() }
+const sendEmailOpen = ref(false)
+function openBulkEmail() { if (selectedCount.value > 0) sendEmailOpen.value = true }
+function onBulkEmailSent() {
+  clearSelection()
+  sendEmailOpen.value = false
+}
+
 // Prefer the server's authoritative counts for the hero line so the "N
 // total · N active" number stays put while the user is searching.
 const heroCounts = computed(() =>
@@ -303,6 +325,59 @@ const filtered = computed(() =>
   }),
 )
 
+const selectedCount = computed(() => selectedIds.value.size)
+/** True when every visible row is selected — drives the header "all"
+ *  checkbox. We check against the currently-filtered list so toggling
+ *  the header respects whatever chip/filter the admin has applied. */
+const allVisibleSelected = computed(
+  () => filtered.value.length > 0 && filtered.value.every((m) => selectedIds.value.has(m.id)),
+)
+const someVisibleSelected = computed(
+  () => filtered.value.some((m) => selectedIds.value.has(m.id)) && !allVisibleSelected.value,
+)
+function toggleAllVisible() {
+  const next = new Set(selectedIds.value)
+  if (allVisibleSelected.value) {
+    for (const m of filtered.value) next.delete(m.id)
+  } else {
+    for (const m of filtered.value) next.add(m.id)
+  }
+  selectedIds.value = next
+}
+/** `indeterminate` isn't reflected by `v-model`, so we poke the DOM
+ *  whenever the derived "some but not all" state flips. */
+const selectAllEl = ref<HTMLInputElement | null>(null)
+watchEffect(() => {
+  if (selectAllEl.value) selectAllEl.value.indeterminate = someVisibleSelected.value
+})
+
+/** Build the recipient list from the global roster + any current search
+ *  results, so admins who tick rows while refining a search still see
+ *  every selection in the modal (not just the ones still visible). */
+const selectedRecipients = computed<EmailRecipient[]>(() => {
+  const byId = new Map<string, EmailRecipient>()
+  const push = (m: Member) => {
+    if (!byId.has(m.id)) {
+      byId.set(m.id, {
+        user_id: Number(m.id),
+        name: m.name,
+        email: m.email || null,
+      })
+    }
+  }
+  for (const m of members.value) if (selectedIds.value.has(m.id)) push(m)
+  for (const m of apiResults.value) {
+    const id = String(m.user_id)
+    if (selectedIds.value.has(id) && !byId.has(id)) {
+      byId.set(id, { user_id: m.user_id, name: m.name, email: m.email ?? null })
+    }
+  }
+  return Array.from(byId.values())
+})
+const selectedWithoutEmail = computed(
+  () => selectedRecipients.value.filter((r) => !r.email).length,
+)
+
 /** Tier dropdown — sourced from the club's current tier list (one fetch
  *  on mount via `loadTiers`), not the roster. Each option carries the
  *  slug used for the backend filter and the display name. Includes a
@@ -326,10 +401,34 @@ function initials(m: Member) {
  * hands back (gravatar-style URLs, generic silhouettes) is a default
  * we'd rather replace with initials.
  */
+/** Cloudflare Images URLs look like
+ *    https://imagedelivery.net/{account_hash}/{image_id}/{variant}
+ *  — pull out the stable `image_id` so a logo served as `/public` matches
+ *  an avatar served as `/thumbnail` of the same asset. */
+function cfImageId(url: string | null | undefined): string | null {
+  if (!url) return null
+  const m = url.match(/imagedelivery\.net\/[^/]+\/([^/?#]+)/)
+  return m?.[1] ?? null
+}
+/** CF Image IDs known to be baked-in defaults from the backend (pre-brief-53).
+ *  Reject these as "not a real avatar" until the brief 53 backfill runs. */
+const TORNY_DEFAULT_AVATAR_IDS = new Set<string>([
+  'e6f09767-ae0b-49cd-825e-3e387f4d8600', // generic Torny placeholder
+])
+// Treat uploads on our Cloudflare Images CDN as real avatars, EXCEPT the
+// stock Torny placeholder or the active club's own logo — both of which
+// the backend used to bake in as a default before migration 119. Once the
+// brief 53 backfill runs, this guard can collapse back to the single
+// `.includes('imagedelivery.net')` check.
 function hasRealAvatar(m: Member): boolean {
   const url = m.avatarUrl
   if (!url) return false
-  return url.includes('imagedelivery.net')
+  if (!url.includes('imagedelivery.net')) return false
+  const avatarId = cfImageId(url)
+  if (avatarId && TORNY_DEFAULT_AVATAR_IDS.has(avatarId)) return false
+  const logoId = cfImageId(clubStore.current?.logoUrl)
+  if (avatarId && logoId && avatarId === logoId) return false
+  return true
 }
 
 const statusTone: Record<MemberStatus, string> = {
@@ -580,7 +679,10 @@ const newSeasonForm = reactive({
   season_name: '',
   start_date: '',
   end_date: '',
-  default_fee: '' as string,
+  // `<input type="number">` + v-model gives us a number once the user
+  // types anything, falls back to '' when the field is empty. Both are
+  // handled in submitNewSeason.
+  default_fee: '' as string | number,
   description: '',
   set_current: true,
 })
@@ -620,12 +722,17 @@ async function submitNewSeason() {
   newSeasonError.value = null
   newSeasonFieldErrors.value = {}
   try {
-    const fee = newSeasonForm.default_fee.trim()
+    // `<input type="number">` + v-model coerces to a number at runtime,
+    // so default_fee may be a number OR a string depending on what the
+    // user did. Normalise before validating.
+    const feeRaw = newSeasonForm.default_fee
+    const feeStr = typeof feeRaw === 'number' ? String(feeRaw) : feeRaw.trim()
+    const feeNum = feeStr.length > 0 ? Number(feeStr) : undefined
     const created = await seasonsApi.create(cid, {
       season_name: newSeasonForm.season_name.trim(),
       start_date: newSeasonForm.start_date,
       end_date: newSeasonForm.end_date,
-      default_fee: fee.length > 0 ? Number(fee) : undefined,
+      default_fee: feeNum != null && !Number.isNaN(feeNum) ? feeNum : undefined,
       description: newSeasonForm.description.trim() || undefined,
       set_current: newSeasonForm.set_current,
     })
@@ -751,6 +858,10 @@ const paymentForm = reactive({
   reference: '',
   notes: '',
   waived: false,
+  // Season the payment attaches to. Defaults to the page's picker so what
+  // the admin sees in the summary cards is what the payment feeds — can be
+  // overridden in-modal for a back-dated or pre-paid entry.
+  seasonId: null as number | null,
 })
 
 function todayIso(): string {
@@ -772,6 +883,7 @@ function openPayment() {
   paymentForm.reference = ''
   paymentForm.notes = ''
   paymentForm.waived = false
+  paymentForm.seasonId = selectedSeasonId.value
   paymentError.value = null
   // membershipFee isn't stored on the local Member view; fall back to 0 for the input
   void same
@@ -810,6 +922,7 @@ async function submitPayment() {
       payment_method: paymentForm.method,
       payment_reference: paymentForm.reference.trim() || undefined,
       notes: paymentForm.notes.trim() || undefined,
+      season_id: paymentForm.seasonId ?? undefined,
     })
     const verb = paymentForm.waived
       ? 'Fees waived'
@@ -818,7 +931,8 @@ async function submitPayment() {
         : result.payment_status === 'partial'
           ? 'Partial payment recorded'
           : 'Payment recorded'
-    toast.success(`${verb} for ${m.name}.`)
+    const seasonSuffix = result.season_name ? ` · ${result.season_name}` : ''
+    toast.success(`${verb} for ${m.name}${seasonSuffix}.`)
     paymentOpen.value = false
     detailOpen.value = false
     await Promise.all([loadRoster(), loadSummary()])
@@ -1110,10 +1224,48 @@ async function submit() {
       </div>
     </div>
 
+    <!-- Bulk actions bar — appears once anything is ticked. Lives
+         inline above the table so the primary action stays near the
+         rows the admin just selected. -->
+    <div v-if="selectedCount > 0" class="selection-bar" role="status" aria-live="polite">
+      <div class="selection-bar__count">
+        <strong>{{ selectedCount }}</strong> selected
+        <span v-if="selectedWithoutEmail > 0" class="selection-bar__warn">
+          · {{ selectedWithoutEmail }} without email
+        </span>
+      </div>
+      <div class="selection-bar__actions">
+        <button
+          type="button"
+          class="selection-bar__btn selection-bar__btn--primary"
+          :disabled="selectedCount === selectedWithoutEmail"
+          @click="openBulkEmail"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+            <polyline points="22,6 12,13 2,6"/>
+          </svg>
+          Send email
+        </button>
+        <button type="button" class="selection-bar__btn selection-bar__btn--ghost" @click="clearSelection">
+          Clear
+        </button>
+      </div>
+    </div>
+
     <!-- Desktop table -->
     <table class="table">
       <thead>
         <tr>
+          <th class="table__check">
+            <input
+              ref="selectAllEl"
+              type="checkbox"
+              :checked="allVisibleSelected"
+              :aria-label="allVisibleSelected ? 'Deselect all visible members' : 'Select all visible members'"
+              @change="toggleAllVisible"
+            />
+          </th>
           <th>Name</th>
           <th>Email</th>
           <th>Membership</th>
@@ -1122,7 +1274,16 @@ async function submit() {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="m in filtered" :key="m.id" class="row" :class="{ 'row--lapsed': m.status === 'Lapsed' }" tabindex="0" @click="openDetail(m)" @keydown.enter="openDetail(m)">
+        <tr v-for="m in filtered" :key="m.id" class="row" :class="{ 'row--lapsed': m.status === 'Lapsed', 'row--selected': isSelected(m) }" tabindex="0" @click="openDetail(m)" @keydown.enter="openDetail(m)">
+          <td class="row__check" @click.stop>
+            <input
+              type="checkbox"
+              :checked="isSelected(m)"
+              :aria-label="`Select ${m.name}`"
+              @change="toggleSelected(m)"
+              @click.stop
+            />
+          </td>
           <td class="row__name">
             <div class="row__name-inner">
               <div
@@ -1164,6 +1325,7 @@ async function submit() {
             class="row row--skeleton"
             aria-busy="true"
           >
+            <td class="row__check" aria-hidden="true" />
             <td class="row__name">
               <div class="row__name-inner">
                 <CrmSkeleton shape="circle" width="36px" height="36px" />
@@ -1186,7 +1348,7 @@ async function submit() {
           </tr>
         </template>
         <tr v-else-if="isSearching && searchError && !filtered.length">
-          <td colspan="5" class="empty">
+          <td colspan="6" class="empty">
             <CrmEmptyState
               variant="error"
               title="We couldn't run that search"
@@ -1197,7 +1359,7 @@ async function submit() {
           </td>
         </tr>
         <tr v-else-if="!isSearching && rosterError && !filtered.length">
-          <td colspan="5" class="empty">
+          <td colspan="6" class="empty">
             <CrmEmptyState
               variant="error"
               title="We couldn't load the roster"
@@ -1208,7 +1370,7 @@ async function submit() {
           </td>
         </tr>
         <tr v-else-if="!filtered.length">
-          <td colspan="5" class="empty">
+          <td colspan="6" class="empty">
             <CrmEmptyState
               variant="empty"
               :title="emptyTitle"
@@ -1223,7 +1385,16 @@ async function submit() {
 
     <!-- Mobile card list -->
     <ul class="cards">
-      <li v-for="m in filtered" :key="m.id" class="card" :class="{ 'card--lapsed': m.status === 'Lapsed' }" tabindex="0" @click="openDetail(m)" @keydown.enter="openDetail(m)">
+      <li v-for="m in filtered" :key="m.id" class="card" :class="{ 'card--lapsed': m.status === 'Lapsed', 'card--selected': isSelected(m) }" tabindex="0" @click="openDetail(m)" @keydown.enter="openDetail(m)">
+        <label class="card__check" @click.stop>
+          <input
+            type="checkbox"
+            :checked="isSelected(m)"
+            :aria-label="`Select ${m.name}`"
+            @change="toggleSelected(m)"
+            @click.stop
+          />
+        </label>
         <div
           class="card__avatar"
           :class="{ 'card__avatar--image': hasRealAvatar(m), 'card__avatar--invited': m.status === 'Pending' }"
@@ -1425,6 +1596,20 @@ async function submit() {
           </select>
         </label>
 
+        <label class="field" v-if="seasonsList.length > 0">
+          <span class="field__label">Season</span>
+          <select v-model.number="paymentForm.seasonId">
+            <option
+              v-for="s in seasonsList"
+              :key="s.season_id"
+              :value="s.season_id"
+            >
+              {{ s.season_name }}{{ s.is_current_season ? ' · current' : '' }}
+            </option>
+          </select>
+          <span class="field__hint">Payment attaches to this season's totals. Defaults to what's showing above.</span>
+        </label>
+
         <label class="field">
           <span class="field__label">Reference (optional)</span>
           <input v-model="paymentForm.reference" type="text" maxlength="100" placeholder="e.g. ANZ-12345, receipt #A234" />
@@ -1612,6 +1797,14 @@ async function submit() {
         >{{ addSubmitting ? 'Adding…' : 'Add member' }}</button>
       </template>
     </CrmModal>
+
+    <SendEmailModal
+      :open="sendEmailOpen"
+      :club-id="clubStore.current?.id ?? null"
+      :members="selectedRecipients"
+      @close="sendEmailOpen = false"
+      @sent="onBulkEmailSent"
+    />
   </div>
 </template>
 
@@ -1712,6 +1905,65 @@ async function submit() {
 .row__name-text--sk { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
 .row__name-text--sk .crm-skeleton { display: block; }
 
+/* Selection checkbox column */
+.table__check,
+.row__check {
+  width: 36px;
+  padding-left: 16px;
+  padding-right: 0;
+  text-align: center;
+}
+.table__check input,
+.row__check input,
+.card__check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-ink);
+  cursor: pointer;
+}
+.table tbody tr.row--selected { background: var(--color-accent-soft); }
+.table tbody tr.row--selected:hover { background: color-mix(in srgb, var(--color-accent-soft) 80%, var(--color-accent) 20%); }
+
+/* Bulk action bar — matches the pill-shaped controls used elsewhere.
+   Lives inline so there's no fixed-position overlay to collide with
+   the sidebar / mobile nav. */
+.selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--color-ink);
+  color: #fff;
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+.selection-bar__count { font-family: var(--font-body); font-size: 13px; color: rgba(255, 255, 255, 0.85); }
+.selection-bar__count strong { color: #fff; font-weight: 700; margin-right: 4px; }
+.selection-bar__warn { color: #FDE68A; margin-left: 2px; }
+.selection-bar__actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.selection-bar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease;
+}
+.selection-bar__btn--primary { background: #fff; color: var(--color-ink); }
+.selection-bar__btn--primary:hover:not(:disabled) { background: var(--color-surface); }
+.selection-bar__btn--primary:disabled { background: rgba(255, 255, 255, 0.4); color: rgba(0, 0, 0, 0.4); cursor: not-allowed; }
+.selection-bar__btn--ghost { background: transparent; color: #fff; border: 1px solid rgba(255, 255, 255, 0.3); }
+.selection-bar__btn--ghost:hover { background: rgba(255, 255, 255, 0.1); }
+
 /* Cards (mobile) */
 .cards { display: none; list-style: none; padding: 0; margin: 0; flex-direction: column; gap: 8px; }
 .card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; cursor: pointer; }
@@ -1733,6 +1985,8 @@ async function submit() {
 .card--lapsed .card__avatar,
 .card--lapsed .card__meta,
 .card--lapsed .card__contact { opacity: 0.7; }
+.card__check { display: inline-flex; align-items: center; justify-content: center; width: 20px; margin-right: -4px; flex-shrink: 0; }
+.card--selected { background: var(--color-accent-soft); border-color: var(--color-accent); }
 .card__fee { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); margin-top: 6px; flex-wrap: wrap; }
 .card__fee-sep { opacity: 0.5; }
 .card__fee-ok { color: var(--color-graphite); }

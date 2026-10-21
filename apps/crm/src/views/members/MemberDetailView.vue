@@ -14,6 +14,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   members as membersApi,
+  media as mediaApi,
   ApiError,
   type RosterMember,
   type MemberRole,
@@ -29,6 +30,8 @@ import { useClubStore } from '@/stores/club'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import LogNoteModal from '@/components/modals/LogNoteModal.vue'
+import SendEmailModal from '@/components/modals/SendEmailModal.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
 import CrmEmptyState from '@/components/CrmEmptyState.vue'
 
@@ -90,6 +93,31 @@ watch(() => clubStore.current?.id, loadRoster)
 const initials = computed(() => {
   const name = member.value?.name ?? ''
   return name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?'
+})
+/** Cloudflare Images URLs look like
+ *    https://imagedelivery.net/{account_hash}/{image_id}/{variant}
+ *  — pull out the stable `image_id` so a logo served as `/public` matches
+ *  an avatar served as `/thumbnail` of the same asset. */
+function cfImageId(url: string | null | undefined): string | null {
+  if (!url) return null
+  const m = url.match(/imagedelivery\.net\/[^/]+\/([^/?#]+)/)
+  return m?.[1] ?? null
+}
+/** CF Image IDs known to be baked-in defaults from the backend (pre-brief-53).
+ *  Collapse this back to the raw `.includes('imagedelivery.net')` check once
+ *  the brief 53 backfill has swept the old defaults out of users.avatar_url. */
+const TORNY_DEFAULT_AVATAR_IDS = new Set<string>([
+  'e6f09767-ae0b-49cd-825e-3e387f4d8600', // generic Torny placeholder
+])
+const hasRealAvatar = computed(() => {
+  const url = member.value?.avatar_url
+  if (!url) return false
+  if (!url.includes('imagedelivery.net')) return false
+  const avatarId = cfImageId(url)
+  if (avatarId && TORNY_DEFAULT_AVATAR_IDS.has(avatarId)) return false
+  const logoId = cfImageId(clubStore.current?.logoUrl)
+  if (avatarId && logoId && avatarId === logoId) return false
+  return true
 })
 
 const MONTH_YEAR = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' })
@@ -193,11 +221,18 @@ async function markPaid() {
   }
   markingPaid.value = true
   try {
-    await membersApi.recordPayment(cid, m.user_id, {
+    // No season picker on this page — let the server attribute to the
+    // club's current season (brief 55). It echoes the season name back
+    // so the toast can be explicit about where the money landed.
+    const result = await membersApi.recordPayment(cid, m.user_id, {
       amount: m.membership.fee,
       payment_method: 'cash',
     })
-    toast.success('Payment recorded.')
+    toast.success(
+      result.season_name
+        ? `Payment recorded against ${result.season_name}.`
+        : 'Payment recorded.',
+    )
     await loadRoster()
   } catch (err) {
     const msg = err instanceof ApiError ? err.message : (err instanceof Error ? err.message : 'Could not record payment.')
@@ -207,13 +242,17 @@ async function markPaid() {
   }
 }
 
-function sendEmail() {
-  const email = member.value?.email
-  if (!email) return
-  window.location.href = `mailto:${email}`
-}
+// Log note + Send email live in their own modals. Both refresh the roster
+// on save so the hero / Notes tab reflect the write immediately.
+const logNoteOpen = ref(false)
+const sendEmailOpen = ref(false)
 function logNote() {
-  toast.info('Logging notes ships with the Communications brief.')
+  if (!member.value) return
+  logNoteOpen.value = true
+}
+function sendEmail() {
+  if (!member.value?.email) return
+  sendEmailOpen.value = true
 }
 
 // ── Payments history (from what the roster row exposes) ───────────
@@ -270,6 +309,47 @@ const TABS: { value: Tab; label: string; count?: number }[] = [
   { value: 'notes', label: 'Notes' },
   { value: 'settings', label: 'Settings' },
 ]
+
+// ── Avatar upload / remove ────────────────────────────────────────
+// Three-step dance per the "Member Avatars" brief: ask for a signed
+// upload URL, POST the file to Cloudflare, then PATCH the member with
+// the returned avatar URL. The backend auto-deletes the previously
+// stored image when `avatar_url` changes, so no explicit cleanup call.
+const avatarInputEl = ref<HTMLInputElement | null>(null)
+const avatarBusy = ref(false)
+function pickAvatar() {
+  if (!callerCanEdit.value || avatarBusy.value) return
+  avatarInputEl.value?.click()
+}
+async function onAvatarFile(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  // Clear the input so re-picking the same file re-fires `change`.
+  input.value = ''
+  if (!file) return
+  const m = member.value
+  const cid = clubStore.current?.id
+  if (!m || cid == null) return
+  if (!file.type.startsWith('image/')) {
+    toast.error('Pick an image file (JPEG, PNG, or WebP).')
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    toast.error('Image is over 10 MB — pick something smaller.')
+    return
+  }
+  avatarBusy.value = true
+  try {
+    const confirmed = await mediaApi.uploadMemberAvatar(m.user_id, file)
+    await membersApi.patchMember(cid, m.user_id, { avatar_url: confirmed.avatar_url })
+    await loadRoster()
+    toast.success('Photo updated.')
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Could not upload photo.')
+  } finally {
+    avatarBusy.value = false
+  }
+}
 
 // ── Edit modal ────────────────────────────────────────────────────
 // One PATCH posts the whole 12-field Member Detail form. Fields split
@@ -592,9 +672,31 @@ async function submitEdit() {
       <template v-else-if="member">
         <!-- Hero card -->
         <section class="member-detail__hero">
-          <div class="member-detail__avatar" :class="{ 'member-detail__avatar--image': member.avatar_url }">
-            <img v-if="member.avatar_url" :src="member.avatar_url" :alt="member.name" />
-            <template v-else>{{ initials }}</template>
+          <div class="member-detail__avatar-wrap">
+            <button
+              type="button"
+              class="member-detail__avatar"
+              :class="{ 'member-detail__avatar--image': hasRealAvatar, 'member-detail__avatar--editable': callerCanEdit, 'member-detail__avatar--busy': avatarBusy }"
+              :disabled="!callerCanEdit || avatarBusy"
+              :aria-label="hasRealAvatar ? 'Change photo' : 'Upload photo'"
+              @click="pickAvatar"
+            >
+              <img v-if="hasRealAvatar" :src="member.avatar_url!" :alt="member.name" />
+              <template v-else>{{ initials }}</template>
+              <span v-if="avatarBusy" class="member-detail__avatar-spin" aria-hidden="true">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+              </span>
+              <span v-else-if="callerCanEdit" class="member-detail__avatar-camera" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              </span>
+            </button>
+            <input
+              ref="avatarInputEl"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              class="member-detail__avatar-input"
+              @change="onAvatarFile"
+            />
           </div>
           <div class="member-detail__hero-body">
             <div class="member-detail__hero-line">
@@ -1028,6 +1130,21 @@ async function submitEdit() {
         </button>
       </template>
     </CrmModal>
+
+    <LogNoteModal
+      :open="logNoteOpen"
+      :club-id="clubStore.current?.id ?? null"
+      :member="member"
+      @close="logNoteOpen = false"
+      @saved="loadRoster"
+    />
+
+    <SendEmailModal
+      :open="sendEmailOpen"
+      :club-id="clubStore.current?.id ?? null"
+      :member="member"
+      @close="sendEmailOpen = false"
+    />
   </div>
 </template>
 
@@ -1077,15 +1194,40 @@ async function submitEdit() {
   border: 1px solid var(--color-hairline);
   border-radius: 16px;
 }
+.member-detail__avatar-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
 .member-detail__avatar {
+  position: relative;
   width: 88px; height: 88px; border-radius: 999px;
   background: var(--color-graphite); color: #fff;
   display: inline-flex; align-items: center; justify-content: center;
   font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -0.01em;
   flex-shrink: 0; overflow: hidden;
+  border: 0; padding: 0; cursor: default;
 }
+.member-detail__avatar--editable { cursor: pointer; }
+.member-detail__avatar--editable:hover .member-detail__avatar-camera { opacity: 1; }
+.member-detail__avatar--busy { opacity: 0.6; cursor: wait; }
 .member-detail__avatar--image { background: var(--color-surface); }
 .member-detail__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.member-detail__avatar-camera {
+  position: absolute; inset: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(10, 10, 11, 0.5); color: #fff;
+  border-radius: 999px;
+  opacity: 0; transition: opacity 0.15s ease;
+}
+.member-detail__avatar-spin {
+  position: absolute; inset: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(10, 10, 11, 0.55); color: #fff;
+  border-radius: 999px;
+  animation: member-detail__avatar-spin 0.8s linear infinite;
+}
+@keyframes member-detail__avatar-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.member-detail__avatar-input { display: none; }
 
 .member-detail__hero-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .member-detail__hero-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

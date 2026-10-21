@@ -334,5 +334,5 @@ export type {
   SettingsPublishing,
   SettingsPage,
 } from './resources/clubSettings'
-export { SAM_BASE, CRM_BASE, MEDIA_BASE } from './config'
+export { SAM_BASE, CRM_BASE, MEDIA_BASE, BULK_EMAIL_BASE } from './config'
 export { ApiError, authedFetch, publicFetch, TOKEN_STORAGE_KEY } from './http'

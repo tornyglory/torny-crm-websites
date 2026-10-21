@@ -146,6 +146,35 @@ export async function uploadClubLogo(
 }
 
 /**
+ * Member avatar upload — three-step dance keyed to a `user` entity.
+ * Mirrors `uploadClubLogo` but targets `entity_type: 'user'` so the
+ * returned image gets attached to the member's user row. Caller then
+ * persists `confirmed.avatar_url` via `PATCH /clubs/:cid/members/:uid`.
+ */
+export async function uploadMemberAvatar(
+  userId: number,
+  file: File,
+  opts: { signal?: AbortSignal } = {},
+): Promise<ConfirmedImage> {
+  const { uploadUrl, imageId } = await requestUploadUrl(
+    { entity_type: 'user', entity_id: userId, content_type: 'avatar', content_id: userId },
+    { signal: opts.signal },
+  )
+
+  const form = new FormData()
+  form.append('file', file)
+  const cf = await fetch(uploadUrl, { method: 'POST', body: form, signal: opts.signal })
+  if (!cf.ok) {
+    throw new Error(`Cloudflare upload failed (${cf.status} ${cf.statusText})`)
+  }
+
+  return confirmUpload(
+    { imageId, entity_type: 'user', entity_id: userId, content_type: 'avatar', content_id: userId },
+    { signal: opts.signal },
+  )
+}
+
+/**
  * Generic club image upload — request URL, PUT to Cloudflare, confirm.
  * `contentType` picks which slot on the club record the image lives in.
  * Common choices for club-level assets:

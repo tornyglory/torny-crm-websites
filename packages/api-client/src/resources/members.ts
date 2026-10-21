@@ -451,6 +451,10 @@ export interface RecordPaymentInput {
   payment_method?: PaymentMethod
   payment_reference?: string
   notes?: string
+  /** Which season the payment attaches to. Omit → server attributes to the
+   *  club's current season (brief 55). Pass an explicit id to back-date into
+   *  a past season or pre-pay into a future one. */
+  season_id?: number
 }
 
 export interface RecordPaymentResult {
@@ -463,6 +467,11 @@ export interface RecordPaymentResult {
   payment_method: PaymentMethod
   payment_reference: string | null
   payment_status: PaymentStatus
+  /** Season the server actually attached this payment to — echoed so the
+   *  CRM can refresh the right summary panel. Null during the brief 55
+   *  transition if the server hasn't shipped season attribution yet. */
+  season_id?: number | null
+  season_name?: string | null
 }
 
 /** POST /clubs/:clubId/members — add one. Handles link / invite / stub paths. */
@@ -652,6 +661,9 @@ export interface UpdateMemberPatch {
   address?: string | null
   /** `YYYY-MM-DD`, or null to clear. */
   dob?: string | null
+  /** CDN URL (https://, ≤ 2048 chars) or null to clear.
+   *  Backend auto-deletes the previously-stored image when this changes. */
+  avatar_url?: string | null
 
   // ── Roster (→ club_members) ───────────────────────────────────────
   role?: MemberRole

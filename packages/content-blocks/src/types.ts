@@ -24,6 +24,7 @@ export type BlockType =
   | 'featureGrid'
   | 'faqAccordion'
   | 'fullBleedImage'
+  | 'fullBleedMedia'
   | 'timeline'
   | 'twoColumn'
   | 'divider'
@@ -483,6 +484,39 @@ export interface FullBleedImageProps {
   bottomCaption?: string
 }
 
+/** Cinematic hero: full-bleed autoplaying video (or still image) with
+ *  overlaid eyebrow + headline + body + two CTAs. Content can sit centred
+ *  (dramatic default) or bottom-left (editorial / event-focused). */
+export interface FullBleedMediaProps {
+  /** `video` plays a muted autoplay loop with the usual mobile-safe
+   *  attributes. `image` renders a still (same imageUrl field). */
+  mediaType?: 'video' | 'image'
+  /** MP4 (or any browser-native source) URL. Required when
+   *  mediaType === 'video'. */
+  videoUrl?: string
+  /** Poster frame shown while video loads + fallback when the browser
+   *  can't play it. Also used when mediaType === 'image'. */
+  imageUrl?: string
+  /** Where the content sits over the media. Defaults to `centre`. */
+  contentPosition?: 'centre' | 'bottom-left'
+  /** Scrim darkness over the media so copy stays readable. 0 = none,
+   *  1 = opaque. Defaults to 0.55 (centre) / 0.6 (bottom-left). */
+  overlayOpacity?: number
+  /** Small pill above the headline — brand accent dot + uppercase mono. */
+  eyebrow?: string
+  heading: string
+  /** One short paragraph under the headline. */
+  body?: string
+  primaryCta?: { label: string; href: string }
+  secondaryCta?: { label: string; href: string }
+  /** Short caption rendered beside a hairline tick at the bottom-left
+   *  (only visible on the centred layout). */
+  bottomCaption?: string
+  /** When true, hides the "tap for sound" chip. Useful if the video is
+   *  intentionally silent. */
+  hideUnmuteChip?: boolean
+}
+
 export interface TimelineEntry {
   year: string
   yearLabel?: string
@@ -544,6 +578,7 @@ export type Block =
   | BlockBase<'featureGrid', FeatureGridProps>
   | BlockBase<'faqAccordion', FaqAccordionProps>
   | BlockBase<'fullBleedImage', FullBleedImageProps>
+  | BlockBase<'fullBleedMedia', FullBleedMediaProps>
   | BlockBase<'timeline', TimelineProps>
   | BlockBase<'twoColumn', TwoColumnProps>
   | BlockBase<'divider', DividerProps>

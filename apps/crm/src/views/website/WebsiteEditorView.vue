@@ -66,6 +66,7 @@ import type {
   FaqAccordionProps,
   FaqItem,
   FullBleedImageProps,
+  FullBleedMediaProps,
   TimelineProps,
   TimelineEntry,
   TwoColumnProps,
@@ -286,6 +287,20 @@ const fullBleedImageDefault = (): FullBleedImageProps => ({
   overlayOpacity: 0.35,
 })
 
+const fullBleedMediaDefault = (): FullBleedMediaProps => ({
+  mediaType: 'video',
+  videoUrl: '',
+  imageUrl: '',
+  contentPosition: 'centre',
+  overlayOpacity: 0.55,
+  eyebrow: 'Est. 1953 · Hutt Valley',
+  heading: 'Where the green meets the evening.',
+  body: 'Mixed-membership twilights every Friday from October to March. Grab a mat, meet the neighbours, bowls until the lights go out.',
+  primaryCta: { label: 'Join the club', href: '/membership' },
+  secondaryCta: { label: 'Watch the roll-up', href: '#video' },
+  bottomCaption: 'Film · Opening night 2026',
+})
+
 const timelineDefault = (): TimelineProps => ({
   eyebrow: 'Milestones · 1953 – 2026',
   heading: 'Seventy-three years, in short.',
@@ -335,6 +350,8 @@ const EDITORIAL_PALETTE = [
     defaults: () => faqAccordionDefault() },
   { type: 'fullBleedImage' as const, label: 'Full-bleed image', hint: 'A big picture with a CTA', icon: '◪',
     defaults: () => fullBleedImageDefault() },
+  { type: 'fullBleedMedia' as const, label: 'Full-bleed video / image', hint: 'Cinematic hero — video or still, headline on top', icon: '▶',
+    defaults: () => fullBleedMediaDefault() },
   { type: 'timeline' as const, label: 'Timeline', hint: 'Milestones by year', icon: '⌘',
     defaults: () => timelineDefault() },
   { type: 'twoColumn' as const, label: 'Two-column text', hint: 'Side-by-side text columns', icon: '║',
@@ -717,6 +734,7 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   featureGrid: 'Feature grid',
   faqAccordion: 'FAQ',
   fullBleedImage: 'Full-bleed image',
+  fullBleedMedia: 'Full-bleed video / image',
   timeline: 'Timeline',
   twoColumn: 'Two-column text',
   divider: 'Divider',
@@ -1336,6 +1354,7 @@ function blockSummary(block: Block): string {
     case 'featureGrid':   return (block.props as FeatureGridProps).heading || `${(block.props as FeatureGridProps).items.length} features`
     case 'faqAccordion':  return (block.props as FaqAccordionProps).heading || `${(block.props as FaqAccordionProps).items.length} questions`
     case 'fullBleedImage':return (block.props as FullBleedImageProps).heading || '(no heading)'
+    case 'fullBleedMedia':return (block.props as FullBleedMediaProps).heading || '(no heading)'
     case 'timeline':      return (block.props as TimelineProps).heading || `${(block.props as TimelineProps).entries.length} milestones`
     case 'twoColumn':     return (block.props as TwoColumnProps).heading || 'Two-column text'
     case 'divider':       return `Divider · ${(block.props as DividerProps).variant ?? 'hairline'}`
@@ -2775,6 +2794,139 @@ const lastSavedLabel = computed(() => {
             </label>
           </template>
 
+          <!-- Full-bleed video / image (cinematic hero) -->
+          <template v-else-if="selectedBlock.type === 'fullBleedMedia'">
+            <!-- Media type picker. Video needs a URL; image reuses the usual
+                 picker. Both can co-exist — the video poster falls back to
+                 the image when the browser blocks autoplay. -->
+            <div class="field">
+              <span class="field__label">Media type</span>
+              <div class="seg">
+                <button
+                  type="button"
+                  class="seg__btn"
+                  :class="{ 'seg__btn--active': ((selectedBlock!.props as FullBleedMediaProps).mediaType ?? 'video') === 'video' }"
+                  @click="(selectedBlock!.props as FullBleedMediaProps).mediaType = 'video'"
+                >Video</button>
+                <button
+                  type="button"
+                  class="seg__btn"
+                  :class="{ 'seg__btn--active': (selectedBlock!.props as FullBleedMediaProps).mediaType === 'image' }"
+                  @click="(selectedBlock!.props as FullBleedMediaProps).mediaType = 'image'"
+                >Image</button>
+              </div>
+              <span class="field__hint">Video autoplays muted on loop (mobile-safe). Image is a plain still background.</span>
+            </div>
+
+            <label v-if="((selectedBlock!.props as FullBleedMediaProps).mediaType ?? 'video') === 'video'" class="field">
+              <span class="field__label">Video URL</span>
+              <input
+                v-model="(selectedBlock!.props as FullBleedMediaProps).videoUrl"
+                type="url"
+                placeholder="https://cdn.example.com/hero.mp4"
+              />
+              <span class="field__hint">Hosted .mp4 (or .webm). Keep it under 10 MB — bg video should be short &amp; silent.</span>
+            </label>
+
+            <div class="field">
+              <ImagePicker
+                v-model="(selectedBlock!.props as FullBleedMediaProps).imageUrl"
+                :page-slug="currentPage"
+                :block-id="selectedBlock!.id"
+                :label="((selectedBlock!.props as FullBleedMediaProps).mediaType ?? 'video') === 'video' ? 'Poster frame (shown while video loads)' : 'Background image'"
+                aspect="16 / 9"
+              />
+            </div>
+
+            <!-- Position + scrim controls -->
+            <div class="field">
+              <span class="field__label">Content position</span>
+              <div class="seg">
+                <button
+                  type="button"
+                  class="seg__btn"
+                  :class="{ 'seg__btn--active': ((selectedBlock!.props as FullBleedMediaProps).contentPosition ?? 'centre') === 'centre' }"
+                  @click="(selectedBlock!.props as FullBleedMediaProps).contentPosition = 'centre'"
+                >Centre</button>
+                <button
+                  type="button"
+                  class="seg__btn"
+                  :class="{ 'seg__btn--active': (selectedBlock!.props as FullBleedMediaProps).contentPosition === 'bottom-left' }"
+                  @click="(selectedBlock!.props as FullBleedMediaProps).contentPosition = 'bottom-left'"
+                >Bottom-left</button>
+              </div>
+              <span class="field__hint">Centre is the dramatic default. Bottom-left is editorial / event-focused.</span>
+            </div>
+
+            <label class="field">
+              <span class="field__label">Overlay darkness</span>
+              <input v-model.number="(selectedBlock!.props as FullBleedMediaProps).overlayOpacity" type="number" min="0" max="1" step="0.05" />
+              <span class="field__hint">0 = clear, 1 = solid. Default 0.55.</span>
+            </label>
+
+            <!-- Content -->
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock!.props as FullBleedMediaProps).eyebrow" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <textarea v-model="(selectedBlock!.props as FullBleedMediaProps).heading" rows="2" />
+            </label>
+            <label class="field">
+              <span class="field__label">Body</span>
+              <textarea v-model="(selectedBlock!.props as FullBleedMediaProps).body" rows="3" />
+            </label>
+
+            <!-- CTAs -->
+            <div class="field__group">
+              <div class="field__group-title">Primary CTA</div>
+              <label class="field">
+                <span class="field__label">Label</span>
+                <input :value="(selectedBlock!.props as FullBleedMediaProps).primaryCta?.label ?? ''"
+                       @input="e => (selectedBlock!.props as FullBleedMediaProps).primaryCta = { label: (e.target as HTMLInputElement).value, href: (selectedBlock!.props as FullBleedMediaProps).primaryCta?.href ?? '' }"
+                       type="text" />
+              </label>
+              <label class="field">
+                <span class="field__label">Link</span>
+                <input :value="(selectedBlock!.props as FullBleedMediaProps).primaryCta?.href ?? ''"
+                       @input="e => (selectedBlock!.props as FullBleedMediaProps).primaryCta = { label: (selectedBlock!.props as FullBleedMediaProps).primaryCta?.label ?? '', href: (e.target as HTMLInputElement).value }"
+                       type="text" />
+              </label>
+            </div>
+            <div class="field__group">
+              <div class="field__group-title">Secondary CTA (optional)</div>
+              <label class="field">
+                <span class="field__label">Label</span>
+                <input :value="(selectedBlock!.props as FullBleedMediaProps).secondaryCta?.label ?? ''"
+                       @input="e => (selectedBlock!.props as FullBleedMediaProps).secondaryCta = { label: (e.target as HTMLInputElement).value, href: (selectedBlock!.props as FullBleedMediaProps).secondaryCta?.href ?? '' }"
+                       type="text" />
+              </label>
+              <label class="field">
+                <span class="field__label">Link</span>
+                <input :value="(selectedBlock!.props as FullBleedMediaProps).secondaryCta?.href ?? ''"
+                       @input="e => (selectedBlock!.props as FullBleedMediaProps).secondaryCta = { label: (selectedBlock!.props as FullBleedMediaProps).secondaryCta?.label ?? '', href: (e.target as HTMLInputElement).value }"
+                       type="text" />
+              </label>
+            </div>
+
+            <label class="field">
+              <span class="field__label">Bottom caption (centre layout only)</span>
+              <input v-model="(selectedBlock!.props as FullBleedMediaProps).bottomCaption" type="text" />
+            </label>
+
+            <label v-if="((selectedBlock!.props as FullBleedMediaProps).mediaType ?? 'video') === 'video'" class="field field--inline">
+              <input
+                v-model="(selectedBlock!.props as FullBleedMediaProps).hideUnmuteChip"
+                type="checkbox"
+              />
+              <span class="field__inline-copy">
+                <span class="field__label">Hide "tap for sound" chip</span>
+                <span class="field__hint">On if the video is intentionally silent or b-roll only.</span>
+              </span>
+            </label>
+          </template>
+
           <!-- Timeline -->
           <template v-else-if="selectedBlock.type === 'timeline'">
             <label class="field">
@@ -3357,6 +3509,20 @@ const lastSavedLabel = computed(() => {
 .chip-picker__item:has(input:checked) { background: var(--color-ink); color: #fff; border-color: var(--color-ink); font-weight: 600; }
 .chip-picker__item input { appearance: none; margin: 0; }
 .field__group-title { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+
+/* Segmented control inside the settings panel — used by blocks that need
+ * a 2-way or 3-way picker (media type / content position / etc). Matches
+ * the pill-tab styling used elsewhere in the CRM. */
+.seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--color-surface); border: 1px solid var(--color-hairline); gap: 2px; }
+.seg__btn { padding: 7px 14px; border: 0; background: transparent; border-radius: 7px; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-fog); cursor: pointer; }
+.seg__btn:hover:not(.seg__btn--active) { color: var(--color-ink); }
+.seg__btn--active { background: #fff; color: var(--color-ink); font-weight: 600; box-shadow: 0 1px 2px rgba(10,10,11,0.08); }
+
+/* Inline checkbox + label — lighter touch than the full switch-row for
+ * single boolean opt-ins. */
+.field--inline { flex-direction: row; align-items: flex-start; gap: 10px; }
+.field--inline input[type="checkbox"] { width: 16px; height: 16px; margin-top: 2px; padding: 0; }
+.field__inline-copy { display: flex; flex-direction: column; gap: 2px; }
 
 .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .switch-row__label { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }

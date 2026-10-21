@@ -70,6 +70,7 @@ const TAGS_BY_TYPE: Record<BlockType, Tag[]> = {
   featureGrid:    ['layout', 'data'],
   faqAccordion:   ['forms', 'text'],
   fullBleedImage: ['layout', 'media'],
+  fullBleedMedia: ['layout', 'media'],
   timeline:       ['data'],
   twoColumn:      ['text', 'layout'],
   divider:        ['utility'],
@@ -693,6 +694,28 @@ const BlockPreview = defineComponent({
           rect(30, 48, 140, 14, { fill: '#fff' }),
           rect(70, 68, 60, 6, { fill: '#fff', opacity: 0.85 }),
           rect(80, 82, 40, 10, { fill: '#fff', rx: 5 }),
+        ])
+
+      case 'fullBleedMedia':
+        return shell([
+          rect(0, 0, 200, 120, { fill: 'url(#fbm-grad)' }),
+          h('defs', {}, [
+            h('radialGradient', { id: 'fbm-grad', cx: '70%', cy: '30%', r: '80%' }, [
+              h('stop', { offset: 0, 'stop-color': '#1E40AF' }),
+              h('stop', { offset: 0.6, 'stop-color': '#0F172A' }),
+              h('stop', { offset: 1, 'stop-color': '#050812' }),
+            ]),
+          ]),
+          rect(0, 0, 200, 120, { fill: 'rgba(10,10,11,0.5)' }),
+          // Play-triangle motif in the corner — signals "video" at a glance
+          circle(174, 18, 10, { fill: '#DC2F3B' }),
+          h('polygon', { points: '172,15 172,21 177,18', fill: '#fff' }),
+          // Centred content stack
+          rect(50, 42, 100, 7, { fill: 'rgba(255,255,255,0.9)', rx: 3.5 }),
+          rect(30, 54, 140, 14, { fill: '#fff' }),
+          rect(60, 74, 80, 5, { fill: 'rgba(255,255,255,0.75)' }),
+          rect(68, 90, 36, 10, { fill: '#fff', rx: 5 }),
+          rect(110, 90, 36, 10, { fill: 'rgba(255,255,255,0.15)', stroke: 'rgba(255,255,255,0.4)', rx: 5 }),
         ])
 
       case 'timeline':

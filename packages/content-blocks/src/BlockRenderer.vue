@@ -25,6 +25,7 @@ import PullQuoteBlock from './blocks/PullQuoteBlock.vue'
 import FeatureGridBlock from './blocks/FeatureGridBlock.vue'
 import FaqAccordionBlock from './blocks/FaqAccordionBlock.vue'
 import FullBleedImageBlock from './blocks/FullBleedImageBlock.vue'
+import FullBleedMediaBlock from './blocks/FullBleedMediaBlock.vue'
 import TimelineBlock from './blocks/TimelineBlock.vue'
 import TwoColumnBlock from './blocks/TwoColumnBlock.vue'
 import DividerBlock from './blocks/DividerBlock.vue'
@@ -58,6 +59,7 @@ defineProps<{ block: Block }>()
   <FeatureGridBlock v-else-if="block.type === 'featureGrid'" v-bind="block.props" />
   <FaqAccordionBlock v-else-if="block.type === 'faqAccordion'" v-bind="block.props" />
   <FullBleedImageBlock v-else-if="block.type === 'fullBleedImage'" v-bind="block.props" />
+  <FullBleedMediaBlock v-else-if="block.type === 'fullBleedMedia'" v-bind="block.props" />
   <TimelineBlock v-else-if="block.type === 'timeline'" v-bind="block.props" />
   <TwoColumnBlock v-else-if="block.type === 'twoColumn'" v-bind="block.props" />
   <DividerBlock v-else-if="block.type === 'divider'" v-bind="block.props" />

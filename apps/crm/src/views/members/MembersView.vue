@@ -17,7 +17,7 @@ const clubStore = useClubStore()
 const router = useRouter()
 const authStore = useAuthStore()
 
-type MemberStatus = 'Active' | 'Pending' | 'Lapsed'
+type MemberStatus = 'Active' | 'Prospect' | 'Visitor' | 'Pending' | 'Lapsed'
 type MemberRole = 'Player' | 'Committee' | 'Coach' | 'Junior' | 'Volunteer'
 /** Server-provided type_name — kept as a string since clubs can define
  *  their own tiers via the onboarding wizard. */
@@ -74,6 +74,11 @@ interface Member {
   publicVisible?: boolean
   /** Member-authored bio, shown on the public player profile. */
   bio?: string | null
+  /** Where this member came from — enquiry / application / manual / import.
+   *  Drives the "from enquiry" subline on the Prospect standing pill. */
+  source?: 'enquiry' | 'application' | 'manual' | 'import' | null
+  /** The originating enquiry / application id when source is set. */
+  sourceRefId?: number | null
 }
 
 const {
@@ -165,6 +170,8 @@ function rosterToView(r: RosterMember): Member {
   }
   const statusMap: Record<string, MemberStatus> = {
     active: 'Active',
+    prospect: 'Prospect',
+    visitor: 'Visitor',
     pending: 'Pending',
     lapsed: 'Lapsed',
   }
@@ -208,6 +215,8 @@ function rosterToView(r: RosterMember): Member {
     paymentDueDate: r.membership?.payment_due_date ?? null,
     lastPaymentDate: r.membership?.last_payment_date ?? null,
     revokedAt: r.revoked_at ?? null,
+    source: r.source ?? null,
+    sourceRefId: r.source_ref_id ?? null,
   }
 }
 
@@ -311,6 +320,8 @@ const visibleSource = computed<Member[]>(() =>
 const counts = computed(() => ({
   all: visibleSource.value.length,
   Active: visibleSource.value.filter((m) => m.status === 'Active').length,
+  Prospect: visibleSource.value.filter((m) => m.status === 'Prospect').length,
+  Visitor: visibleSource.value.filter((m) => m.status === 'Visitor').length,
   Pending: visibleSource.value.filter((m) => m.status === 'Pending').length,
   Lapsed: visibleSource.value.filter((m) => m.status === 'Lapsed').length,
 }))
@@ -433,6 +444,8 @@ function hasRealAvatar(m: Member): boolean {
 
 const statusTone: Record<MemberStatus, string> = {
   Active: 'ok',
+  Prospect: 'mute',
+  Visitor: 'warn',
   Pending: 'warn',
   Lapsed: 'danger',
 }
@@ -490,7 +503,7 @@ const duesTone: Record<DuesStatus, string> = {
  *   6. Paid up         → "Last paid {date}"
  *   7. No tier         → "No membership"
  */
-type StandingTone = 'paid' | 'due' | 'overdue' | 'waived' | 'partial' | 'invited' | 'lapsed' | 'none'
+type StandingTone = 'paid' | 'due' | 'overdue' | 'waived' | 'partial' | 'invited' | 'lapsed' | 'prospect' | 'visitor' | 'none'
 interface Standing {
   tone: StandingTone
   label: string
@@ -508,6 +521,17 @@ function formatShortDate(iso: string | null | undefined): string {
   return SHORT_DATE_FMT.format(d)
 }
 function standing(m: Member): Standing {
+  // Prospects + visitors (brief 56) have no billing — short-circuit before
+  // the payment-status fall-through so we never claim they owe anything.
+  if (m.status === 'Prospect') {
+    const sub = m.source === 'enquiry'
+      ? (m.sourceRefId != null ? `From enquiry #${m.sourceRefId}` : 'From enquiry')
+      : 'Lead · no fees owing'
+    return { tone: 'prospect', label: 'Prospect', sub }
+  }
+  if (m.status === 'Visitor') {
+    return { tone: 'visitor', label: 'Visitor', sub: 'Guest · no fees owing' }
+  }
   if (m.status === 'Lapsed') {
     const on = formatShortDate(m.revokedAt)
     return { tone: 'lapsed', label: 'Lapsed', sub: on ? `Left ${on}` : 'No active membership' }
@@ -988,7 +1012,9 @@ function removeErrorCopy(err: unknown): string {
 const addOpen = ref(false)
 const addSubmitting = ref(false)
 const addError = ref<string | null>(null)
+type AddType = 'member' | 'prospect' | 'visitor'
 const emptyForm = () => ({
+  type: 'member' as AddType,
   firstName: '',
   lastName: '',
   email: '',
@@ -999,6 +1025,11 @@ const emptyForm = () => ({
   markPending: true,
 })
 const form = reactive(emptyForm())
+const ADD_TYPES: { value: AddType; label: string; hint: string }[] = [
+  { value: 'member',   label: 'Member',   hint: 'Paying — resolves a tier, optional invite.' },
+  { value: 'prospect', label: 'Prospect', hint: 'Lead — no tier, no invite, no subs.' },
+  { value: 'visitor',  label: 'Visitor',  hint: 'Casual guest — no tier, no invite, no subs.' },
+]
 
 function openAdd() {
   Object.assign(form, emptyForm())
@@ -1035,6 +1066,7 @@ async function submit() {
   }
   addSubmitting.value = true
   addError.value = null
+  const isPaying = form.type === 'member'
   try {
     const result = await membersApi.add(cid, {
       email: form.email.trim(),
@@ -1043,27 +1075,33 @@ async function submit() {
       phone: form.phone.trim() || undefined,
       role: toApiRole(form.role),
       title: form.role === 'Coach' || form.role === 'Junior' || form.role === 'Volunteer' ? form.role : undefined,
-      membership_type_id: tierIdForMembership(form.membership),
-      membership_type: form.membership,
-      send_invite: form.sendInvite,
+      // Tier + invite are only wired for paying members. Server ignores
+      // them for prospect/visitor anyway (see brief 56 §2), but omitting
+      // keeps the payload honest.
+      membership_type_id: isPaying ? tierIdForMembership(form.membership) : undefined,
+      membership_type: isPaying ? form.membership : undefined,
+      send_invite: isPaying ? form.sendInvite : false,
+      member_status: form.type,
     })
     const name = `${form.firstName.trim()} ${form.lastName.trim()}`
+    const typeLabel = form.type === 'prospect' ? 'as prospect' : form.type === 'visitor' ? 'as visitor' : ''
     switch (result.resolution) {
-      case 'linked':       toast.success(`${name} linked from an existing Torny user.`); break
-      case 'relinked':     toast.success(`${name} was previously removed — re-linked with their old member number.`); break
+      case 'linked':       toast.success(`${name} linked from an existing Torny user${typeLabel ? ' ' + typeLabel : ''}.`); break
+      case 'relinked':     toast.success(`${name} was previously removed — re-linked${typeLabel ? ' ' + typeLabel : ''}.`); break
       case 'invited':      toast.success(`Invite emailed to ${form.email.trim()}.`); break
-      case 'stub_created': toast.success(`${name} added.`); break
+      case 'stub_created': toast.success(`${name} added${typeLabel ? ' ' + typeLabel : ''}.`); break
     }
     closeAdd()
     await Promise.all([loadRoster(), loadSummary()])
   } catch (err) {
     if (err instanceof ApiError) {
       switch (err.code) {
-        case 'already_member': addError.value = 'That email is already an active member.'; break
-        case 'invite_exists':  addError.value = 'A pending invite already exists for that email.'; break
-        case 'invalid_email':  addError.value = 'That email isn\'t valid.'; break
-        case 'unknown_type':   addError.value = 'That membership tier isn\'t on this club yet — finish onboarding first.'; break
-        default:               addError.value = err.message
+        case 'already_member':         addError.value = 'That email is already an active member.'; break
+        case 'invite_exists':          addError.value = 'A pending invite already exists for that email.'; break
+        case 'invalid_email':          addError.value = 'That email isn\'t valid.'; break
+        case 'unknown_type':           addError.value = 'That membership tier isn\'t on this club yet — finish onboarding first.'; break
+        case 'invalid_member_status':  addError.value = 'That member type isn\'t supported.'; break
+        default:                       addError.value = err.message
       }
     } else {
       addError.value = (err as Error).message
@@ -1192,7 +1230,7 @@ async function submit() {
     <div class="filters">
       <div class="chips">
         <button
-          v-for="tab in (['all', 'Active', 'Pending', 'Lapsed'] as const)"
+          v-for="tab in (['all', 'Active', 'Prospect', 'Visitor', 'Pending', 'Lapsed'] as const)"
           :key="tab"
           class="chip"
           :class="{ 'is-active': statusFilter === tab }"
@@ -1719,6 +1757,24 @@ async function submit() {
       @close="closeAdd"
     >
       <form class="form" @submit.prevent="submit">
+        <!-- Type picker: paying member vs prospect/visitor (brief 56).
+             Non-member types hide tier + invite + pending switches. -->
+        <div class="type-picker" role="radiogroup" aria-label="Member type">
+          <button
+            v-for="t in ADD_TYPES"
+            :key="t.value"
+            type="button"
+            class="type-picker__option"
+            :class="{ 'type-picker__option--active': form.type === t.value }"
+            role="radio"
+            :aria-checked="form.type === t.value"
+            @click="form.type = t.value"
+          >
+            <span class="type-picker__label">{{ t.label }}</span>
+            <span class="type-picker__hint">{{ t.hint }}</span>
+          </button>
+        </div>
+
         <div class="form__row">
           <label class="field">
             <span class="field__label">First name</span>
@@ -1733,7 +1789,7 @@ async function submit() {
           <span class="field__label">Email</span>
           <input v-model="form.email" type="email" placeholder="member@example.com" />
         </label>
-        <div class="form__row">
+        <div class="form__row" v-if="form.type !== 'visitor'">
           <label class="field">
             <span class="field__label">Phone</span>
             <input v-model="form.phone" type="tel" placeholder="021 555 0000" />
@@ -1749,7 +1805,11 @@ async function submit() {
             </select>
           </label>
         </div>
-        <label class="field">
+        <label v-else class="field">
+          <span class="field__label">Phone</span>
+          <input v-model="form.phone" type="tel" placeholder="021 555 0000" />
+        </label>
+        <label v-if="form.type === 'member'" class="field">
           <span class="field__label">Membership</span>
           <select v-model="form.membership">
             <option>Playing member</option>
@@ -1759,30 +1819,38 @@ async function submit() {
           </select>
         </label>
 
-        <div class="switch-row">
-          <div>
-            <div class="switch-row__label">Send an email invite</div>
-            <div class="switch-row__hint">Prompts them to set a password and download the Torny app.</div>
+        <template v-if="form.type === 'member'">
+          <div class="switch-row">
+            <div>
+              <div class="switch-row__label">Send an email invite</div>
+              <div class="switch-row__hint">Prompts them to set a password and download the Torny app.</div>
+            </div>
+            <button
+              type="button"
+              class="switch"
+              :class="{ 'is-on': form.sendInvite }"
+              @click="form.sendInvite = !form.sendInvite"
+            ><span class="switch__knob" /></button>
           </div>
-          <button
-            type="button"
-            class="switch"
-            :class="{ 'is-on': form.sendInvite }"
-            @click="form.sendInvite = !form.sendInvite"
-          ><span class="switch__knob" /></button>
-        </div>
-        <div class="switch-row">
-          <div>
-            <div class="switch-row__label">Mark as pending</div>
-            <div class="switch-row__hint">They'll appear as pending until they confirm dues.</div>
+          <div class="switch-row">
+            <div>
+              <div class="switch-row__label">Mark as pending</div>
+              <div class="switch-row__hint">They'll appear as pending until they confirm dues.</div>
+            </div>
+            <button
+              type="button"
+              class="switch"
+              :class="{ 'is-on': form.markPending }"
+              @click="form.markPending = !form.markPending"
+            ><span class="switch__knob" /></button>
           </div>
-          <button
-            type="button"
-            class="switch"
-            :class="{ 'is-on': form.markPending }"
-            @click="form.markPending = !form.markPending"
-          ><span class="switch__knob" /></button>
-        </div>
+        </template>
+
+        <p v-else class="form__hint">
+          {{ form.type === 'prospect'
+            ? 'Prospects don\'t get a tier, invite, or subs invoice. Promote them later from Member Detail.'
+            : 'Visitors are tracked for the roster + roll-ups. No tier, no invite, no subs.' }}
+        </p>
 
         <p v-if="addError" class="add-error">{{ addError }}</p>
       </form>
@@ -1899,6 +1967,8 @@ async function submit() {
 .standing-pill--invited  { background: var(--color-accent-soft); color: var(--color-accent); }
 .standing-pill--lapsed   { background: var(--color-surface); color: var(--color-fog); border: 1px solid var(--color-hairline); }
 .standing-pill--none     { background: var(--color-surface); color: var(--color-mute); border: 1px dashed var(--color-hairline); }
+.standing-pill--prospect { background: var(--color-surface); color: var(--color-graphite); border: 1px dashed var(--color-fog); }
+.standing-pill--visitor  { background: #FEF3C7; color: #78350F; }
 .row__chev { text-align: right; color: var(--color-mute); font-size: 18px; padding-right: 20px; width: 24px; }
 .row--skeleton { cursor: default; }
 .row--skeleton:hover { background: transparent; }
@@ -2105,6 +2175,18 @@ async function submit() {
 .modal__foot-spacer { flex: 1; }
 
 .add-error { padding: 10px 12px; background: #FEE2E2; color: #991B1B; border-radius: 10px; font-family: var(--font-body); font-size: 13px; margin: 0; }
+
+/* Type picker (brief 56): segmented control at top of Add Member modal.
+ * Non-member types trim the form down to identity + role. */
+.type-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px; border-radius: 12px; background: var(--color-surface); margin-bottom: 4px; }
+.type-picker__option { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 12px; border: 0; border-radius: 9px; background: transparent; cursor: pointer; text-align: left; transition: background 0.1s ease; }
+.type-picker__option:hover:not(.type-picker__option--active) { background: color-mix(in srgb, var(--color-hairline) 50%, transparent); }
+.type-picker__option--active { background: var(--color-ink); }
+.type-picker__option--active .type-picker__label { color: #fff; }
+.type-picker__option--active .type-picker__hint { color: rgba(255, 255, 255, 0.72); }
+.type-picker__label { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
+.type-picker__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); line-height: 1.4; }
+.form__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); line-height: 1.5; margin: 0; padding: 10px 12px; background: var(--color-surface); border-radius: 8px; }
 
 .season-picker { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 32px 0 14px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; cursor: pointer; }
 .season-picker:hover { border-color: var(--color-mute); }

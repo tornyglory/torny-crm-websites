@@ -11,7 +11,20 @@ import { authedFetch, publicFetch } from '../http'
 
 // ── Types ─────────────────────────────────────────────────────────
 
-export type MemberStatus = 'active' | 'pending' | 'lapsed'
+export type MemberStatus = 'active' | 'prospect' | 'visitor' | 'pending' | 'lapsed'
+
+/** The stored type on `club_members.member_status` (brief 56). This is
+ *  the field the admin sets when adding someone to the roster; the pill
+ *  colour on the UI should read `computed_status` which already folds
+ *  this + membership state into one value. Default on existing rows is
+ *  `'member'` (backfilled by the migration). */
+export type MemberType = 'member' | 'prospect' | 'visitor'
+
+/** How this member was first attached to the club — set by the backend on
+ *  insert so the roster + Member Detail page can show provenance (brief 56
+ *  §4a). `'enquiry'` + `'application'` carry a `source_ref_id` pointing at
+ *  the originating row; `'manual'` + `'import'` leave it null. */
+export type MemberSource = 'enquiry' | 'application' | 'manual' | 'import'
 export type MemberRole = 'owner' | 'admin' | 'committee' | 'player'
 export type MembershipCadence = 'annual' | 'monthly' | 'season'
 export type MembershipTone = 'accent' | 'mint' | 'tangerine' | 'violet'
@@ -60,6 +73,12 @@ export interface RosterMember {
   avatar_url: string | null
   member_number: number | null
   club_role: MemberRole
+  /** Stored roster type — the admin-chosen label. `'member'` for paying
+   *  (or paying-eligible) members; `'prospect'` + `'visitor'` are
+   *  non-paying rows with no `club_memberships` row attached. Optional
+   *  until the backend backfill reaches every row — missing is treated as
+   *  `'member'` by the UI. */
+  member_status?: MemberType
   computed_status: MemberStatus
   /** ISO 8601 UTC — when the club_members row was created. Null for
    *  self-declared / pending rows that never got a club_members row. */
@@ -89,6 +108,13 @@ export interface RosterMember {
    *  graded or play social-only. */
   playing_level: PlayingLevel | null
   membership: RosterMembership | null
+  /** Provenance — how this row was first attached to the club (brief 56
+   *  §4a). Optional until the backend backfill ships; pre-brief rows are
+   *  treated as `'manual'` by the UI. */
+  source?: MemberSource
+  /** Enquiry / application id this member was converted from, when
+   *  `source` is `'enquiry'` or `'application'`. Null otherwise. */
+  source_ref_id?: number | null
 }
 
 export interface RosterCounts {
@@ -97,6 +123,10 @@ export interface RosterCounts {
   pending: number
   lapsed: number
   pending_invites: number
+  /** Non-paying roster rows added as leads (brief 56). */
+  prospect?: number
+  /** Non-paying roster rows added as casual guest players (brief 56). */
+  visitor?: number
 }
 
 export interface RosterPagination {
@@ -226,6 +256,8 @@ export interface MembersSummary {
     pending: number
     lapsed: number
     pending_invites?: number
+    /** Prospect members — brief 56. Optional until the backend ships. */
+    prospect?: number
   }
   top_tiers: SummaryTopTier[]
   period_start: string | null
@@ -408,6 +440,11 @@ export interface AddMemberInput {
   membership_type_id?: number
   membership_type?: string
   send_invite?: boolean
+  /** Roster type (brief 56). Omit or pass `'member'` to run the normal
+   *  tier + invite path. `'prospect'` / `'visitor'` tell the server to
+   *  skip tier resolution + skip the invite email — any tier fields are
+   *  silently ignored, `send_invite` is forced to false. */
+  member_status?: MemberType
 }
 
 /** Error codes POST /clubs/:clubId/members can return. */
@@ -418,6 +455,7 @@ export type AddMemberErrorCode =
   | 'invalid_title'
   | 'unknown_type'
   | 'email_in_use'
+  | 'invalid_member_status'
 
 export interface AddMemberResult {
   resolution: AddMemberResolution
@@ -425,8 +463,13 @@ export interface AddMemberResult {
   invite_id?: number
   club_id: number
   role: MemberRole
+  /** Not allocated for `prospect`/`visitor` on first add — the backend
+   *  waits until the row flips to `'member'` with a tier (brief 56 §9). */
   member_number?: number
   membership_type_id?: number
+  /** Echoed from input so the CRM doesn't have to re-GET to render the
+   *  pill. Null-safe: missing on legacy rows. */
+  member_status?: MemberType
   accept_url?: string
   expires_in_days?: number
 }

@@ -13,12 +13,15 @@ import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
 import {
   enquiries as enquiriesApi,
+  members as membersApi,
   ApiError,
   type EnquiryDetail,
   type EnquiryStatus,
   type EnquiryTopic,
+  type MembershipTierListItem,
 } from '@torny/api-client'
 import SendEmailModal, { type EmailRecipient, type SendEmailPayload } from '@/components/modals/SendEmailModal.vue'
+import CrmModal from '@/components/modals/CrmModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -212,6 +215,144 @@ async function sendEmailViaReply(payload: SendEmailPayload) {
   await loadDetail()
 }
 
+// ── Convert enquiry → roster row ──────────────────────────────
+// Backend didn't ship a dedicated /convert endpoint — we use the existing
+// members.add path with `member_status: 'prospect' | 'visitor' | 'member'`
+// and archive the enquiry on success so it leaves the inbox. Audit link
+// relies on the server-side `source='enquiry', source_ref_id=<enquiry_id>`
+// stamp (brief 56 §4a) — we don't track it client-side.
+type ConvertType = 'prospect' | 'visitor' | 'member'
+const convertOpen = ref(false)
+const converting = ref(false)
+const convertError = ref<string | null>(null)
+const convertTiers = ref<MembershipTierListItem[]>([])
+const convertTiersLoading = ref(false)
+const convertForm = ref({
+  type: 'prospect' as ConvertType,
+  membership_type_id: null as number | null,
+  send_invite: false,
+  note: '',
+})
+const CONVERT_TYPES: { value: ConvertType; label: string; hint: string }[] = [
+  { value: 'prospect', label: 'Prospect', hint: 'Lead — no tier, no invite, no subs.' },
+  { value: 'visitor',  label: 'Visitor',  hint: 'Casual guest — no tier, no invite, no subs.' },
+  { value: 'member',   label: 'Member',   hint: 'Paying — pick a tier, optionally invite.' },
+]
+
+async function openConvert() {
+  if (!detail.value) return
+  if (detail.value.status === 'archived') return
+  convertForm.value = { type: 'prospect', membership_type_id: null, send_invite: false, note: '' }
+  convertError.value = null
+  convertOpen.value = true
+  // Lazy-load tiers once; a cold open shouldn't block showing the modal.
+  if (convertTiers.value.length === 0 && !convertTiersLoading.value) {
+    const cid = clubStore.current?.id
+    if (typeof cid === 'number') {
+      convertTiersLoading.value = true
+      try {
+        const res = await membersApi.listTiers(cid)
+        convertTiers.value = res.tiers
+      } catch {
+        // Non-fatal — modal still works for prospect/visitor paths.
+      } finally {
+        convertTiersLoading.value = false
+      }
+    }
+  }
+}
+
+function closeConvert() {
+  if (converting.value) return
+  convertOpen.value = false
+}
+
+/** Split a single `full_name` into first + last on first whitespace. */
+function splitName(full: string): { first: string; last: string } {
+  const trimmed = full.trim()
+  const idx = trimmed.indexOf(' ')
+  if (idx < 0) return { first: trimmed, last: '' }
+  return { first: trimmed.slice(0, idx), last: trimmed.slice(idx + 1) }
+}
+
+async function submitConvert() {
+  const cid = clubStore.current?.id
+  const d = detail.value
+  if (typeof cid !== 'number' || !d) return
+  const { type } = convertForm.value
+  const isPaying = type === 'member'
+  converting.value = true
+  convertError.value = null
+  try {
+    const { first, last } = splitName(d.full_name)
+    const result = await membersApi.add(cid, {
+      email: d.email,
+      first_name: first,
+      last_name: last,
+      phone: d.phone ?? undefined,
+      role: 'player',
+      member_status: type,
+      membership_type_id: isPaying ? (convertForm.value.membership_type_id ?? undefined) : undefined,
+      send_invite: isPaying ? convertForm.value.send_invite : false,
+    })
+    // Document the conversion on the enquiry's internal notes thread so
+    // the trail stays complete (backend doesn't stamp this for us).
+    const typeLabel = type === 'prospect' ? 'prospect' : type === 'visitor' ? 'visitor' : 'paying member'
+    const memberLabel = result.member_number != null ? `#${result.member_number}` : `user ${result.user_id}`
+    const trail = `Converted to ${typeLabel} ${memberLabel} on ${new Date().toISOString().slice(0, 10)}.`
+    try {
+      const userNote = convertForm.value.note.trim()
+      await enquiriesApi.addNote(cid, d.id, userNote ? `${trail}\n\n${userNote}` : trail)
+    } catch {
+      // Non-fatal — the member row already exists, so swallow note errors.
+    }
+    // Archive the enquiry so it leaves the inbox. Non-fatal on failure.
+    try {
+      await enquiriesApi.archive(cid, d.id, { reason: 'resolved' })
+    } catch {
+      // Non-fatal — admin can archive manually later.
+    }
+    const verb = result.resolution === 'invited'
+      ? 'Invite sent'
+      : type === 'visitor'
+        ? 'Added as visitor'
+        : type === 'prospect'
+          ? 'Added as prospect'
+          : 'Added as member'
+    toast.success(`${verb} — ${memberLabel}`)
+    convertOpen.value = false
+    if (result.user_id != null) router.push(`/crm/members/${result.user_id}`)
+  } catch (err) {
+    if (err instanceof ApiError) {
+      // Already-a-member: route the admin to the existing record so they
+      // can see what's going on instead of being stuck in the modal.
+      if (err.code === 'already_member') {
+        const body = (err.body ?? {}) as { user_id?: number; member_number?: number | null }
+        if (typeof body.user_id === 'number') {
+          const label = body.member_number != null ? `#${body.member_number}` : `user ${body.user_id}`
+          toast.info(`${d.email} is already on the roster (${label}).`)
+          convertOpen.value = false
+          router.push(`/crm/members/${body.user_id}`)
+          return
+        }
+        convertError.value = `${d.email} is already on the roster.`
+        return
+      }
+      switch (err.code) {
+        case 'invalid_email':         convertError.value = "That email isn't valid."; break
+        case 'invite_exists':         convertError.value = 'A pending invite already exists for that email.'; break
+        case 'unknown_type':          convertError.value = "That tier isn't on this club."; break
+        case 'invalid_member_status': convertError.value = "That member type isn't supported."; break
+        default:                      convertError.value = err.message
+      }
+    } else {
+      convertError.value = err instanceof Error ? err.message : 'Could not convert the enquiry.'
+    }
+  } finally {
+    converting.value = false
+  }
+}
+
 // ── Archive / unarchive ───────────────────────────────────────
 const archiving = ref(false)
 
@@ -251,6 +392,18 @@ async function toggleArchive() {
         <span class="pill" :class="`pill--${statusTone[detail.status]}`">{{ statusLabel[detail.status] }}</span>
         <span class="pill pill--topic">{{ topicLabel[detail.topic] }}</span>
         <div class="detail__title-actions">
+          <button
+            type="button"
+            class="detail__action-btn"
+            :disabled="detail.status === 'archived'"
+            :title="detail.status === 'archived' ? 'Unarchive to convert' : 'Convert this enquiry into a prospect, visitor, or paying member'"
+            @click="openConvert"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+            Convert to member
+          </button>
           <button
             type="button"
             class="detail__action-btn"
@@ -410,6 +563,95 @@ async function toggleArchive() {
       :send-handler="sendEmailViaReply"
       @close="sendEmailOpen = false"
     />
+
+    <!-- Convert → Prospect member (brief 56) -->
+    <CrmModal
+      :open="convertOpen"
+      eyebrow="Enquiries"
+      :title="detail ? `Convert — ${detail.full_name}` : 'Convert to member'"
+      width="md"
+      @close="closeConvert"
+    >
+      <form v-if="detail" class="convert-form" @submit.prevent="submitConvert">
+        <p class="convert-form__hint">
+          Creates a roster row sourced from this enquiry and archives the enquiry on
+          success. Prospects + visitors don't owe anything — promote them later from
+          the member profile.
+        </p>
+
+        <!-- Type picker — mirrors the Add Member modal in MembersView. -->
+        <div class="type-picker" role="radiogroup" aria-label="Convert as">
+          <button
+            v-for="t in CONVERT_TYPES"
+            :key="t.value"
+            type="button"
+            class="type-picker__option"
+            :class="{ 'type-picker__option--active': convertForm.type === t.value }"
+            role="radio"
+            :aria-checked="convertForm.type === t.value"
+            @click="convertForm.type = t.value"
+          >
+            <span class="type-picker__label">{{ t.label }}</span>
+            <span class="type-picker__hint">{{ t.hint }}</span>
+          </button>
+        </div>
+
+        <div class="convert-form__contact">
+          <div class="convert-form__contact-row"><dt>Name</dt><dd>{{ detail.full_name }}</dd></div>
+          <div class="convert-form__contact-row"><dt>Email</dt><dd>{{ detail.email }}</dd></div>
+          <div v-if="detail.phone" class="convert-form__contact-row"><dt>Phone</dt><dd>{{ detail.phone }}</dd></div>
+        </div>
+
+        <template v-if="convertForm.type === 'member'">
+          <label class="field">
+            <span class="field__label">Membership tier</span>
+            <select v-model.number="convertForm.membership_type_id">
+              <option :value="null">— Pick a tier —</option>
+              <option v-for="t in convertTiers" :key="t.id" :value="t.id">{{ t.type_name }}</option>
+            </select>
+            <span v-if="convertTiersLoading" class="field__hint">Loading tiers…</span>
+            <span v-else-if="convertTiers.length === 0" class="field__hint">
+              No tiers set up on this club — finish onboarding first, or add as a prospect for now.
+            </span>
+          </label>
+
+          <label class="field field--switch">
+            <span class="field__switch-copy">
+              <span class="field__label">Send invite email now</span>
+              <span class="field__hint">Emails a club-join link. The row sits as pending until they accept.</span>
+            </span>
+            <input v-model="convertForm.send_invite" type="checkbox" />
+          </label>
+        </template>
+
+        <label class="field">
+          <span class="field__label">Internal note <em>(optional)</em></span>
+          <textarea
+            v-model="convertForm.note"
+            rows="3"
+            placeholder="e.g. Came in through the open day — mark for Friday roll-up."
+          />
+          <span class="field__hint">Appended to the enquiry's note thread above the conversion stamp.</span>
+        </label>
+
+        <p v-if="convertError" class="convert-form__error" role="alert">{{ convertError }}</p>
+      </form>
+
+      <template #footer>
+        <button
+          type="button"
+          class="btn btn--outline"
+          :disabled="converting"
+          @click="closeConvert"
+        >Cancel</button>
+        <button
+          type="button"
+          class="btn btn--primary"
+          :disabled="converting"
+          @click="submitConvert"
+        >{{ converting ? 'Converting…' : 'Convert →' }}</button>
+      </template>
+    </CrmModal>
   </div>
 </template>
 
@@ -443,6 +685,96 @@ async function toggleArchive() {
 }
 .detail__action-btn:hover:not(:disabled) { background: var(--color-surface); }
 .detail__action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.detail__action-btn--linked {
+  background: var(--color-ink);
+  color: #fff;
+  border-color: var(--color-ink);
+}
+.detail__action-btn--linked:hover:not(:disabled) { background: var(--color-graphite); }
+
+/* Convert modal — the compact form inside CrmModal. */
+.convert-form { display: flex; flex-direction: column; gap: 16px; }
+.convert-form__hint { font-family: var(--font-body); font-size: 13px; color: var(--color-fog); margin: 0; }
+
+/* Type picker — same shape as MembersView's Add Member modal, duplicated
+ * for scoped styles. */
+.type-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px; border-radius: 12px; background: var(--color-surface); }
+.type-picker__option { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 12px; border: 0; border-radius: 9px; background: transparent; cursor: pointer; text-align: left; transition: background 0.1s ease; }
+.type-picker__option:hover:not(.type-picker__option--active) { background: color-mix(in srgb, var(--color-hairline) 50%, transparent); }
+.type-picker__option--active { background: var(--color-ink); }
+.type-picker__option--active .type-picker__label { color: #fff; }
+.type-picker__option--active .type-picker__hint { color: rgba(255, 255, 255, 0.72); }
+.type-picker__label { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
+.type-picker__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); line-height: 1.4; }
+.convert-form__contact {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 6px 12px;
+  padding: 12px 14px;
+  background: var(--color-surface);
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+.convert-form__contact-row { display: contents; }
+.convert-form__contact dt {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-fog);
+}
+.convert-form__contact dd { margin: 0; color: var(--color-ink); }
+.convert-form__error {
+  margin: 0;
+  padding: 10px 12px;
+  background: #FEE2E2;
+  border: 1px solid #FCA5A5;
+  border-radius: 10px;
+  color: #991B1B;
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field__label { font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--color-ink); }
+.field__label em { color: var(--color-fog); font-style: normal; font-weight: 400; font-size: 11px; }
+.field__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); }
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 8px;
+  background: #fff;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-ink);
+}
+.field textarea { resize: vertical; min-height: 72px; }
+.field select:focus,
+.field textarea:focus { outline: none; border-color: var(--color-ink); }
+.field--switch { flex-direction: row; align-items: center; gap: 16px; justify-content: space-between; }
+.field__switch-copy { display: flex; flex-direction: column; gap: 4px; }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.12s ease;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn--primary { background: var(--color-ink); color: #fff; border-color: var(--color-ink); }
+.btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
+.btn--outline { background: #fff; color: var(--color-ink); border-color: var(--color-hairline); }
+.btn--outline:hover:not(:disabled) { background: var(--color-surface); }
 
 /* Empty */
 .empty { padding: 96px 40px; text-align: center; font-family: var(--font-body); background: #fff; border: 1px dashed var(--color-hairline); border-radius: 14px; }

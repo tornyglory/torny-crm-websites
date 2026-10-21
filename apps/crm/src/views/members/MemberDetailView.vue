@@ -42,7 +42,7 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 type Tab = 'payments' | 'communications' | 'notes' | 'settings'
-type StandingTone = 'paid' | 'due' | 'overdue' | 'waived' | 'partial' | 'invited' | 'lapsed' | 'none'
+type StandingTone = 'paid' | 'due' | 'overdue' | 'waived' | 'partial' | 'invited' | 'lapsed' | 'prospect' | 'visitor' | 'none'
 interface Standing { tone: StandingTone; label: string; sub: string }
 
 const memberId = computed(() => Number(route.params.id ?? 0))
@@ -144,6 +144,17 @@ const feeLabel = computed(() => {
 const standing = computed<Standing>(() => {
   const m = member.value
   if (!m) return { tone: 'none', label: 'Unknown', sub: '' }
+  // Prospects + visitors are non-paying — short-circuit so we don't
+  // accidentally read a payment_status that was never set.
+  if (m.computed_status === 'prospect') {
+    const sub = m.source === 'enquiry'
+      ? (m.source_ref_id != null ? `From enquiry #${m.source_ref_id}` : 'From enquiry')
+      : 'Lead · no fees owing'
+    return { tone: 'prospect', label: 'Prospect', sub }
+  }
+  if (m.computed_status === 'visitor') {
+    return { tone: 'visitor', label: 'Visitor', sub: 'Guest · no fees owing' }
+  }
   if (m.computed_status === 'lapsed') {
     const on = fmtShort(m.revoked_at)
     return { tone: 'lapsed', label: 'Lapsed', sub: on ? `Left ${on}` : 'No active membership' }
@@ -785,6 +796,15 @@ async function submitEdit() {
 
               <div v-if="paymentHistory.length === 0" class="member-detail__card-empty">
                 <CrmEmptyState
+                  v-if="member.computed_status === 'prospect' || member.computed_status === 'visitor'"
+                  variant="empty"
+                  :title="member.computed_status === 'visitor' ? 'Visitors don\'t have subs' : 'Prospects don\'t have subs'"
+                  :description="member.computed_status === 'visitor'
+                    ? 'Casual guests aren\'t billed. Promote them to a paying member if they want to join.'
+                    : 'Leads aren\'t billed until they pick a tier. Promote them from the overflow menu when they\'re ready.'"
+                />
+                <CrmEmptyState
+                  v-else
                   variant="empty"
                   title="No payments yet"
                   description="Once a payment is recorded it'll land here with the date, amount, and method."
@@ -1259,6 +1279,8 @@ async function submitEdit() {
 .standing-pill--partial { background: #FFEDD5; color: var(--color-feature-tangerine); }
 .standing-pill--invited { background: var(--color-accent-soft); color: var(--color-accent); }
 .standing-pill--lapsed  { background: var(--color-surface); color: var(--color-fog); border: 1px solid var(--color-hairline); }
+.standing-pill--prospect { background: var(--color-surface); color: var(--color-graphite); border: 1px dashed var(--color-fog); }
+.standing-pill--visitor { background: #FEF3C7; color: #78350F; }
 .standing-pill--none    { background: var(--color-surface); color: var(--color-mute); border: 1px dashed var(--color-hairline); }
 
 /* Body columns */

@@ -61,7 +61,12 @@ export interface EnquiryDetail extends Omit<EnquiryRow, 'message_preview' | 'not
 
 export interface EnquiriesListResponse {
   enquiries: EnquiryRow[]
-  counts: { new: number; read: number; replied: number; archived: number }
+  counts: {
+    new: number
+    read: number
+    replied: number
+    archived: number
+  }
   pagination: { limit: number; offset: number; total: number }
 }
 

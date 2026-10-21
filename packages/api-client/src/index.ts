@@ -4,6 +4,8 @@ export * from './types'
 export * as members from './resources/members'
 export type {
   MemberStatus,
+  MemberType,
+  MemberSource,
   MemberRole,
   MembershipCadence,
   MembershipTone,

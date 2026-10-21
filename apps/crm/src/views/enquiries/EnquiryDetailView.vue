@@ -18,6 +18,7 @@ import {
   type EnquiryStatus,
   type EnquiryTopic,
 } from '@torny/api-client'
+import SendEmailModal, { type EmailRecipient, type SendEmailPayload } from '@/components/modals/SendEmailModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -177,6 +178,40 @@ async function submitNote() {
   }
 }
 
+// ── Send email modal ─────────────────────────────────────────
+// Mirrors the "Send email" affordance on the member detail page but
+// routes through the enquiry reply endpoint — enquirers aren't members
+// so bulkEmail can't address them. Server auto-sets status to `replied`
+// and persists the message in the thread, so we reload after send.
+const sendEmailOpen = ref(false)
+const enquirerRecipient = computed<EmailRecipient | null>(() => {
+  if (!detail.value) return null
+  return {
+    name: detail.value.full_name,
+    email: detail.value.email,
+  }
+})
+function openSendEmail() {
+  if (!detail.value?.email) return
+  sendEmailOpen.value = true
+}
+async function sendEmailViaReply(payload: SendEmailPayload) {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number' || !detail.value) {
+    throw new Error('No club or enquiry selected.')
+  }
+  const res = await enquiriesApi.reply(cid, detail.value.id, {
+    body: payload.body,
+    subject: payload.subject,
+  })
+  // Surface a delivery-failed state as an error the modal can toast.
+  if ('sent' in res.email_status && !res.email_status.sent) {
+    const err = (res.email_status as { sent: false; error?: string }).error
+    throw new Error(err ? `Delivery failed: ${err}` : 'Email delivery failed.')
+  }
+  await loadDetail()
+}
+
 // ── Archive / unarchive ───────────────────────────────────────
 const archiving = ref(false)
 
@@ -215,6 +250,21 @@ async function toggleArchive() {
         <h1 class="detail__title">{{ detail.full_name }}</h1>
         <span class="pill" :class="`pill--${statusTone[detail.status]}`">{{ statusLabel[detail.status] }}</span>
         <span class="pill pill--topic">{{ topicLabel[detail.topic] }}</span>
+        <div class="detail__title-actions">
+          <button
+            type="button"
+            class="detail__action-btn"
+            :disabled="!detail.email || detail.status === 'archived'"
+            :title="!detail.email ? 'No email on file' : detail.status === 'archived' ? 'Unarchive to send' : 'Send email'"
+            @click="openSendEmail"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+              <path d="M2.5 4.5 8 9l5.5-4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Send email
+          </button>
+        </div>
       </div>
       <p v-if="detail" class="detail__sub">
         Sent {{ timeAgo(detail.received_at) }} · {{ formatDateTime(detail.received_at) }}
@@ -352,6 +402,14 @@ async function toggleArchive() {
         </div>
       </aside>
     </div>
+
+    <SendEmailModal
+      :open="sendEmailOpen"
+      :club-id="clubStore.current?.id ?? null"
+      :member="enquirerRecipient"
+      :send-handler="sendEmailViaReply"
+      @close="sendEmailOpen = false"
+    />
   </div>
 </template>
 
@@ -366,6 +424,25 @@ async function toggleArchive() {
 .detail__title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 6px; }
 .detail__title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; line-height: 1.05; }
 .detail__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-fog); margin: 0; }
+.detail__title-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.detail__action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--color-hairline);
+  background: #fff;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.detail__action-btn:hover:not(:disabled) { background: var(--color-surface); }
+.detail__action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Empty */
 .empty { padding: 96px 40px; text-align: center; font-family: var(--font-body); background: #fff; border: 1px dashed var(--color-hairline); border-radius: 14px; }

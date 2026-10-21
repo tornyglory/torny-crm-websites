@@ -72,6 +72,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'website', redirect: { name: 'website', params: { pageSlug: 'home' } } },
       { path: 'website/:pageSlug', name: 'website', component: () => import('@/views/website/WebsiteEditorView.vue') },
       { path: 'communications', name: 'communications', component: () => import('@/views/communications/CommunicationsView.vue') },
+      { path: 'communications/compose', name: 'compose', component: () => import('@/views/communications/ComposeView.vue') },
+      { path: 'communications/:id', name: 'campaign-detail', component: () => import('@/views/communications/CampaignDetailView.vue') },
       { path: 'settings', name: 'settings', component: () => import('@/views/settings/SettingsView.vue') },
       { path: 'site-settings', redirect: { name: 'website', params: { pageSlug: 'domain' } } },
     ],
@@ -82,4 +84,12 @@ const routes: RouteRecordRaw[] = [
 export const router = createRouter({
   history: createWebHistory(),
   routes,
+  // Reset scroll on every navigation so new pages start at the top.
+  // Browser back/forward still restores where the user was via
+  // savedPosition, and in-page anchors (#foo) still scroll to the target.
+  scrollBehavior(to, _from, savedPosition) {
+    if (savedPosition) return savedPosition
+    if (to.hash) return { el: to.hash, behavior: 'smooth' }
+    return { top: 0 }
+  },
 })

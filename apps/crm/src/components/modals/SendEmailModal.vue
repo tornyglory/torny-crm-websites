@@ -20,11 +20,22 @@ import { useToast } from '@/composables/useToast'
 
 /** Lightweight shape the modal needs — RosterMember already satisfies it,
  *  and callers composing a bulk send can pass trimmed rows without having
- *  to hydrate full roster objects. */
+ *  to hydrate full roster objects. `user_id` is optional for callers that
+ *  provide their own `sendHandler` (e.g. the enquiry page, where the
+ *  recipient is a prospect not a member). */
 export interface EmailRecipient {
-  user_id: number
+  user_id?: number
   name: string
   email: string | null
+}
+
+/** Payload handed to a custom `sendHandler`. Includes both the plain-text
+ *  body (for endpoints that template server-side, like enquiry replies)
+ *  and the HTML version (for endpoints that need wrapped markup). */
+export interface SendEmailPayload {
+  subject: string
+  body: string
+  bodyHtml: string
 }
 
 const props = defineProps<{
@@ -34,6 +45,10 @@ const props = defineProps<{
   member?: RosterMember | EmailRecipient | null
   /** Bulk recipients — takes precedence over `member` when provided. */
   members?: EmailRecipient[] | null
+  /** Optional override for the send step. If provided, replaces the
+   *  default bulkEmail flow — useful for contexts where recipients
+   *  aren't members (enquiries) or need a different backend endpoint. */
+  sendHandler?: (payload: SendEmailPayload) => Promise<void>
 }>()
 
 const emit = defineEmits<{
@@ -90,10 +105,21 @@ const recipients = computed<EmailRecipient[]>(() => {
   const base: EmailRecipient[] = props.members && props.members.length > 0
     ? props.members
     : props.member
-      ? [{ user_id: props.member.user_id, name: props.member.name, email: props.member.email ?? null }]
+      ? [{
+          user_id: 'user_id' in props.member ? props.member.user_id : undefined,
+          name: props.member.name,
+          email: props.member.email ?? null,
+        }]
       : []
-  return base.filter((r) => !removedIds.value.has(r.user_id))
+  return base.filter((r) => r.user_id == null || !removedIds.value.has(r.user_id))
 })
+
+/** Stable key for v-for over recipients — user_id when available, falls
+ *  back to email + name so recipients without a user_id (enquiry prospects)
+ *  still render without Vue key warnings. */
+function recipientKey(r: EmailRecipient): string | number {
+  return r.user_id ?? `${r.email ?? ''}:${r.name}`
+}
 
 /** Recipients with a real email on file — the only ones the server will
  *  actually mail. Addresses without one are called out in the warning
@@ -147,13 +173,32 @@ function toBodyHtml(text: string): string {
 async function send() {
   if (!canSend.value) return
   const cid = props.clubId
-  const userIds = deliverable.value.map((r) => r.user_id)
-  if (cid == null || userIds.length === 0) return
+  if (cid == null) return
   sending.value = true
   try {
-    const result = await bulkEmailApi.send(cid, {
+    const payload: SendEmailPayload = {
       subject: state.subject.trim(),
-      body_html: toBodyHtml(state.body),
+      body: state.body.trim(),
+      bodyHtml: toBodyHtml(state.body),
+    }
+    // Custom send path (enquiry replies etc). Parent is responsible for
+    // its own success toasts — we only surface a generic one.
+    if (props.sendHandler) {
+      await props.sendHandler(payload)
+      toast.success('Email sent.')
+      emit('sent')
+      emit('close')
+      return
+    }
+    // Default: bulk-email endpoint. Requires every deliverable recipient
+    // to have a `user_id` (members only).
+    const userIds = deliverable.value
+      .map((r) => r.user_id)
+      .filter((id): id is number => typeof id === 'number')
+    if (userIds.length === 0) return
+    const result = await bulkEmailApi.send(cid, {
+      subject: payload.subject,
+      body_html: payload.bodyHtml,
       recipients: { mode: 'ids', user_ids: userIds },
     })
     if (result.sent_count === 0 && result.failed_count > 0) {
@@ -235,13 +280,14 @@ function pickField(f: InsertField) {
           <template v-else-if="isBulk">
             <div
               v-for="r in recipients"
-              :key="r.user_id"
+              :key="recipientKey(r)"
               class="email__chip email__chip--removable"
               :class="{ 'email__chip--no-email': !r.email }"
             >
               <span class="email__chip-avatar">{{ recipientInitials(r) }}</span>
               <span class="email__chip-name">{{ r.name }}</span>
               <button
+                v-if="r.user_id != null"
                 type="button"
                 class="email__chip-remove"
                 :disabled="sending"
@@ -257,7 +303,7 @@ function pickField(f: InsertField) {
           <template v-else>
             <div
               v-for="r in recipients"
-              :key="r.user_id"
+              :key="recipientKey(r)"
               class="email__chip"
               :class="{ 'email__chip--no-email': !r.email }"
             >

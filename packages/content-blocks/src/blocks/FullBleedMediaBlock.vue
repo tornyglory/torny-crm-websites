@@ -137,7 +137,11 @@ function toggleMute() {
       <span class="fbm__unmute-dot" aria-hidden="true">
         <span />
       </span>
-      {{ isMuted ? 'Tap for sound' : 'Playing · tap to mute' }}
+      <!-- Label hidden on mobile — the icon + status dot carry the meaning
+           and the accessible name stays on the button via aria-label. -->
+      <span class="fbm__unmute-label">
+        {{ isMuted ? 'Tap for sound' : 'Playing · tap to mute' }}
+      </span>
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
         <path
           d="M2 3h3l3-2v10l-3-2H2z"
@@ -383,7 +387,22 @@ function toggleMute() {
   .fbm__ctas { flex-direction: column; align-items: stretch; width: 100%; gap: 10px; }
   .fbm__cta { justify-content: center; height: 48px; padding: 0 22px; font-size: 14px; }
   .fbm__caption { left: 20px; bottom: 20px; }
-  .fbm__unmute { right: 16px; bottom: 20px; padding: 6px 12px 6px 8px; font-size: 11px; }
-  .fbm--bottom-left .fbm__unmute { top: 88px; }
+  /* Compact icon-only button on mobile — the headline is tight against
+     the top of the hero and the full chip was crowding the eyebrow. */
+  .fbm__unmute {
+    right: 12px;
+    bottom: 16px;
+    gap: 0;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    justify-content: center;
+    border-radius: 999px;
+  }
+  .fbm--bottom-left .fbm__unmute { top: 72px; }
+  .fbm__unmute-label { display: none; }
+  .fbm__unmute-dot { width: 10px; height: 10px; position: absolute; top: 2px; right: 2px; }
+  .fbm__unmute-dot > span { width: 4px; height: 4px; }
+  .fbm__unmute svg { width: 14px; height: 14px; }
 }
 </style>

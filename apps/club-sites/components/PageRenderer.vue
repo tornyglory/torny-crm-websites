@@ -27,6 +27,22 @@ const blocks = computed<Block[] | null>(() => {
   return raw && raw.length > 0 ? (raw as unknown as Block[]) : null
 })
 
+/** Full-bleed blocks render edge-to-edge via negative margins — the
+ *  wrapper's top padding leaves an awkward gap between the header and
+ *  the hero. When the first block is one of these, kill the top padding
+ *  so the hero sits flush against the nav. */
+const FULL_BLEED_TYPES = new Set<string>([
+  'hero',
+  'fullBleedImage',
+  'fullBleedMedia',
+  'venueHireHero',
+  'upcomingTournamentHero',
+])
+const flushTop = computed<boolean>(() => {
+  const first = blocks.value?.[0]
+  return first != null && FULL_BLEED_TYPES.has(first.type)
+})
+
 const accent = computed(() => site.value?.club.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
 
 // Provide the block context so data-hydrated blocks work without any
@@ -45,7 +61,12 @@ provide(BLOCK_CONTEXT_KEY, computed<BlockContext>(() => ({
 </script>
 
 <template>
-  <div v-if="blocks" class="page-blocks" :style="{ '--brand': accent } as any">
+  <div
+    v-if="blocks"
+    class="page-blocks"
+    :class="{ 'page-blocks--flush-top': flushTop }"
+    :style="{ '--brand': accent } as any"
+  >
     <BlockRenderer v-for="b in blocks" :key="b.id" :block="b" />
   </div>
   <slot v-else />
@@ -63,4 +84,8 @@ provide(BLOCK_CONTEXT_KEY, computed<BlockContext>(() => ({
      the nav content edges automatically. */
   padding: 40px max(48px, calc((100vw - var(--container-content, 1280px)) / 2)) 80px;
 }
+/* When the page opens with a full-bleed hero (fullBleedMedia, hero,
+ * venueHireHero, …), drop the top padding so the media sits flush
+ * against the site header. */
+.page-blocks--flush-top { padding-top: 0; }
 </style>

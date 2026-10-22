@@ -26,6 +26,7 @@ import { sitePreviewUrl } from '@/composables/sitePreviewUrl'
 import { useClubStore } from '@/stores/club'
 import { useOnboardingStore } from '@/stores/onboarding'
 import ImagePicker from '@/components/ImagePicker.vue'
+import VideoPicker from '@/components/VideoPicker.vue'
 import Skeleton from '@/components/Skeleton.vue'
 import BlockPaletteDialog from '@/components/BlockPaletteDialog.vue'
 import WebsiteSettingsPanel, { type WebsiteSettingsSection } from '@/components/WebsiteSettingsPanel.vue'
@@ -2818,15 +2819,20 @@ const lastSavedLabel = computed(() => {
               <span class="field__hint">Video autoplays muted on loop (mobile-safe). Image is a plain still background.</span>
             </div>
 
-            <label v-if="((selectedBlock!.props as FullBleedMediaProps).mediaType ?? 'video') === 'video'" class="field">
-              <span class="field__label">Video URL</span>
-              <input
-                v-model="(selectedBlock!.props as FullBleedMediaProps).videoUrl"
-                type="url"
-                placeholder="https://cdn.example.com/hero.mp4"
+            <div v-if="((selectedBlock!.props as FullBleedMediaProps).mediaType ?? 'video') === 'video'" class="field">
+              <VideoPicker
+                :model-value="(selectedBlock!.props as FullBleedMediaProps).videoUrl"
+                :page-slug="currentPage"
+                :block-id="selectedBlock!.id"
+                label="Background video"
+                hint="Autoplays muted on loop. Keep it under 50 MB and 60 seconds — background video should be short &amp; silent."
+                @update:model-value="(v) => (selectedBlock!.props as FullBleedMediaProps).videoUrl = v"
+                @update:thumbnail-url="(t) => {
+                  const p = selectedBlock!.props as FullBleedMediaProps
+                  if (!p.imageUrl) p.imageUrl = t
+                }"
               />
-              <span class="field__hint">Hosted .mp4 (or .webm). Keep it under 10 MB — bg video should be short &amp; silent.</span>
-            </label>
+            </div>
 
             <div class="field">
               <ImagePicker
@@ -2834,6 +2840,7 @@ const lastSavedLabel = computed(() => {
                 :page-slug="currentPage"
                 :block-id="selectedBlock!.id"
                 :label="((selectedBlock!.props as FullBleedMediaProps).mediaType ?? 'video') === 'video' ? 'Poster frame (shown while video loads)' : 'Background image'"
+                hint="Auto-filled from the uploaded video's thumbnail. Override to pick your own."
                 aspect="16 / 9"
               />
             </div>

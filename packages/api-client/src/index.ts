@@ -287,6 +287,13 @@ export type {
   ConfirmParams,
 } from './resources/media'
 export * as blockImages from './resources/blockImages'
+export * as blockVideos from './resources/blockVideos'
+export type {
+  BlockVideo,
+  BlockVideoState,
+  BlockVideoUploadUrl,
+  BlockVideoErrorCode,
+} from './resources/blockVideos'
 export type {
   BlockImage,
   UploadUrlResponse as BlockImageUploadUrlResponse,

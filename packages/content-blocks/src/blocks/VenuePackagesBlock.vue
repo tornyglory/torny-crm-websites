@@ -47,7 +47,7 @@ const hasFooter = computed(() =>
         <span class="vp__eyebrow-dot" />
         <span>{{ props.eyebrow }}</span>
       </div>
-      <h2 v-if="props.heading" class="vp__title">{{ props.heading }}</h2>
+      <h2 v-if="props.heading" class="vp__title" :data-sh="props.headingSize">{{ props.heading }}</h2>
       <p v-if="props.description" class="vp__desc">{{ props.description }}</p>
     </header>
 

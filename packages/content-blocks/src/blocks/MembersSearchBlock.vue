@@ -183,7 +183,7 @@ function avatarPalette(m: PublicMember) {
         <span class="mem__eyebrow-dot" />
         <span>{{ props.eyebrow }}</span>
       </div>
-      <h2 class="mem__title">{{ props.heading }}</h2>
+      <h2 class="mem__title" :data-sh="props.headingSize">{{ props.heading }}</h2>
       <p v-if="props.description" class="mem__sub">{{ props.description }}</p>
     </header>
 

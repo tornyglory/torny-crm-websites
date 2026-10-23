@@ -1,0 +1,53 @@
+/**
+ * Section heading size — global modifier stylesheet.
+ *
+ * Each block that opts into the heading-size picker adds `data-sh="sm|md|lg"`
+ * to its heading element. These attribute selectors live outside any Vue
+ * scoped-CSS boundary, so they apply to every block in the DOM.
+ *
+ * `!important` is used so the modifier wins against each block's own
+ * baseline font-size, which lives inside scoped styles and would otherwise
+ * tie on specificity when the breakpoint rules fire.
+ *
+ * Scale lives here and only here — keep it in sync with the picker labels
+ * in WebsiteEditorView.vue when editing.
+ */
+
+/* Unified heading-size scale — matches HeroHeadingSize so "Medium" picked
+ * on a section block renders the same pixel size as "Medium" picked on a
+ * hero block. Font-size, line-height, letter-spacing, and weight are all
+ * forced so block-to-block typographic variation can't creep back in.
+ * Max-width stays per-block (layout decision, not type).
+ *
+ * Scale (desktop → 1279 → 1023 → 639):
+ *   sm — 48 / 44 / 40 / 32
+ *   md — 72 / 64 / 56 / 40
+ *   lg — 88 / 80 / 64 / 44
+ *   xl — 112 / 96 / 72 / 48 */
+[data-sh] { line-height: 1.05 !important; letter-spacing: -0.02em !important; font-weight: 700 !important; }
+
+[data-sh='sm'] { font-size: 48px !important; }
+[data-sh='md'] { font-size: 72px !important; }
+[data-sh='lg'] { font-size: 88px !important; }
+[data-sh='xl'] { font-size: 112px !important; }
+
+@media (max-width: 1279px) {
+  [data-sh='sm'] { font-size: 44px !important; }
+  [data-sh='md'] { font-size: 64px !important; }
+  [data-sh='lg'] { font-size: 80px !important; }
+  [data-sh='xl'] { font-size: 96px !important; }
+}
+
+@media (max-width: 1023px) {
+  [data-sh='sm'] { font-size: 40px !important; }
+  [data-sh='md'] { font-size: 56px !important; }
+  [data-sh='lg'] { font-size: 64px !important; }
+  [data-sh='xl'] { font-size: 72px !important; }
+}
+
+@media (max-width: 639px) {
+  [data-sh='sm'] { font-size: 32px !important; }
+  [data-sh='md'] { font-size: 40px !important; }
+  [data-sh='lg'] { font-size: 44px !important; }
+  [data-sh='xl'] { font-size: 48px !important; }
+}

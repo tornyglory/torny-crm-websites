@@ -202,7 +202,7 @@ function href(t: PublicTournamentCard): string {
           <template v-if="eyebrow">{{ eyebrow }}</template>
           <template v-else>Tournaments · <span class="tsx__eyebrow-accent">{{ needsSlug ? 'Preview' : `${total} listed` }}</span></template>
         </div>
-        <h2 class="tsx__heading">{{ heading }}</h2>
+        <h2 class="tsx__heading" :data-sh="headingSize">{{ heading }}</h2>
         <p v-if="description" class="tsx__desc">{{ description }}</p>
       </div>
     </header>

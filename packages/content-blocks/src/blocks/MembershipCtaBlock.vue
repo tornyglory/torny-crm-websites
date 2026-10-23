@@ -6,7 +6,7 @@ withDefaults(defineProps<MembershipCtaProps>(), { ctaLabel: 'Join the club', cta
 <template>
   <section class="mc">
     <div class="mc__inner">
-      <h2 class="mc__heading">{{ heading }}</h2>
+      <h2 class="mc__heading" :data-sh="headingSize">{{ heading }}</h2>
       <p v-if="body" class="mc__body">{{ body }}</p>
       <a :href="ctaHref" class="mc__cta">{{ ctaLabel }}</a>
     </div>

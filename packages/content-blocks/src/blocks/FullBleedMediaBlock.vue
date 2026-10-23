@@ -87,7 +87,7 @@ function toggleMute() {
         {{ eyebrow }}
       </div>
 
-      <h1 class="fbm__heading">{{ heading }}</h1>
+      <h1 class="fbm__heading" :class="`fbm__heading--${headingSize ?? 'xl'}`">{{ heading }}</h1>
 
       <p v-if="body" class="fbm__body">{{ body }}</p>
 
@@ -179,14 +179,16 @@ function toggleMute() {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 120px 48px;
+  /* Horizontal padding mirrors PageRenderer's container formula so hero
+     copy aligns with every block below (1280px column, 48px min gutter). */
+  padding: 120px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
 }
 /* Bottom-left layout — content anchors to lower-left. */
 .fbm--bottom-left {
   align-items: flex-end;
   justify-content: flex-start;
   text-align: left;
-  padding: 120px 72px 96px;
+  padding: 120px max(48px, calc((100vw - var(--container-content, 1280px)) / 2)) 96px;
 }
 
 .fbm__media {
@@ -249,17 +251,23 @@ function toggleMute() {
 
 .fbm__heading {
   font-family: var(--font-display);
-  font-size: clamp(44px, 7.5vw, 112px);
+  /* Shared HeroHeadingSize scale — modifier class sets the stops. */
+  font-size: var(--h, 112px);
   font-weight: 500;
   color: #fff;
   letter-spacing: -0.04em;
   line-height: 95%;
   margin: 0;
 }
-.fbm--bottom-left .fbm__heading {
-  font-size: clamp(40px, 6.2vw, 88px);
-  letter-spacing: -0.035em;
-}
+.fbm__heading--sm { --h: 48px; --h-md: 44px; --h-sm: 40px; --h-xs: 32px; }
+.fbm__heading--md { --h: 72px; --h-md: 64px; --h-sm: 56px; --h-xs: 40px; }
+.fbm__heading--lg { --h: 88px; --h-md: 80px; --h-sm: 64px; --h-xs: 44px; }
+.fbm__heading--xl { --h: 112px; --h-md: 96px; --h-sm: 72px; --h-xs: 48px; }
+/* Bottom-left layout dials the headline down one step so the body isn't
+ * crushed against the viewport edge. */
+.fbm--bottom-left .fbm__heading { letter-spacing: -0.035em; }
+.fbm--bottom-left .fbm__heading--xl { --h: 88px; --h-md: 80px; --h-sm: 64px; --h-xs: 44px; }
+.fbm--bottom-left .fbm__heading--lg { --h: 72px; --h-md: 64px; --h-sm: 56px; --h-xs: 40px; }
 
 .fbm__body {
   font-family: var(--font-body);
@@ -340,7 +348,9 @@ function toggleMute() {
 
 .fbm__unmute {
   position: absolute;
-  right: 32px;
+  /* Match the container formula so the chip's right edge aligns with
+     the right edge of the hero copy and every block below. */
+  right: max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
   bottom: 32px;
   z-index: 2;
   display: inline-flex;
@@ -378,7 +388,13 @@ function toggleMute() {
 }
 .fbm__unmute--playing .fbm__unmute-dot { background: var(--color-success, #2E5D3C); }
 
+/* Stepped heading scale — mirrors HeroBlock / VenueHireHero breakpoints
+ * so every hero on the site steps at the same viewport thresholds. */
+@media (max-width: 1279px) { .fbm__heading { font-size: var(--h-md, 96px); } }
+@media (max-width: 1023px) { .fbm__heading { font-size: var(--h-sm, 72px); } }
+
 @media (max-width: 768px) {
+  .fbm__heading { font-size: var(--h-xs, 48px); }
   .fbm { min-height: 620px; }
   .fbm--centre { padding: 96px 20px; }
   .fbm--bottom-left { padding: 96px 20px 72px; }

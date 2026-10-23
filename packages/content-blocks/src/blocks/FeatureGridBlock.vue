@@ -18,7 +18,7 @@ const gridStyle = computed(() => ({
         <span class="fg__eyebrow-dot" />
         <span>{{ eyebrow }}</span>
       </div>
-      <h2 v-if="heading" class="fg__heading">{{ heading }}</h2>
+      <h2 v-if="heading" class="fg__heading" :data-sh="headingSize">{{ heading }}</h2>
     </div>
 
     <div class="fg__grid" :style="gridStyle">

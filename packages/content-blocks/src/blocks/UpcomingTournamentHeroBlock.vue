@@ -154,7 +154,7 @@ const detailHref = computed(() => featured.value ? `/tournaments/${featured.valu
       <div class="ut-hero__bottom">
         <div class="ut-hero__copy">
           <div class="ut-hero__eyebrow">{{ formatDateRange(featured.starts_at, featured.ends_at) }} · {{ featured.format.toUpperCase() }} · {{ featured.category.toUpperCase() }}</div>
-          <h2 class="ut-hero__title">{{ featured.title }}</h2>
+          <h2 class="ut-hero__title" :class="`ut-hero__title--${props.headingSize ?? 'lg'}`">{{ featured.title }}</h2>
           <p class="ut-hero__desc">{{ description || featured.subtitle || ('description' in featured ? featured.description : '') || '' }}</p>
           <div class="ut-hero__ctas">
             <a :href="enterHref" class="ut-hero__cta ut-hero__cta--primary">
@@ -219,7 +219,14 @@ const detailHref = computed(() => featured.value ? `/tournaments/${featured.valu
 .ut-hero__bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 60px; }
 .ut-hero__copy { max-width: 720px; }
 .ut-hero__eyebrow { font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 12px; color: rgba(255,255,255,0.6); letter-spacing: 0.14em; font-weight: 600; margin-bottom: 16px; }
-.ut-hero__title { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: 700; font-size: clamp(48px, 8vw, 88px); color: #FFFFFF; letter-spacing: -0.045em; line-height: 92%; margin: 0 0 20px; }
+.ut-hero__title { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: 700; font-size: var(--h, 88px); color: #FFFFFF; letter-spacing: -0.045em; line-height: 92%; margin: 0 0 20px; }
+.ut-hero__title--sm { --h: 48px; --h-md: 44px; --h-sm: 40px; --h-xs: 32px; }
+.ut-hero__title--md { --h: 72px; --h-md: 64px; --h-sm: 56px; --h-xs: 40px; }
+.ut-hero__title--lg { --h: 88px; --h-md: 80px; --h-sm: 64px; --h-xs: 44px; }
+.ut-hero__title--xl { --h: 112px; --h-md: 96px; --h-sm: 72px; --h-xs: 48px; }
+@media (max-width: 1279px) { .ut-hero__title { font-size: var(--h-md, 80px); } }
+@media (max-width: 1023px) { .ut-hero__title { font-size: var(--h-sm, 64px); } }
+@media (max-width: 639px)  { .ut-hero__title { font-size: var(--h-xs, 44px); } }
 .ut-hero__desc { font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 16px; color: rgba(255,255,255,0.72); line-height: 150%; margin: 0 0 32px; max-width: 540px; }
 
 .ut-hero__ctas { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

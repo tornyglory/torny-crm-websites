@@ -6,7 +6,7 @@ withDefaults(defineProps<CtaBannerProps>(), { tone: 'accent' })
 <template>
   <section class="cta" :class="`cta--${tone}`">
     <div class="cta__body">
-      <h3 class="cta__heading">{{ heading }}</h3>
+      <h3 class="cta__heading" :data-sh="headingSize">{{ heading }}</h3>
       <p v-if="body" class="cta__text">{{ body }}</p>
     </div>
     <a v-if="ctaHref && ctaLabel" :href="ctaHref" class="cta__btn">{{ ctaLabel }}</a>

@@ -167,7 +167,7 @@ function enquiryErrorMessage(err: unknown): string {
         <span class="cf__eyebrow-dot" />
         <span>{{ props.eyebrow }}</span>
       </div>
-      <h1 class="cf__title">{{ props.heading }}</h1>
+      <h1 class="cf__title" :data-sh="props.headingSize">{{ props.heading }}</h1>
       <p v-if="props.description" class="cf__sub">{{ props.description }}</p>
     </header>
 

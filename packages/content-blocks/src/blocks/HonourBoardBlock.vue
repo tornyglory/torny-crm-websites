@@ -121,7 +121,7 @@ const categoryLabel = computed(() => reigning.value?.category_name ?? 'Champion 
           <span class="hb__eyebrow-dot" />
           <span>{{ eyebrow }}</span>
         </div>
-        <h2 class="hb__heading">{{ heading }}</h2>
+        <h2 class="hb__heading" :data-sh="headingSize">{{ heading }}</h2>
         <p v-if="description" class="hb__body">{{ description }}</p>
       </div>
       <a v-if="ctaLabel && ctaHref" :href="ctaHref" class="hb__cta">

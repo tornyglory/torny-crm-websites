@@ -23,7 +23,7 @@ const overlayStyle = computed(() => ({
 
     <div class="fbi__body">
       <div v-if="eyebrow" class="fbi__eyebrow">{{ eyebrow }}</div>
-      <h2 class="fbi__heading">{{ heading }}</h2>
+      <h2 class="fbi__heading" :class="`fbi__heading--${headingSize ?? 'lg'}`">{{ heading }}</h2>
       <p v-if="subheading" class="fbi__sub">{{ subheading }}</p>
       <a v-if="cta" :href="cta.href" class="fbi__cta">
         <span>{{ cta.label }}</span>
@@ -130,12 +130,16 @@ const overlayStyle = computed(() => ({
   margin: 0;
   max-width: 1000px;
   font-family: var(--font-display);
-  font-size: 88px;
+  font-size: var(--h, 88px);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--track-tight);
   line-height: var(--leading-tight);
   color: #fff;
 }
+.fbi__heading--sm { --h: 48px; --h-md: 44px; --h-sm: 40px; --h-xs: 32px; }
+.fbi__heading--md { --h: 72px; --h-md: 64px; --h-sm: 56px; --h-xs: 40px; }
+.fbi__heading--lg { --h: 88px; --h-md: 80px; --h-sm: 64px; --h-xs: 44px; }
+.fbi__heading--xl { --h: 112px; --h-md: 96px; --h-sm: 72px; --h-xs: 48px; }
 
 .fbi__sub {
   margin: 0;
@@ -162,14 +166,15 @@ const overlayStyle = computed(() => ({
   margin-top: 8px;
 }
 
+@media (max-width: 1279px) { .fbi__heading { font-size: var(--h-md, 80px); } }
 @media (max-width: 1023px) {
   .fbi { min-height: 560px; padding: 72px 32px; }
-  .fbi__heading { font-size: 56px; }
+  .fbi__heading { font-size: var(--h-sm, 64px); }
 }
 @media (max-width: 639px) {
   .fbi { min-height: 460px; padding: 56px 20px; }
   .fbi__body { gap: 20px; }
-  .fbi__heading { font-size: 36px; }
+  .fbi__heading { font-size: var(--h-xs, 44px); }
   .fbi__sub { font-size: 16px; }
   .fbi__top-badge, .fbi__bottom-caption { top: auto; bottom: 20px; left: 20px; }
   .fbi__top-badge { top: 20px; bottom: auto; }

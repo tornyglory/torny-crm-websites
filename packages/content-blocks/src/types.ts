@@ -40,8 +40,31 @@ export interface HeroStat {
   label: string
 }
 
+/** Shared heading-size scale used by every hero block (HeroBlock,
+ *  FullBleedMediaBlock, FullBleedImageBlock, VenueHireHeroBlock,
+ *  UpcomingTournamentHeroBlock). Each block renders at a sensible default
+ *  so existing published layouts don't shift — admins override per block
+ *  in the editor when they want to tune the statement weight.
+ *
+ *  Steps (desktop → mobile):
+ *    sm — 48 / 44 / 40 / 32
+ *    md — 72 / 64 / 56 / 40
+ *    lg — 88 / 80 / 64 / 44
+ *    xl — 112 / 96 / 72 / 48 */
+export type HeroHeadingSize = 'sm' | 'md' | 'lg' | 'xl'
+
+/** Shared section-heading scale used by every non-hero block that renders
+ *  a title. Deliberately identical values to HeroHeadingSize so "Medium"
+ *  on a section block and "Medium" on a hero block render at the same
+ *  pixel size — no more same-label-different-size surprises. Each block
+ *  keeps its own baseline when the admin hasn't picked a size yet. */
+export type SectionHeadingSize = HeroHeadingSize
+
 export interface HeroProps {
   heading: string
+  /** Hero heading scale — see HeroHeadingSize. Defaults to `'md'` so
+   *  existing published layouts keep rendering at 72px. */
+  headingSize?: HeroHeadingSize
   subheading?: string
   eyebrow?: string
   description?: string
@@ -76,6 +99,8 @@ export interface EventListProps {
   /** Small mono label above the heading. Auto = "This month · September 2026". */
   eyebrow?: string
   heading?: string
+  /** Section-level title scale — see SectionHeadingSize. */
+  headingSize?: SectionHeadingSize
   description?: string
   limit?: number
   upcomingOnly?: boolean
@@ -91,6 +116,7 @@ export interface EventListProps {
 export interface EventsCalendarProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   description?: string
   /** Highlights to show in the right column. Defaults to the next 4 events. */
   highlightsCount?: number
@@ -101,6 +127,7 @@ export interface EventsCalendarProps {
 export interface HonourBoardProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   description?: string
   /** Which honour-board category to feature. Defaults to Champion of Champions. */
   categorySlug?: string
@@ -115,6 +142,7 @@ export interface HonourBoardProps {
 export interface HonourBoardSearchProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   description?: string
   /** Rows per page fetch. Defaults to 50 on server-side. */
   pageSize?: number
@@ -131,6 +159,7 @@ export interface HonourBoardSearchProps {
 export interface TournamentSearchProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   description?: string
   /** `club` (default) restricts to the current club. `network` shows every
    *  public tournament across Torny. */
@@ -153,6 +182,7 @@ export interface TournamentSearchProps {
 export interface UpcomingTournamentsListProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   description?: string
   /** How many tournaments to show. Defaults to 3. */
   limit?: number
@@ -174,6 +204,9 @@ export interface UpcomingTournamentHeroProps {
   description?: string
   primaryLabel?: string
   secondaryLabel?: string
+  /** Hero heading scale — defaults to `'lg'` to preserve the current
+   *  statement weight. */
+  headingSize?: HeroHeadingSize
 }
 
 /** Position group used by the public members directory (brief 35). */
@@ -184,6 +217,7 @@ export type MemberPositionGroup = 'board' | 'staff' | 'committee' | 'member'
 export interface MembersSearchProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   description?: string
   /** Restrict to a subset of position groups. Empty/undefined = all. */
   positions?: MemberPositionGroup[]
@@ -217,6 +251,7 @@ export interface PeopleGridPerson {
 export interface PeopleGridProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   /** Right-aligned intro copy on the header row. */
   subheading?: string
   people: PeopleGridPerson[]
@@ -243,6 +278,8 @@ export interface VenueTestimonial {
 export interface VenueHireHeroProps {
   eyebrow?: string
   heading: string
+  /** Hero heading scale — defaults to `'md'`. */
+  headingSize?: HeroHeadingSize
   description?: string
   /** Three stat pills under the description. */
   stats?: VenueStat[]
@@ -283,6 +320,7 @@ export interface VenueSpaceItem {
 export interface VenueSpacesProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   /** Right-aligned CTA link on the header row. */
   ctaLabel?: string
   ctaHref?: string
@@ -323,6 +361,7 @@ export interface VenuePackagesFooter {
 export interface VenuePackagesProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   description?: string
   packages: VenuePackageItem[]
   footer?: VenuePackagesFooter
@@ -344,6 +383,7 @@ export interface GalleryImage {
 export interface GalleryProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   /** Right-aligned link on the header row — e.g. "Open full gallery →". */
   ctaLabel?: string
   ctaHref?: string
@@ -358,6 +398,7 @@ export interface GalleryProps {
 export interface MembershipJoinFormProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   description?: string
   /** Slug the applicant navigates to on submit. Defaults to `/join/thanks`. */
   successHref?: string
@@ -376,6 +417,7 @@ export interface MembershipJoinFormProps {
 export interface ContactFormProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   description?: string
   /** Rail-column copy above the "Send us a note" card. Falls back to a generic reassurance. */
   formHeading?: string
@@ -396,6 +438,7 @@ export interface ContactFormProps {
 
 export interface MembershipCtaProps {
   heading: string
+  headingSize?: SectionHeadingSize
   body?: string
   ctaLabel?: string
   ctaHref?: string
@@ -403,6 +446,7 @@ export interface MembershipCtaProps {
 
 export interface CtaBannerProps {
   heading: string
+  headingSize?: SectionHeadingSize
   body?: string
   ctaLabel?: string
   ctaHref?: string
@@ -418,6 +462,7 @@ export interface MediaSplitBadge {
 export interface MediaSplitProps {
   eyebrow?: string
   heading: string
+  headingSize?: SectionHeadingSize
   bodyParagraphs?: string[]
   checklist?: string[]
   primaryCta?: { label: string; href: string }
@@ -434,6 +479,7 @@ export interface MediaSplitProps {
 export interface SectionTitleProps {
   eyebrow?: string
   heading: string
+  headingSize?: SectionHeadingSize
   body?: string
   align?: 'center' | 'left'
 }
@@ -457,6 +503,7 @@ export interface FeatureGridItem {
 export interface FeatureGridProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   columns?: 2 | 3 | 4
   items: FeatureGridItem[]
 }
@@ -468,6 +515,7 @@ export interface FaqItem {
 export interface FaqAccordionProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   supportText?: string
   cta?: { label: string; href: string }
   items: FaqItem[]
@@ -478,6 +526,8 @@ export interface FullBleedImageProps {
   overlayOpacity?: number
   eyebrow?: string
   heading: string
+  /** Hero heading scale — defaults to `'lg'`. */
+  headingSize?: HeroHeadingSize
   subheading?: string
   cta?: { label: string; href: string }
   topBadge?: { label: string; tone?: 'green' | 'blue' | 'amber' }
@@ -505,6 +555,9 @@ export interface FullBleedMediaProps {
   /** Small pill above the headline — brand accent dot + uppercase mono. */
   eyebrow?: string
   heading: string
+  /** Hero heading scale — defaults to `'xl'` (112px → 48px) to keep the
+   *  current statement weight on existing published layouts. */
+  headingSize?: HeroHeadingSize
   /** One short paragraph under the headline. */
   body?: string
   primaryCta?: { label: string; href: string }
@@ -530,6 +583,7 @@ export interface TimelineEntry {
 export interface TimelineProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   entries: TimelineEntry[]
 }
 
@@ -542,6 +596,7 @@ export interface TwoColumnItem {
 export interface TwoColumnProps {
   eyebrow?: string
   heading?: string
+  headingSize?: SectionHeadingSize
   background?: 'ground' | 'surface'
   columns: [TwoColumnItem, TwoColumnItem]
 }

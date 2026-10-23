@@ -1,4 +1,8 @@
 <script setup lang="ts">
+// Global modifier stylesheet for section headings — any block that
+// surfaces `data-sh="sm|md|lg"` on its heading picks these up without
+// needing per-block CSS.
+import './styles/section-heading-size.css'
 import type { Block } from './types'
 import HeroBlock from './blocks/HeroBlock.vue'
 import RichTextBlock from './blocks/RichTextBlock.vue'

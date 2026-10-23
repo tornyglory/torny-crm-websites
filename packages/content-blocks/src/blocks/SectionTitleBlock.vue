@@ -16,7 +16,7 @@ const alignClass = computed(() => (props.align === 'left' ? 'st--left' : 'st--ce
         <span class="st__eyebrow-dot" />
         <span>{{ eyebrow }}</span>
       </div>
-      <h2 class="st__heading">{{ heading }}</h2>
+      <h2 class="st__heading" :data-sh="headingSize">{{ heading }}</h2>
       <p v-if="body" class="st__body">{{ body }}</p>
     </div>
   </section>

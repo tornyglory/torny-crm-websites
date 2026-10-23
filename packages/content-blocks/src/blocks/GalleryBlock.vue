@@ -63,7 +63,7 @@ function tileStyle(img: GalleryImage, index: number): Record<string, string> {
           <span class="gal__eyebrow-dot" />
           <span>{{ props.eyebrow }}</span>
         </div>
-        <h2 v-if="props.heading" class="gal__title">{{ props.heading }}</h2>
+        <h2 v-if="props.heading" class="gal__title" :data-sh="props.headingSize">{{ props.heading }}</h2>
       </div>
       <a
         v-if="props.ctaLabel && props.ctaHref"

@@ -72,7 +72,7 @@ function initialsFor(name: string, initials?: string): string {
           <span class="vhh__eyebrow-dot" />
           <span>{{ props.eyebrow }}</span>
         </div>
-        <h1 class="vhh__title">{{ props.heading }}</h1>
+        <h1 class="vhh__title" :class="`vhh__title--${props.headingSize ?? 'md'}`">{{ props.heading }}</h1>
         <p v-if="props.description" class="vhh__desc">{{ props.description }}</p>
 
         <ul v-if="props.stats && props.stats.length > 0" class="vhh__stats">
@@ -138,8 +138,14 @@ function initialsFor(name: string, initials?: string): string {
 .vhh__copy { display: flex; flex-direction: column; gap: 20px; }
 .vhh__eyebrow { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--color-fog); text-transform: uppercase; }
 .vhh__eyebrow-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--brand); }
-.vhh__title { font-family: var(--font-display); font-size: clamp(48px, 6vw, 88px); font-weight: 700; line-height: 1; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; max-width: 520px; }
-.vhh__desc { font-family: var(--font-body); font-size: 16px; line-height: 155%; color: var(--color-fog); margin: 0; max-width: 480px; }
+/* Heading scale shared with every hero block (brief: HeroHeadingSize).
+   Default is 'md'; override via the editor's size picker. */
+.vhh__title { font-family: var(--font-display); font-size: var(--h, 72px); font-weight: 700; line-height: 1; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; max-width: 528px; }
+.vhh__title--sm { --h: 48px; --h-md: 44px; --h-sm: 40px; --h-xs: 32px; }
+.vhh__title--md { --h: 72px; --h-md: 64px; --h-sm: 56px; --h-xs: 40px; }
+.vhh__title--lg { --h: 88px; --h-md: 80px; --h-sm: 64px; --h-xs: 44px; }
+.vhh__title--xl { --h: 112px; --h-md: 96px; --h-sm: 72px; --h-xs: 48px; }
+.vhh__desc { font-family: var(--font-body); font-size: 19px; line-height: 155%; color: var(--color-fog); margin: 0; max-width: 480px; }
 
 .vhh__stats { list-style: none; padding: 24px 0; margin: 0; display: flex; flex-direction: row; gap: 48px; border-top: 1px solid var(--color-hairline); border-bottom: 1px solid var(--color-hairline); }
 .vhh__stat { display: flex; flex-direction: column; gap: 4px; }
@@ -168,9 +174,14 @@ function initialsFor(name: string, initials?: string): string {
 .vhh__quote-author { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: #fff; }
 .vhh__quote-role { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: rgba(255,255,255,0.7); text-transform: uppercase; }
 
+@media (max-width: 1279px) {
+  .vhh__title { font-size: var(--h-md, 64px); }
+}
+
 @media (max-width: 1023px) {
   .vhh__grid { grid-template-columns: 1fr; gap: 32px; }
-  .vhh__title { font-size: clamp(40px, 8vw, 64px); }
+  .vhh__title { font-size: var(--h-sm, 56px); max-width: none; }
+  .vhh__desc { font-size: 18px; max-width: 640px; }
   .vhh__card { min-height: 360px; }
   .vhh__stats { flex-wrap: wrap; gap: 24px; }
 }
@@ -190,8 +201,8 @@ function initialsFor(name: string, initials?: string): string {
 
   .vhh__copy { gap: 14px; }
   .vhh__eyebrow { font-size: 10px; letter-spacing: 0.08em; }
-  .vhh__title { font-size: 40px; letter-spacing: -0.02em; line-height: 100%; max-width: none; }
-  .vhh__desc { font-size: 14px; line-height: 150%; max-width: none; }
+  .vhh__title { font-size: var(--h-xs, 40px); letter-spacing: -0.02em; line-height: 100%; max-width: none; }
+  .vhh__desc { font-size: 16px; line-height: 150%; max-width: none; }
 
   /* Stats row: 3 columns separated by thin dividers, scaled down */
   .vhh__stats {

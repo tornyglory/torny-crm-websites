@@ -132,7 +132,7 @@ function goingLabel(e: EventEntry): string {
           <span v-if="props.eyebrow">{{ props.eyebrow }}</span>
           <span v-else>THIS MONTH · {{ monthLabel.toUpperCase() }}</span>
         </div>
-        <h2 class="evh__heading">{{ props.heading }}</h2>
+        <h2 class="evh__heading" :data-sh="props.headingSize">{{ props.heading }}</h2>
         <p class="evh__sub">
           {{ props.description || autoDescription }}
         </p>

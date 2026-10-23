@@ -119,7 +119,7 @@ function href(t: PublicTournamentCard): string {
             <template v-if="eyebrow">{{ eyebrow }}</template>
             <template v-else>{{ results.length }} upcoming · Taking entries</template>
           </div>
-          <h2 class="ut-list__heading">{{ heading }}</h2>
+          <h2 class="ut-list__heading" :data-sh="headingSize">{{ heading }}</h2>
           <p v-if="description" class="ut-list__desc">{{ description }}</p>
         </div>
         <a v-if="ctaLabel && ctaHref" :href="ctaHref" class="ut-list__cta">

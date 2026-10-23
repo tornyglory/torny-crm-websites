@@ -239,7 +239,7 @@ function loadMore() {
           {{ categories.length }} categor{{ categories.length === 1 ? 'y' : 'ies' }} · {{ yearRange }}
         </template>
       </div>
-      <h2 class="hbs__title">{{ props.heading }}</h2>
+      <h2 class="hbs__title" :data-sh="props.headingSize">{{ props.heading }}</h2>
       <p v-if="props.description" class="hbs__sub">{{ props.description }}</p>
     </header>
 

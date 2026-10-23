@@ -31,7 +31,7 @@ const bgClass = computed(() => (props.background === 'surface' ? 'ms--bg-surface
         <span>{{ eyebrow }}</span>
       </div>
 
-      <h2 class="ms__heading">{{ heading }}</h2>
+      <h2 class="ms__heading" :data-sh="headingSize">{{ heading }}</h2>
 
       <p
         v-for="(para, i) in bodyParagraphs"

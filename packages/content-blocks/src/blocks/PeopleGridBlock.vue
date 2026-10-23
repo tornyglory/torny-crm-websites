@@ -62,7 +62,7 @@ function toneStyle(p: PeopleGridPerson, index: number): { background: string; co
           <span class="pg__eyebrow-dot" />
           <span>{{ props.eyebrow }}</span>
         </div>
-        <h2 v-if="props.heading" class="pg__title">{{ props.heading }}</h2>
+        <h2 v-if="props.heading" class="pg__title" :data-sh="props.headingSize">{{ props.heading }}</h2>
       </div>
       <p v-if="props.subheading" class="pg__sub">{{ props.subheading }}</p>
     </header>

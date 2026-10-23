@@ -61,7 +61,7 @@ function slabStyle(space: VenueSpaceItem, index: number): Record<string, string>
           <span class="vs__eyebrow-dot" />
           <span>{{ props.eyebrow }}</span>
         </div>
-        <h2 v-if="props.heading" class="vs__title">{{ props.heading }}</h2>
+        <h2 v-if="props.heading" class="vs__title" :data-sh="props.headingSize">{{ props.heading }}</h2>
       </div>
       <a v-if="props.ctaLabel && props.ctaHref" :href="props.ctaHref" class="vs__cta">
         <span>{{ props.ctaLabel }}</span>

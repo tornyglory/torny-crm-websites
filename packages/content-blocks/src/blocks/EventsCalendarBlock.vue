@@ -365,7 +365,7 @@ function spotsTaken(e: EventEntry): number {
           <template v-if="props.eyebrow">{{ props.eyebrow }}</template>
           <template v-else>{{ monthLabel.toUpperCase() }} · WEEK {{ weekNumber }}</template>
         </div>
-        <h2 class="evc__title">{{ props.heading }}</h2>
+        <h2 class="evc__title" :data-sh="props.headingSize">{{ props.heading }}</h2>
         <p v-if="props.description" class="evc__sub">{{ props.description }}</p>
       </div>
       <div class="evc__view-toggle" role="tablist" aria-label="View">

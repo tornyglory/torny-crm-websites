@@ -1620,6 +1620,17 @@ const lastSavedLabel = computed(() => {
               <input v-model="(selectedBlock!.props as HeroProps).heading" type="text" />
             </label>
             <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock!.props as HeroProps).headingSize">
+                <option :value="undefined">Default (medium)</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+              <span class="field__hint">Scales down smoothly on tablet &amp; mobile.</span>
+            </label>
+            <label class="field">
               <span class="field__label">Description</span>
               <textarea v-model="(selectedBlock!.props as HeroProps).description" rows="3" placeholder="A paragraph under the heading." />
             </label>
@@ -1749,6 +1760,16 @@ const lastSavedLabel = computed(() => {
               <input v-model="(selectedBlock.props as EventListProps).heading" type="text" placeholder="What's on the greens." />
             </label>
             <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as EventListProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
+            <label class="field">
               <span class="field__label">Description</span>
               <textarea v-model="(selectedBlock.props as EventListProps).description" rows="3" placeholder="Leave blank for auto — 'Twelve events on the schedule.'" />
               <span class="field__hint">Falls back to an auto-count line when blank.</span>
@@ -1808,6 +1829,16 @@ const lastSavedLabel = computed(() => {
               <input v-model="(selectedBlock.props as EventsCalendarProps).heading" type="text" placeholder="What's on the greens." />
             </label>
             <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as EventsCalendarProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
+            <label class="field">
               <span class="field__label">Description</span>
               <textarea v-model="(selectedBlock.props as EventsCalendarProps).description" rows="3" placeholder="One line of context above the calendar." />
             </label>
@@ -1839,6 +1870,16 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Heading</span>
               <input v-model="(selectedBlock.props as HonourBoardProps).heading" type="text" placeholder="Champions." />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as HonourBoardProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
             </label>
             <label class="field">
               <span class="field__label">Description</span>
@@ -1879,6 +1920,16 @@ const lastSavedLabel = computed(() => {
               <input v-model="(selectedBlock.props as HonourBoardSearchProps).heading" type="text" placeholder="The honour board." />
             </label>
             <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as HonourBoardSearchProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
+            <label class="field">
               <span class="field__label">Description</span>
               <textarea v-model="(selectedBlock.props as HonourBoardSearchProps).description" rows="3" placeholder="One line of context above the search." />
             </label>
@@ -1897,6 +1948,16 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Heading</span>
               <input v-model="(selectedBlock.props as TournamentSearchProps).heading" type="text" placeholder="Find your next comp." />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as TournamentSearchProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
             </label>
             <label class="field">
               <span class="field__label">Description</span>
@@ -1949,6 +2010,16 @@ const lastSavedLabel = computed(() => {
               <input v-model="(selectedBlock.props as UpcomingTournamentsListProps).heading" type="text" placeholder="Grab your spot." />
             </label>
             <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as UpcomingTournamentsListProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
+            <label class="field">
               <span class="field__label">Description</span>
               <textarea v-model="(selectedBlock.props as UpcomingTournamentsListProps).description" rows="2" placeholder="One line above the list." />
             </label>
@@ -1985,6 +2056,17 @@ const lastSavedLabel = computed(() => {
               <span class="field__label">Description override</span>
               <textarea v-model="(selectedBlock.props as UpcomingTournamentHeroProps).description" rows="3" placeholder="Otherwise uses the tournament's own subtitle or description." />
             </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as UpcomingTournamentHeroProps).headingSize">
+                <option :value="undefined">Default (large)</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+              <span class="field__hint">Scales down smoothly on tablet &amp; mobile.</span>
+            </label>
             <div class="field-row">
               <label class="field">
                 <span class="field__label">Primary CTA</span>
@@ -2006,6 +2088,16 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Heading</span>
               <input v-model="(selectedBlock.props as MembersSearchProps).heading" type="text" placeholder="Meet the club" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as MembersSearchProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
             </label>
             <label class="field">
               <span class="field__label">Description</span>
@@ -2075,6 +2167,16 @@ const lastSavedLabel = computed(() => {
               <input v-model="(selectedBlock.props as MembershipJoinFormProps).heading" type="text" placeholder="Join the club." />
             </label>
             <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as MembershipJoinFormProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
+            <label class="field">
               <span class="field__label">Description</span>
               <textarea v-model="(selectedBlock.props as MembershipJoinFormProps).description" rows="3" placeholder="Reassuring copy under the hero." />
             </label>
@@ -2131,6 +2233,16 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Heading</span>
               <input v-model="(selectedBlock.props as ContactFormProps).heading" type="text" placeholder="Say hi." />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as ContactFormProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
             </label>
             <label class="field">
               <span class="field__label">Description</span>
@@ -2195,6 +2307,16 @@ const lastSavedLabel = computed(() => {
               <input v-model="(selectedBlock.props as MembershipCtaProps).heading" type="text" />
             </label>
             <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as MembershipCtaProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
+            <label class="field">
               <span class="field__label">Body</span>
               <textarea v-model="(selectedBlock.props as MembershipCtaProps).body" rows="3" />
             </label>
@@ -2213,6 +2335,16 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Heading</span>
               <input v-model="(selectedBlock.props as CtaBannerProps).heading" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as CtaBannerProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
             </label>
             <label class="field">
               <span class="field__label">Body (optional)</span>
@@ -2245,6 +2377,16 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Heading</span>
               <input v-model="(selectedBlock.props as GalleryProps).heading" type="text" placeholder="Some Fridays we photograph." />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as GalleryProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
             </label>
             <label class="field">
               <span class="field__label">Link label</span>
@@ -2286,6 +2428,16 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Heading</span>
               <input v-model="(selectedBlock.props as PeopleGridProps).heading" type="text" placeholder="The people to know." />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as PeopleGridProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
             </label>
             <label class="field">
               <span class="field__label">Subheading (right-aligned)</span>
@@ -2333,6 +2485,17 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Heading</span>
               <textarea v-model="(selectedBlock.props as VenueHireHeroProps).heading" rows="2" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as VenueHireHeroProps).headingSize">
+                <option :value="undefined">Default (medium)</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+              <span class="field__hint">Scales down smoothly on tablet &amp; mobile.</span>
             </label>
             <label class="field">
               <span class="field__label">Description</span>
@@ -2411,6 +2574,16 @@ const lastSavedLabel = computed(() => {
               <input v-model="(selectedBlock.props as VenueSpacesProps).heading" type="text" />
             </label>
             <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as VenueSpacesProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
+            <label class="field">
               <span class="field__label">Right link label</span>
               <input v-model="(selectedBlock.props as VenueSpacesProps).ctaLabel" type="text" placeholder="All spaces are OK" />
             </label>
@@ -2462,6 +2635,16 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Heading</span>
               <textarea v-model="(selectedBlock.props as VenuePackagesProps).heading" rows="2" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as VenuePackagesProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
             </label>
             <label class="field">
               <span class="field__label">Description</span>
@@ -2526,6 +2709,16 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Heading</span>
               <textarea v-model="(selectedBlock!.props as MediaSplitProps).heading" rows="2" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock!.props as MediaSplitProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
             </label>
             <div class="field">
               <span class="field__label">Body paragraphs</span>
@@ -2607,6 +2800,16 @@ const lastSavedLabel = computed(() => {
               <textarea v-model="(selectedBlock!.props as SectionTitleProps).heading" rows="3" />
             </label>
             <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock!.props as SectionTitleProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
+            <label class="field">
               <span class="field__label">Body</span>
               <textarea v-model="(selectedBlock!.props as SectionTitleProps).body" rows="3" />
             </label>
@@ -2660,6 +2863,16 @@ const lastSavedLabel = computed(() => {
               <input v-model="(selectedBlock!.props as FeatureGridProps).heading" type="text" />
             </label>
             <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock!.props as FeatureGridProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
+            <label class="field">
               <span class="field__label">Columns</span>
               <select v-model.number="(selectedBlock!.props as FeatureGridProps).columns">
                 <option :value="2">2</option>
@@ -2710,6 +2923,16 @@ const lastSavedLabel = computed(() => {
               <textarea v-model="(selectedBlock!.props as FaqAccordionProps).heading" rows="2" />
             </label>
             <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock!.props as FaqAccordionProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
+            <label class="field">
               <span class="field__label">Support text</span>
               <textarea v-model="(selectedBlock!.props as FaqAccordionProps).supportText" rows="2" />
             </label>
@@ -2758,6 +2981,17 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Heading</span>
               <textarea v-model="(selectedBlock!.props as FullBleedImageProps).heading" rows="2" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock!.props as FullBleedImageProps).headingSize">
+                <option :value="undefined">Default (large)</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+              <span class="field__hint">Scales down smoothly on tablet &amp; mobile.</span>
             </label>
             <label class="field">
               <span class="field__label">Subheading</span>
@@ -2881,6 +3115,17 @@ const lastSavedLabel = computed(() => {
               <textarea v-model="(selectedBlock!.props as FullBleedMediaProps).heading" rows="2" />
             </label>
             <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock!.props as FullBleedMediaProps).headingSize">
+                <option :value="undefined">Default (extra large)</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+              <span class="field__hint">Scales down smoothly on tablet &amp; mobile.</span>
+            </label>
+            <label class="field">
               <span class="field__label">Body</span>
               <textarea v-model="(selectedBlock!.props as FullBleedMediaProps).body" rows="3" />
             </label>
@@ -2944,6 +3189,16 @@ const lastSavedLabel = computed(() => {
               <span class="field__label">Heading</span>
               <input v-model="(selectedBlock!.props as TimelineProps).heading" type="text" />
             </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock!.props as TimelineProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
             <div class="field">
               <span class="field__label">Entries ({{ (selectedBlock!.props as TimelineProps).entries.length }})</span>
               <div v-for="(entry, ei) in (selectedBlock!.props as TimelineProps).entries" :key="ei" class="field__group">
@@ -2973,6 +3228,16 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Heading</span>
               <input v-model="(selectedBlock!.props as TwoColumnProps).heading" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock!.props as TwoColumnProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
             </label>
             <label class="field">
               <span class="field__label">Background</span>

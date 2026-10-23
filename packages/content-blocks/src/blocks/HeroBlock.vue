@@ -39,7 +39,7 @@ function initialsFor(name: string, initials?: string): string {
           <span class="hero__eyebrow-text">{{ eyebrow }}</span>
         </div>
 
-        <h1 class="hero__heading">{{ heading }}</h1>
+        <h1 class="hero__heading" :class="`hero__heading--${headingSize ?? 'md'}`">{{ heading }}</h1>
 
         <p v-if="bodyText" class="hero__body">{{ bodyText }}</p>
 
@@ -164,13 +164,19 @@ function initialsFor(name: string, initials?: string): string {
 .hero__heading {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 72px;
+  /* `--h` + three stepped stops drive the responsive scale; the modifier
+   *  class below sets which scale (sm / md / lg / xl) is in play. */
+  font-size: var(--h, 72px);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--track-tight);
   line-height: var(--leading-tight);
   color: var(--color-ink);
   max-width: 528px;
 }
+.hero__heading--sm { --h: 48px; --h-md: 44px; --h-sm: 40px; --h-xs: 32px; }
+.hero__heading--md { --h: 72px; --h-md: 64px; --h-sm: 56px; --h-xs: 40px; }
+.hero__heading--lg { --h: 88px; --h-md: 80px; --h-sm: 64px; --h-xs: 44px; }
+.hero__heading--xl { --h: 112px; --h-md: 96px; --h-sm: 72px; --h-xs: 48px; }
 
 .hero__body {
   margin: 0;
@@ -380,7 +386,7 @@ function initialsFor(name: string, initials?: string): string {
 /* Large tablet: keep split, tighten gap + shrink heading. */
 @media (max-width: 1279px) {
   .hero__split { gap: 32px; }
-  .hero__heading { font-size: 64px; }
+  .hero__heading { font-size: var(--h-md, 64px); }
 }
 
 /* Below 1024px: stack. Text is unreadable in a half-column with a big heading. */
@@ -393,7 +399,7 @@ function initialsFor(name: string, initials?: string): string {
     padding: 24px;
     border-radius: 20px;
   }
-  .hero__heading { font-size: 56px; max-width: none; }
+  .hero__heading { font-size: var(--h-sm, 56px); max-width: none; }
   .hero__body { font-size: 18px; max-width: 640px; }
 }
 
@@ -403,7 +409,7 @@ function initialsFor(name: string, initials?: string): string {
   .hero__split { padding: 32px 0; gap: 20px; }
   .hero__col--media { min-height: 240px; padding: 20px; border-radius: 20px; }
   .hero__col--text { gap: 20px; }
-  .hero__heading { font-size: 40px; }
+  .hero__heading { font-size: var(--h-xs, 40px); }
   .hero__body { font-size: 16px; }
   .hero__ctas { gap: 12px; }
   .hero__cta-primary,
@@ -411,6 +417,9 @@ function initialsFor(name: string, initials?: string): string {
   .hero__cta-primary { padding-inline: 20px; }
   .hero__stats { gap: 20px; padding-top: 24px; margin-top: 8px; }
   .hero__stat-value { font-size: 24px; }
+  /* Testimonial card is too chunky over the image on narrow viewports —
+     drop it entirely rather than squeezing it in. */
+  .hero__quote { display: none; }
 }
 
 /* Mobile (≤640px) — tighten the 48px desktop gutter so the block

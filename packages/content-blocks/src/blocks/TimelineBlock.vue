@@ -15,7 +15,7 @@ function yearToneClass(tone: string | undefined): string {
         <span class="tl__eyebrow-dot" />
         <span>{{ eyebrow }}</span>
       </div>
-      <h2 v-if="heading" class="tl__heading">{{ heading }}</h2>
+      <h2 v-if="heading" class="tl__heading" :data-sh="headingSize">{{ heading }}</h2>
     </div>
 
     <div class="tl__list">

@@ -23,7 +23,7 @@ function pad(n: number): string {
         <span class="faq__eyebrow-dot" />
         <span>{{ eyebrow }}</span>
       </div>
-      <h2 v-if="heading" class="faq__heading">{{ heading }}</h2>
+      <h2 v-if="heading" class="faq__heading" :data-sh="headingSize">{{ heading }}</h2>
       <p v-if="supportText" class="faq__support">{{ supportText }}</p>
       <a v-if="cta" :href="cta.href" class="faq__cta">
         <span>{{ cta.label }}</span>

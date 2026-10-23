@@ -261,7 +261,7 @@ function joinFormErrorMessage(err: unknown): string {
         <span class="jf__eyebrow-dot" />
         <span>{{ props.eyebrow }}</span>
       </div>
-      <h1 class="jf__title">{{ props.heading }}</h1>
+      <h1 class="jf__title" :data-sh="props.headingSize">{{ props.heading }}</h1>
       <p v-if="props.description" class="jf__sub">{{ props.description }}</p>
     </header>
 

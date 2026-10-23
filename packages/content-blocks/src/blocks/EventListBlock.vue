@@ -246,6 +246,9 @@ function goingLabel(e: EventEntry): string {
 .evh__chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; background: transparent; border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-graphite); cursor: pointer; }
 .evh__chip:hover { background: #fff; }
 .evh__chip--active { background: var(--color-ink); color: #fff; border-color: var(--color-ink); font-weight: 600; }
+/* Active chip would otherwise go white-on-white because the base :hover
+ * forces the background to #fff — keep the dark pill on hover. */
+.evh__chip--active:hover { background: var(--color-graphite); }
 .evh__chip-dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
 .evh__chip-count { font-family: var(--font-mono); font-size: 11px; opacity: 0.65; }
 
@@ -254,9 +257,13 @@ function goingLabel(e: EventEntry): string {
 
 /* Grid */
 .evh__grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+/* The grid stretches each <li> to the row's tallest card — this makes
+ * the <a> card inside fill its <li> so all four match height even when
+ * titles wrap to different line counts. */
+.evh__grid > li { display: flex; }
 
 /* Card */
-.ec { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 16px; text-decoration: none; color: inherit; transition: transform 160ms, box-shadow 160ms, border-color 160ms; overflow: hidden; }
+.ec { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 16px; text-decoration: none; color: inherit; transition: transform 160ms, box-shadow 160ms, border-color 160ms; overflow: hidden; width: 100%; }
 .ec::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--ec-from, #F5A623), var(--ec-to, #E85D5D)); }
 .ec:hover { transform: translateY(-2px); border-color: transparent; box-shadow: 0 10px 30px color-mix(in oklab, var(--ec-ring, var(--brand)) 22%, transparent); }
 
@@ -271,7 +278,9 @@ function goingLabel(e: EventEntry): string {
 .ec__meta { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); line-height: 1.4; }
 .ec__sep { opacity: 0.5; margin: 0 5px; }
 
-.ec__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--color-hairline); }
+/* `margin-top: auto` pushes the foot to the bottom of the card so short-title
+ * cards share the same height as long-title ones in the row. */
+.ec__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--color-hairline); }
 .ec__avatars { display: inline-flex; align-items: center; }
 .ec__avatar { width: 24px; height: 24px; border-radius: 999px; border: 2px solid #fff; background: var(--color-hairline); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 9px; font-weight: 700; margin-left: -6px; overflow: hidden; box-sizing: border-box; }
 .ec__avatar:first-child { margin-left: 0; }

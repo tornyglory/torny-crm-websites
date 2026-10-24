@@ -253,7 +253,7 @@ function toggleMute() {
   font-family: var(--font-display);
   /* Shared HeroHeadingSize scale — modifier class sets the stops. */
   font-size: var(--h, 112px);
-  font-weight: 500;
+  font-weight: var(--weight-semibold, 600);
   color: #fff;
   letter-spacing: -0.04em;
   line-height: 95%;

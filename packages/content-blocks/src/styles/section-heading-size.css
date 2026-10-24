@@ -24,7 +24,7 @@
  *   md — 72 / 64 / 56 / 40
  *   lg — 88 / 80 / 64 / 44
  *   xl — 112 / 96 / 72 / 48 */
-[data-sh] { line-height: 1.05 !important; letter-spacing: -0.02em !important; font-weight: 700 !important; }
+[data-sh] { line-height: 1.05 !important; letter-spacing: -0.02em !important; font-weight: var(--weight-semibold, 600) !important; }
 
 [data-sh='sm'] { font-size: 48px !important; }
 [data-sh='md'] { font-size: 72px !important; }

@@ -409,7 +409,7 @@ function href(t: PublicTournamentCard): string {
 .tsx__head-text { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
 .tsx__eyebrow { font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 12px; color: #6B6B72; letter-spacing: 0.14em; font-weight: 700; text-transform: uppercase; }
 .tsx__eyebrow-accent { color: #16A34A; }
-.tsx__heading { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: 700; font-size: clamp(40px, 5vw, 64px); letter-spacing: -0.02em; line-height: 1.05; margin: 0; color: var(--site-ink, #0A0A0B); }
+.tsx__heading { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: var(--weight-semibold, 600); font-size: clamp(40px, 5vw, 64px); letter-spacing: -0.02em; line-height: 1.05; margin: 0; color: var(--site-ink, #0A0A0B); }
 .tsx__desc { font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 15px; color: #6B6B72; line-height: 1.55; margin: 0; max-width: 560px; }
 
 /* ── Main column ─────────────────────────────────────────────── */

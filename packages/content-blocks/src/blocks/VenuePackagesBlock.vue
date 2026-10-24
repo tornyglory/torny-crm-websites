@@ -138,7 +138,7 @@ const hasFooter = computed(() =>
 .vp__head { display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center; }
 .vp__eyebrow { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--color-fog); text-transform: uppercase; }
 .vp__eyebrow-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--brand); flex-shrink: 0; }
-.vp__title { font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); font-weight: 700; line-height: 1; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; max-width: 780px; }
+.vp__title { font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); font-weight: var(--weight-semibold, 600); line-height: 1; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; max-width: 780px; }
 .vp__desc { font-family: var(--font-body); font-size: 16px; line-height: 155%; color: var(--color-fog); margin: 0; max-width: 620px; }
 
 /* Grid */

@@ -116,7 +116,7 @@ function tileStyle(img: GalleryImage, index: number): Record<string, string> {
 .gal__head-copy { display: flex; flex-direction: column; gap: 12px; }
 .gal__eyebrow { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--color-fog); text-transform: uppercase; }
 .gal__eyebrow-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--brand); flex-shrink: 0; }
-.gal__title { font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); font-weight: 700; line-height: 1; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; }
+.gal__title { font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); font-weight: var(--weight-semibold, 600); line-height: 1; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; }
 .gal__cta { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); text-decoration: none; padding-bottom: 6px; border-bottom: 1px solid var(--color-ink); flex-shrink: 0; white-space: nowrap; }
 .gal__cta:hover { color: var(--brand); border-color: var(--brand); }
 

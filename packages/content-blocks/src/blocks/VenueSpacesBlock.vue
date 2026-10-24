@@ -129,7 +129,7 @@ function slabStyle(space: VenueSpaceItem, index: number): Record<string, string>
 .vs__head-copy { display: flex; flex-direction: column; gap: 12px; }
 .vs__eyebrow { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--color-fog); text-transform: uppercase; }
 .vs__eyebrow-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--brand); }
-.vs__title { font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); font-weight: 700; line-height: 1; letter-spacing: -0.02em; margin: 0; }
+.vs__title { font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); font-weight: var(--weight-semibold, 600); line-height: 1; letter-spacing: -0.02em; margin: 0; }
 .vs__cta { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; color: var(--color-fog); text-transform: uppercase; text-decoration: none; white-space: nowrap; }
 .vs__cta:hover { color: var(--color-ink); }
 

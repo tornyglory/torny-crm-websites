@@ -291,7 +291,7 @@ function avatarPalette(m: PublicMember) {
 .mem__head { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
 .mem__eyebrow { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
 .mem__eyebrow-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--brand); }
-.mem__title { font-family: var(--font-display); font-size: clamp(32px, 4vw, 48px); font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--color-ink); line-height: 1.05; }
+.mem__title { font-family: var(--font-display); font-size: clamp(32px, 4vw, 48px); font-weight: var(--weight-semibold, 600); letter-spacing: -0.02em; margin: 0; color: var(--color-ink); line-height: 1.05; }
 .mem__sub { font-family: var(--font-body); font-size: 15px; color: var(--color-graphite); margin: 0; max-width: 560px; line-height: 1.55; }
 
 .mem__placeholder { padding: 40px; text-align: center; background: var(--color-surface); border: 1px dashed var(--color-hairline); border-radius: 16px; font-family: var(--font-body); color: var(--color-graphite); }

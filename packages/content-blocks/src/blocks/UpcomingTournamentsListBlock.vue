@@ -180,7 +180,7 @@ function href(t: PublicTournamentCard): string {
 .ut-list__head-copy { max-width: 540px; }
 .ut-list__eyebrow { display: inline-flex; align-items: center; gap: 8px; font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #16A34A; font-weight: 600; margin-bottom: 12px; }
 .ut-list__eyebrow-dot { width: 6px; height: 6px; border-radius: 999px; background: #16A34A; }
-.ut-list__heading { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: 700; font-size: clamp(36px, 5vw, 48px); letter-spacing: -0.03em; line-height: 100%; margin: 0 0 10px; color: var(--site-ink, #0A0A0B); }
+.ut-list__heading { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: var(--weight-semibold, 600); font-size: clamp(36px, 5vw, 48px); letter-spacing: -0.03em; line-height: 100%; margin: 0 0 10px; color: var(--site-ink, #0A0A0B); }
 .ut-list__desc { font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 15px; color: #6B6B72; line-height: 150%; margin: 0; }
 .ut-list__cta { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; background: #FFFFFF; border: 1px solid #E7E7E1; border-radius: 999px; font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 13px; font-weight: 600; color: var(--site-ink, #0A0A0B); text-decoration: none; }
 .ut-list__cta:hover { background: var(--site-ink, #0A0A0B); color: #FFFFFF; border-color: var(--site-ink, #0A0A0B); }

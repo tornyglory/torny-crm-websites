@@ -65,7 +65,7 @@ function initialsFor(name: string, initials?: string): string {
 
 <template>
   <section class="vhh" :style="{ '--brand': brand } as any">
-    <div class="vhh__grid">
+    <div class="vhh__grid" :class="`vhh__grid--media-${props.mediaSide ?? 'right'}`">
       <!-- Left — editorial copy -->
       <div class="vhh__copy">
         <div v-if="props.eyebrow" class="vhh__eyebrow">
@@ -133,6 +133,11 @@ function initialsFor(name: string, initials?: string): string {
 }
 
 .vhh__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: stretch; min-height: 520px; }
+/* Swap column order via `order` so the DOM / a11y / mobile stacking
+ * stay intact (copy first, card second). On desktop the admin can flip
+ * the visual arrangement via mediaSide. */
+.vhh__grid--media-left > .vhh__copy { order: 2; }
+.vhh__grid--media-left > .vhh__card { order: 1; }
 
 /* Left copy */
 .vhh__copy { display: flex; flex-direction: column; gap: 20px; }
@@ -140,7 +145,7 @@ function initialsFor(name: string, initials?: string): string {
 .vhh__eyebrow-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--brand); }
 /* Heading scale shared with every hero block (brief: HeroHeadingSize).
    Default is 'md'; override via the editor's size picker. */
-.vhh__title { font-family: var(--font-display); font-size: var(--h, 72px); font-weight: 700; line-height: 1; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; max-width: 528px; }
+.vhh__title { font-family: var(--font-display); font-size: var(--h, 72px); font-weight: var(--weight-semibold, 600); line-height: 1; letter-spacing: -0.02em; color: var(--color-ink); margin: 0; max-width: 528px; }
 .vhh__title--sm { --h: 48px; --h-md: 44px; --h-sm: 40px; --h-xs: 32px; }
 .vhh__title--md { --h: 72px; --h-md: 64px; --h-sm: 56px; --h-xs: 40px; }
 .vhh__title--lg { --h: 88px; --h-md: 80px; --h-sm: 64px; --h-xs: 44px; }
@@ -180,6 +185,10 @@ function initialsFor(name: string, initials?: string): string {
 
 @media (max-width: 1023px) {
   .vhh__grid { grid-template-columns: 1fr; gap: 32px; }
+  /* Reset the desktop media-left swap — on narrow viewports we always
+   * want copy on top and card below, no matter what the admin picked. */
+  .vhh__grid--media-left > .vhh__copy,
+  .vhh__grid--media-left > .vhh__card { order: initial; }
   .vhh__title { font-size: var(--h-sm, 56px); max-width: none; }
   .vhh__desc { font-size: 18px; max-width: 640px; }
   .vhh__card { min-height: 360px; }

@@ -236,7 +236,7 @@ function goingLabel(e: EventEntry): string {
 .evh__head-text { display: flex; flex-direction: column; gap: 12px; max-width: 640px; }
 .evh__eyebrow { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
 .evh__eyebrow-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--brand); flex-shrink: 0; }
-.evh__heading { font-family: var(--font-display); font-size: clamp(32px, 4vw, 48px); font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--color-ink); line-height: 1.05; }
+.evh__heading { font-family: var(--font-display); font-size: clamp(32px, 4vw, 48px); font-weight: var(--weight-semibold, 600); letter-spacing: -0.02em; margin: 0; color: var(--color-ink); line-height: 1.05; }
 .evh__sub { font-family: var(--font-body); font-size: 15px; color: var(--color-graphite); margin: 0; line-height: 1.55; max-width: 480px; }
 .evh__cta { display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; background: var(--color-ink); color: #fff; border-radius: 999px; font-family: var(--font-body); font-size: 14px; font-weight: 600; text-decoration: none; flex-shrink: 0; }
 .evh__cta:hover { background: var(--color-graphite); }

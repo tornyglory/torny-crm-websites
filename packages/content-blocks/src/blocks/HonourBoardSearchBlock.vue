@@ -490,7 +490,7 @@ function loadMore() {
 
 .hbs__head { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
 .hbs__eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; }
-.hbs__title { font-family: var(--font-display); font-size: clamp(40px, 5vw, 64px); font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--color-ink); line-height: 1.05; }
+.hbs__title { font-family: var(--font-display); font-size: clamp(40px, 5vw, 64px); font-weight: var(--weight-semibold, 600); letter-spacing: -0.02em; margin: 0; color: var(--color-ink); line-height: 1.05; }
 .hbs__sub { font-family: var(--font-body); font-size: 15px; color: var(--color-graphite); margin: 0; line-height: 1.55; max-width: 560px; }
 
 .hbs__placeholder { padding: 40px; text-align: center; background: var(--color-surface); border: 1px dashed var(--color-hairline); border-radius: 16px; font-family: var(--font-body); color: var(--color-graphite); }

@@ -351,7 +351,7 @@ function enquiryErrorMessage(err: unknown): string {
 .cf__head { display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center; padding-bottom: 64px; border-bottom: 1px solid var(--color-hairline); }
 .cf__eyebrow { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--color-fog); text-transform: uppercase; }
 .cf__eyebrow-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--brand); flex-shrink: 0; }
-.cf__title { font-family: var(--font-display); font-size: clamp(48px, 7vw, 88px); font-weight: 700; line-height: 1; letter-spacing: -0.02em; margin: 0; }
+.cf__title { font-family: var(--font-display); font-size: clamp(48px, 7vw, 88px); font-weight: var(--weight-semibold, 600); line-height: 1; letter-spacing: -0.02em; margin: 0; }
 .cf__sub { font-family: var(--font-body); font-size: 18px; line-height: 150%; color: var(--color-fog); margin: 0; max-width: 620px; }
 
 /* Body layout */

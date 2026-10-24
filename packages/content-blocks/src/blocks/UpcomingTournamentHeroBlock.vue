@@ -219,7 +219,7 @@ const detailHref = computed(() => featured.value ? `/tournaments/${featured.valu
 .ut-hero__bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 60px; }
 .ut-hero__copy { max-width: 720px; }
 .ut-hero__eyebrow { font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 12px; color: rgba(255,255,255,0.6); letter-spacing: 0.14em; font-weight: 600; margin-bottom: 16px; }
-.ut-hero__title { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: 700; font-size: var(--h, 88px); color: #FFFFFF; letter-spacing: -0.045em; line-height: 92%; margin: 0 0 20px; }
+.ut-hero__title { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: var(--weight-semibold, 600); font-size: var(--h, 88px); color: #FFFFFF; letter-spacing: -0.045em; line-height: 92%; margin: 0 0 20px; }
 .ut-hero__title--sm { --h: 48px; --h-md: 44px; --h-sm: 40px; --h-xs: 32px; }
 .ut-hero__title--md { --h: 72px; --h-md: 64px; --h-sm: 56px; --h-xs: 40px; }
 .ut-hero__title--lg { --h: 88px; --h-md: 80px; --h-sm: 64px; --h-xs: 44px; }

@@ -14,6 +14,7 @@ export type BlockType =
   | 'venueHireHero'
   | 'venueSpaces'
   | 'venuePackages'
+  | 'venueBooking'
   | 'gallery'
   | 'contactForm'
   | 'membershipCta'
@@ -293,8 +294,16 @@ export interface VenueHireHeroProps {
   cardTone?: VenueTone
   /** Background photo URL for the card. Falls back to the tone gradient. */
   cardImageUrl?: string
+  /** Row id from the block-images API — needed for later DELETE / PATCH
+   *  via the ImagePicker component. */
+  cardImageId?: number | null
   /** Overlay quote card. Positioned bottom-right of the feature card. */
   testimonial?: VenueTestimonial
+  /** Which side the feature card sits on at desktop widths. Defaults to
+   *  `'right'` (copy left, card right). `'left'` swaps them. On mobile
+   *  the grid collapses to a single column — the card always drops below
+   *  the copy regardless. */
+  mediaSide?: 'left' | 'right'
 }
 
 export interface VenueSpaceItem {
@@ -365,6 +374,97 @@ export interface VenuePackagesProps {
   description?: string
   packages: VenuePackageItem[]
   footer?: VenuePackagesFooter
+}
+
+// ── Venue booking wizard ──────────────────────────────────────
+// 3-step public booking flow matching Paper's "Booking · Step N" and
+// "Booking · Confirmation" artboards. Owner configures a package list;
+// each package carries its own time slots + add-ons so the wizard can
+// price the booking without any backend call. Submit sinks into the
+// Enquiries inbox with a structured JSON payload in the message (brief
+// 62 proposes graduating this to a proper `venue_bookings` resource
+// once deposit payments are needed).
+
+export interface VenueBookingSlot {
+  /** Short label — "Afternoon · 2pm – 6pm". */
+  label: string
+  /** Mono eyebrow under the label — e.g. "4 hours · $720 · Most booked". */
+  sub?: string
+  /** Base price for this slot. Added to the running total. */
+  price: number
+  /** Hidden from the picker when true (sold out / dark hours). */
+  disabled?: boolean
+  /** Pre-selects this slot when the wizard mounts. */
+  defaultSelected?: boolean
+}
+
+export interface VenueBookingAddon {
+  /** "Grazing platters". */
+  name: string
+  /** One-line description under the name. */
+  description?: string
+  /** Per-unit price. */
+  price: number
+  /** Suffix shown next to the price — "/ platter", "/ session", "/ hour". */
+  priceSuffix?: string
+  /** When present, renders a counter instead of a checkbox. */
+  countable?: boolean
+  /** Starting quantity when countable (defaults to 1 on first tick). */
+  defaultQuantity?: number
+  /** Starts checked / counted. */
+  defaultSelected?: boolean
+}
+
+export interface VenueBookingPackage {
+  /** Matches `?package=` on the URL. Admins mirror the slug used in the
+   *  VenuePackages block's `ctaHref`. */
+  slug: string
+  /** Human name — "The clubhouse". */
+  name: string
+  /** Short line under the name on the booking summary. */
+  sub?: string
+  slots: VenueBookingSlot[]
+  addons?: VenueBookingAddon[]
+  /** Fixed add-on charged every booking (refundable bond, cleaning fee).
+   *  Shown as a separate line in the summary. */
+  bondAmount?: number
+  bondLabel?: string
+}
+
+export interface VenueBookingOccasion {
+  /** "Birthday", "Wedding", … */
+  label: string
+  /** Pre-selected when the wizard opens. */
+  defaultSelected?: boolean
+}
+
+/** Public-site venue booking wizard — Paper artboards CQV-0 / CVC-0 / CZU-0. */
+export interface VenueBookingProps {
+  eyebrow?: string
+  heading?: string
+  description?: string
+  /** The packages this wizard can book. The URL `?package=slug` picks one;
+   *  without a match it falls back to the first package. */
+  packages: VenueBookingPackage[]
+  /** Occasion chips on Step 2 (Birthday / Wedding / Corporate day / …). */
+  occasions?: VenueBookingOccasion[]
+  /** Dropdown options for the "setup style" field. */
+  setupStyles?: string[]
+  /** Deposit as a percentage of the total (0–100). Default 25. */
+  depositPercent?: number
+  /** The person the enquiry lands on. Shown on the confirmation card. */
+  hostName?: string
+  hostRole?: string
+  hostInitials?: string
+  hostPhone?: string
+  /** Minimum lead time in days — dates before `today + N` are greyed out
+   *  on the calendar. Default 14. */
+  leadTimeDays?: number
+  /** Primary CTA label on the final step. */
+  submitLabel?: string
+  /** Copy under the confirmation hero. `{host}` is substituted for the
+   *  configured hostName. */
+  confirmationSubtitle?: string
 }
 
 export interface GalleryImage {
@@ -623,6 +723,7 @@ export type Block =
   | BlockBase<'venueHireHero', VenueHireHeroProps>
   | BlockBase<'venueSpaces', VenueSpacesProps>
   | BlockBase<'venuePackages', VenuePackagesProps>
+  | BlockBase<'venueBooking', VenueBookingProps>
   | BlockBase<'gallery', GalleryProps>
   | BlockBase<'contactForm', ContactFormProps>
   | BlockBase<'membershipCta', MembershipCtaProps>

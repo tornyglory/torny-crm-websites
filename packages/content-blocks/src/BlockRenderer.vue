@@ -19,6 +19,7 @@ import PeopleGridBlock from './blocks/PeopleGridBlock.vue'
 import VenueHireHeroBlock from './blocks/VenueHireHeroBlock.vue'
 import VenueSpacesBlock from './blocks/VenueSpacesBlock.vue'
 import VenuePackagesBlock from './blocks/VenuePackagesBlock.vue'
+import VenueBookingBlock from './blocks/VenueBookingBlock.vue'
 import GalleryBlock from './blocks/GalleryBlock.vue'
 import ContactFormBlock from './blocks/ContactFormBlock.vue'
 import MembershipCtaBlock from './blocks/MembershipCtaBlock.vue'
@@ -53,6 +54,7 @@ defineProps<{ block: Block }>()
   <VenueHireHeroBlock v-else-if="block.type === 'venueHireHero'" v-bind="block.props" />
   <VenueSpacesBlock v-else-if="block.type === 'venueSpaces'" v-bind="block.props" />
   <VenuePackagesBlock v-else-if="block.type === 'venuePackages'" v-bind="block.props" />
+  <VenueBookingBlock v-else-if="block.type === 'venueBooking'" v-bind="block.props" />
   <GalleryBlock v-else-if="block.type === 'gallery'" v-bind="block.props" />
   <ContactFormBlock v-else-if="block.type === 'contactForm'" v-bind="block.props" />
   <MembershipCtaBlock v-else-if="block.type === 'membershipCta'" v-bind="block.props" />

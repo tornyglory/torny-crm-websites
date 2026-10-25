@@ -338,7 +338,11 @@ const year = new Date().getFullYear()
   width: 7px;
   height: 7px;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  /* Torny-brand blue, pinned — don't inherit `--color-accent` because
+   * each tenant overrides that with their own brand (which can be black
+   * on a dark footer, making the dot invisible). This mark is Torny's,
+   * not the club's, so it stays Torny-blue everywhere. */
+  background: #2563EB;
   align-self: center;
 }
 .site-footer__powered-wordmark {

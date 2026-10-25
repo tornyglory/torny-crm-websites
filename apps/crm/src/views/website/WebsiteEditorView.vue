@@ -55,6 +55,10 @@ import type {
   VenueSpaceItem,
   VenuePackagesProps,
   VenuePackageItem,
+  VenueBookingProps,
+  VenueBookingPackage,
+  VenueBookingSlot,
+  VenueBookingAddon,
   VenueStat,
   ContactFormProps,
   MembershipCtaProps,
@@ -573,6 +577,71 @@ const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
           contactRole: 'EXT 143',
         },
       }) },
+    { type: 'venueBooking', label: 'Venue booking wizard', hint: '3-step: pick date → details → confirm. Drop on /venue-hire/book', icon: '📅',
+      defaults: (): VenueBookingProps => ({
+        eyebrow: 'VENUE HIRE',
+        heading: 'Book the venue',
+        description: '',
+        depositPercent: 25,
+        leadTimeDays: 14,
+        hostName: 'Grace Whittaker',
+        hostRole: 'YOUR HOST · CLUB PRESIDENT',
+        hostInitials: 'GW',
+        hostPhone: '027 341 2020',
+        submitLabel: 'Confirm booking',
+        confirmationSubtitle:
+          "Deposit charged. We've emailed confirmation and a calendar invite. {host} will call to confirm the finer details.",
+        packages: [
+          {
+            slug: 'the-clubhouse',
+            name: 'The clubhouse',
+            sub: 'Timber-lined main room · seated 80 · standing 140',
+            slots: [
+              { label: 'Morning · 9am – 1pm', sub: '4 hours · $720', price: 720 },
+              { label: 'Afternoon · 2pm – 6pm', sub: '4 hours · $720 · Most booked', price: 720, defaultSelected: true },
+              { label: 'Evening · 6pm – 11pm', sub: '5 hours · $900 · Bar staff incl.', price: 900 },
+              { label: 'Full day · 9am – 11pm', sub: '14 hours · $2,340 · Save 15%', price: 2340 },
+            ],
+            addons: [
+              { name: 'Grazing platters', description: 'Locally sourced, catered by Naenae Cafe · Serves 8 per platter', price: 85, priceSuffix: '/ platter', countable: true, defaultQuantity: 6, defaultSelected: true },
+              { name: 'Bowls on the green', description: 'Coach + all equipment · 90 min session · Ideal for corporate', price: 180, priceSuffix: '/ session' },
+              { name: 'Bar tab · Prepaid', description: 'Set an amount for the bar. Anything unused refunded.', price: 400, defaultSelected: true },
+            ],
+            bondAmount: 300,
+            bondLabel: 'Refundable bond',
+          },
+          {
+            slug: 'green-bbq',
+            name: 'Green + BBQ',
+            sub: 'Green A plus the covered BBQ area',
+            slots: [
+              { label: 'Weekend morning · 9am – 1pm', sub: '4 hours · $220', price: 220, defaultSelected: true },
+              { label: 'Weekend afternoon · 2pm – 6pm', sub: '4 hours · $220', price: 220 },
+              { label: 'Full day · 9am – 6pm', sub: '9 hours · $400', price: 400 },
+            ],
+            addons: [
+              { name: 'BBQ pack', description: 'Fire-up kit + gas + utensils', price: 60, defaultSelected: true },
+              { name: 'Coach for the hour', description: 'A friendly intro to lawn bowls for your group', price: 90, priceSuffix: '/ hour' },
+            ],
+            bondAmount: 150,
+            bondLabel: 'Refundable bond',
+          },
+          {
+            slug: 'whole-shebang',
+            name: 'Whole shebang',
+            sub: 'Exclusive-use all day · three greens, clubhouse, catering, host',
+            slots: [
+              { label: 'One Saturday a month', sub: 'Full day · $1,600 · Host included', price: 1600, defaultSelected: true },
+            ],
+            addons: [
+              { name: 'Full catering', description: 'Lunch + dinner + bar for up to 150', price: 2800 },
+              { name: 'Photographer for the day', description: '8 hours, final edit within 10 days', price: 950 },
+            ],
+            bondAmount: 500,
+            bondLabel: 'Refundable bond',
+          },
+        ] satisfies VenueBookingPackage[],
+      }) },
     { type: 'membershipCta', label: 'Membership CTA', hint: 'Push people to /membership', icon: '★',
       defaults: (): MembershipCtaProps => ({ heading: 'Play with us this season', body: 'Whether you\'re a first-time bowler or a seasoned skip, there\'s a spot for you.', ctaLabel: 'See tiers', ctaHref: '/membership' }) },
     { type: 'ctaBanner', label: 'CTA banner', hint: 'A slim strip with one link', icon: '▬',
@@ -725,6 +794,7 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   venueHireHero: 'Venue-hire hero',
   venueSpaces: 'Venue spaces',
   venuePackages: 'Venue packages',
+  venueBooking: 'Venue booking wizard',
   gallery: 'Gallery',
   contactForm: 'Contact form',
   membershipCta: 'Membership CTA',
@@ -1344,6 +1414,7 @@ function blockSummary(block: Block): string {
     case 'venueHireHero': return (block.props as VenueHireHeroProps).heading || 'Venue-hire hero'
     case 'venueSpaces':   return (block.props as VenueSpacesProps).heading || `${(block.props as VenueSpacesProps).spaces.length} spaces`
     case 'venuePackages': return (block.props as VenuePackagesProps).heading || `${(block.props as VenuePackagesProps).packages.length} packages`
+    case 'venueBooking': return (block.props as VenueBookingProps).heading || `${(block.props as VenueBookingProps).packages?.length ?? 0} packages`
     case 'gallery':       return `${(block.props as GalleryProps).images.length} photos`
     case 'contactForm':   return (block.props as ContactFormProps).heading || 'Contact form'
     case 'membershipJoinForm': return (block.props as MembershipJoinFormProps).heading || 'Join form'
@@ -2537,6 +2608,15 @@ const lastSavedLabel = computed(() => {
               <input v-model="(selectedBlock.props as VenueHireHeroProps).cardBadge" type="text" placeholder="3 FRIDAYS FREE IN OCT" />
             </label>
             <label class="field">
+              <span class="field__label">Media side</span>
+              <select v-model="(selectedBlock.props as VenueHireHeroProps).mediaSide">
+                <option :value="undefined">Right (default)</option>
+                <option value="right">Right — card on the right, copy on the left</option>
+                <option value="left">Left — card on the left, copy on the right</option>
+              </select>
+              <span class="field__hint">Desktop only. Mobile always stacks copy above card.</span>
+            </label>
+            <label class="field">
               <span class="field__label">Card tone</span>
               <select v-model="(selectedBlock.props as VenueHireHeroProps).cardTone">
                 <option value="tangerine">Tangerine</option>
@@ -2547,11 +2627,18 @@ const lastSavedLabel = computed(() => {
                 <option value="sky">Sky</option>
               </select>
             </label>
-            <label class="field">
-              <span class="field__label">Card background image URL</span>
-              <input v-model="(selectedBlock.props as VenueHireHeroProps).cardImageUrl" type="text" placeholder="/media/clubhouse-dusk.jpg" />
-              <span class="field__hint">Optional — overrides the tone gradient.</span>
-            </label>
+            <div class="field">
+              <ImagePicker
+                v-model="(selectedBlock!.props as VenueHireHeroProps).cardImageUrl"
+                :image-id="(selectedBlock!.props as VenueHireHeroProps).cardImageId ?? null"
+                @update:image-id="(v) => (selectedBlock!.props as VenueHireHeroProps).cardImageId = v"
+                :page-slug="currentPage"
+                :block-id="selectedBlock!.id"
+                label="Card background image"
+                aspect="4 / 5"
+                hint="Fills the right-hand feature card. Leave empty for the tone gradient."
+              />
+            </div>
             <div class="field">
               <span class="field__label">Testimonial</span>
               <textarea v-model="(selectedBlock.props as VenueHireHeroProps).testimonial!.quote" rows="3" placeholder="Quote from a happy hirer" />
@@ -2697,6 +2784,120 @@ const lastSavedLabel = computed(() => {
                 <input v-model="(selectedBlock.props as VenuePackagesProps).footer!.contactRole" placeholder="Role (EXT 143)" type="text" style="flex: 1;" />
                 <input v-model="(selectedBlock.props as VenuePackagesProps).footer!.contactInitials" placeholder="Initials" type="text" style="width: 80px;" />
               </div>
+            </div>
+          </template>
+
+          <!-- Venue booking wizard -->
+          <template v-else-if="selectedBlock.type === 'venueBooking'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as VenueBookingProps).eyebrow" type="text" placeholder="VENUE HIRE" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as VenueBookingProps).heading" type="text" />
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as VenueBookingProps).description" rows="3" placeholder="Short intro above the step rail." />
+            </label>
+            <div class="field-row">
+              <label class="field">
+                <span class="field__label">Deposit %</span>
+                <input v-model.number="(selectedBlock.props as VenueBookingProps).depositPercent" type="number" min="0" max="100" step="5" />
+                <span class="field__hint">Charged on confirmation. Balance due 14 days before the event.</span>
+              </label>
+              <label class="field">
+                <span class="field__label">Lead time (days)</span>
+                <input v-model.number="(selectedBlock.props as VenueBookingProps).leadTimeDays" type="number" min="0" max="90" step="1" />
+                <span class="field__hint">Dates before today + N are greyed out on the calendar.</span>
+              </label>
+            </div>
+            <label class="field">
+              <span class="field__label">Submit label</span>
+              <input v-model="(selectedBlock.props as VenueBookingProps).submitLabel" type="text" placeholder="Confirm booking" />
+            </label>
+            <div class="field__group">
+              <div class="field__group-title">Your host</div>
+              <div class="field-row">
+                <label class="field">
+                  <span class="field__label">Name</span>
+                  <input v-model="(selectedBlock.props as VenueBookingProps).hostName" type="text" placeholder="Grace Whittaker" />
+                </label>
+                <label class="field">
+                  <span class="field__label">Role</span>
+                  <input v-model="(selectedBlock.props as VenueBookingProps).hostRole" type="text" placeholder="YOUR HOST · CLUB PRESIDENT" />
+                </label>
+              </div>
+              <div class="field-row">
+                <label class="field">
+                  <span class="field__label">Phone</span>
+                  <input v-model="(selectedBlock.props as VenueBookingProps).hostPhone" type="text" placeholder="027 341 2020" />
+                </label>
+                <label class="field">
+                  <span class="field__label">Initials</span>
+                  <input v-model="(selectedBlock.props as VenueBookingProps).hostInitials" type="text" placeholder="GW" />
+                </label>
+              </div>
+            </div>
+            <label class="field">
+              <span class="field__label">Confirmation subtitle</span>
+              <textarea v-model="(selectedBlock.props as VenueBookingProps).confirmationSubtitle" rows="2" placeholder="Use {host} to inject the host's name." />
+              <span class="field__hint">Use <code>{host}</code> to inject the host's first name.</span>
+            </label>
+            <div class="field">
+              <span class="field__label">Packages ({{ (selectedBlock.props as VenueBookingProps).packages?.length ?? 0 }})</span>
+              <div
+                v-for="(pkg, pi) in ((selectedBlock.props as VenueBookingProps).packages ?? [])"
+                :key="pi"
+                class="gallery-item"
+              >
+                <div class="gallery-item__row">
+                  <input v-model="pkg.slug" placeholder="Slug (matches ?package=)" type="text" style="flex: 1;" />
+                  <input v-model="pkg.name" placeholder="Package name" type="text" style="flex: 2;" />
+                </div>
+                <input v-model="pkg.sub" placeholder="Sub-line under the name" type="text" />
+                <div class="gallery-item__row">
+                  <input v-model.number="pkg.bondAmount" placeholder="Bond ($)" type="number" style="flex: 1;" />
+                  <input v-model="pkg.bondLabel" placeholder="Bond label" type="text" style="flex: 2;" />
+                </div>
+                <div class="field__group-title" style="margin-top: 8px;">Slots</div>
+                <div v-for="(s, si) in pkg.slots" :key="si" class="gallery-item">
+                  <div class="gallery-item__row">
+                    <input v-model="s.label" placeholder="Label — e.g. Afternoon · 2pm – 6pm" type="text" style="flex: 2;" />
+                    <input v-model.number="s.price" placeholder="Price" type="number" style="flex: 1;" />
+                  </div>
+                  <input v-model="s.sub" placeholder="Mono eyebrow — e.g. 4 hours · $720 · Most booked" type="text" />
+                  <div class="gallery-item__row">
+                    <label class="chip-picker__item"><input v-model="s.defaultSelected" type="checkbox" /> <span>Default</span></label>
+                    <label class="chip-picker__item"><input v-model="s.disabled" type="checkbox" /> <span>Disabled</span></label>
+                    <button type="button" class="gallery-item__remove" @click="pkg.slots.splice(si, 1)">Remove slot</button>
+                  </div>
+                </div>
+                <button type="button" class="gallery-add" @click="pkg.slots.push({ label: '', price: 0 } satisfies VenueBookingSlot)">+ Add slot</button>
+                <div class="field__group-title" style="margin-top: 10px;">Add-ons</div>
+                <div v-for="(a, ai) in (pkg.addons ?? [])" :key="ai" class="gallery-item">
+                  <div class="gallery-item__row">
+                    <input v-model="a.name" placeholder="Name — e.g. Grazing platters" type="text" style="flex: 2;" />
+                    <input v-model.number="a.price" placeholder="Price" type="number" style="flex: 1;" />
+                    <input v-model="a.priceSuffix" placeholder="/ platter" type="text" style="width: 80px;" />
+                  </div>
+                  <input v-model="a.description" placeholder="Description" type="text" />
+                  <div class="gallery-item__row">
+                    <label class="chip-picker__item"><input v-model="a.countable" type="checkbox" /> <span>Qty counter</span></label>
+                    <label class="chip-picker__item"><input v-model="a.defaultSelected" type="checkbox" /> <span>Default on</span></label>
+                    <input v-model.number="a.defaultQuantity" placeholder="Default qty" type="number" style="width: 100px;" />
+                    <button type="button" class="gallery-item__remove" @click="(pkg.addons ??= []).splice(ai, 1)">Remove add-on</button>
+                  </div>
+                </div>
+                <button type="button" class="gallery-add" @click="(pkg.addons ??= []).push({ name: '', price: 0 } satisfies VenueBookingAddon)">+ Add add-on</button>
+                <button type="button" class="gallery-item__remove" style="margin-top: 10px;" @click="(selectedBlock!.props as VenueBookingProps).packages.splice(pi, 1)">Remove package</button>
+              </div>
+              <button
+                type="button"
+                class="gallery-add"
+                @click="((selectedBlock!.props as VenueBookingProps).packages ??= []).push({ slug: '', name: '', slots: [] } satisfies VenueBookingPackage)"
+              >+ Add package</button>
             </div>
           </template>
 

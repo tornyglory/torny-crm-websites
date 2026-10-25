@@ -60,6 +60,7 @@ const TAGS_BY_TYPE: Record<BlockType, Tag[]> = {
   venueHireHero:  ['layout', 'text', 'media'],
   venueSpaces:    ['layout', 'data'],
   venuePackages:  ['layout', 'cta'],
+  venueBooking:   ['forms', 'cta'],
   gallery:        ['media', 'layout'],
   contactForm:    ['forms'],
   membershipCta:  ['cta'],

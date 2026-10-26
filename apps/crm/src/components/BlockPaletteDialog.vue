@@ -542,6 +542,59 @@ const BlockPreview = defineComponent({
           }).flat(),
         ])
 
+      case 'venueBooking':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          // Stepper — 3 numbered dots with connectors
+          circle(22, 14, 4.5, { fill: ink }),
+          rect(29, 13, 20, 2, { fill: hairline, rx: 1 }),
+          circle(58, 14, 4.5, { fill: '#fff', stroke: hairline, 'stroke-width': 1 }),
+          rect(65, 13, 20, 2, { fill: hairline, rx: 1 }),
+          circle(94, 14, 4.5, { fill: '#fff', stroke: hairline, 'stroke-width': 1 }),
+          // Step labels
+          rect(32, 13.5, 20, 1.5, { fill: ink }),
+          rect(68, 13.5, 20, 1.5, { fill: graphite, opacity: 0.4 }),
+          rect(104, 13.5, 16, 1.5, { fill: graphite, opacity: 0.4 }),
+          // Calendar card
+          rect(14, 26, 100, 70, { fill: '#fff', stroke: hairline, rx: 4 }),
+          // Month label
+          rect(22, 32, 30, 3, { fill: ink }),
+          circle(96, 34, 2.5, { fill: 'none', stroke: hairline, 'stroke-width': 1 }),
+          circle(104, 34, 2.5, { fill: 'none', stroke: hairline, 'stroke-width': 1 }),
+          // Day cells — 7 cols x 3 rows (free in mint, selected dark, muted grey)
+          ...[0, 1, 2].map((row) =>
+            [0, 1, 2, 3, 4, 5, 6].map((col) => {
+              const x = 22 + col * 13
+              const y = 44 + row * 15
+              const isSelected = row === 1 && col === 4
+              const isMuted = (row === 0 && col < 2) || (row === 2 && col === 6)
+              return rect(x, y, 11, 11, {
+                fill: isSelected ? ink : isMuted ? '#F5F5F2' : '#DCFCE7',
+                rx: 2,
+              })
+            }),
+          ).flat(),
+          // Slot picker rail
+          rect(120, 26, 66, 70, { fill: '#fff', stroke: hairline, rx: 4 }),
+          rect(128, 32, 24, 3, { fill: graphite, opacity: 0.5 }),
+          // Selected slot (accent soft)
+          rect(126, 42, 54, 15, { fill: '#DBEAFE', stroke: accent, 'stroke-width': 1, rx: 3 }),
+          circle(173, 49, 2.5, { fill: accent }),
+          rect(130, 46, 26, 2.5, { fill: ink }),
+          rect(130, 51, 20, 2, { fill: graphite, opacity: 0.5 }),
+          // Other slots
+          rect(126, 60, 54, 13, { fill: '#fff', stroke: hairline, rx: 3 }),
+          rect(130, 64, 26, 2.5, { fill: ink }),
+          rect(130, 68, 20, 2, { fill: graphite, opacity: 0.5 }),
+          rect(126, 76, 54, 13, { fill: '#fff', stroke: hairline, rx: 3 }),
+          rect(130, 80, 26, 2.5, { fill: ink }),
+          rect(130, 84, 20, 2, { fill: graphite, opacity: 0.5 }),
+          // Continue CTA
+          rect(14, 102, 172, 10, { fill: ink, rx: 2 }),
+          rect(78, 106, 40, 2.5, { fill: '#fff' }),
+          rect(122, 106, 6, 2.5, { fill: '#fff' }),
+        ])
+
       case 'peopleGrid':
         return shell([
           rect(0, 0, 200, 120, { fill: '#fff' }),

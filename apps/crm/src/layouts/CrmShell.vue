@@ -151,7 +151,7 @@ const clubInitials = computed(() => {
 const crumbTitle = computed(() => String(route.name ?? '').replace(/-/g, ' '))
 
 type NavIcon =
-  | 'dashboard' | 'members' | 'applications' | 'enquiries'
+  | 'dashboard' | 'members' | 'applications' | 'enquiries' | 'venue-bookings'
   | 'website' | 'events' | 'teams' | 'honour' | 'tournaments'
   | 'communications' | 'site-settings' | 'settings'
 
@@ -278,6 +278,39 @@ if (typeof window !== 'undefined') {
   onBeforeUnmount(() => window.removeEventListener('torny:enquiries-count', onEnquiriesCountUpdate))
 }
 
+// ── Venue bookings new count ──────────────────────────────────
+// Topic-scoped read of the enquiries list. The server doesn't offer a
+// `counts_topic` filter yet (see brief draft) so we count rows ourselves
+// from a cheap `limit=50&topic=facilities&status=new` fetch. VenueBookingsView
+// broadcasts `torny:venue-bookings-count` after mutations.
+const venueBookingsNewCount = ref<number | null>(null)
+async function loadVenueBookingsCount(clubId: number) {
+  try {
+    const res = await enquiriesApi.list(clubId, { topic: 'facilities', status: 'new', limit: 50 })
+    venueBookingsNewCount.value = res.enquiries.length
+  } catch {
+    venueBookingsNewCount.value = null
+  }
+}
+
+watch(
+  () => club.current?.id,
+  (id) => {
+    if (id != null && typeof id === 'number') void loadVenueBookingsCount(id)
+    else venueBookingsNewCount.value = null
+  },
+  { immediate: true },
+)
+
+function onVenueBookingsCountUpdate(e: Event) {
+  const detail = (e as CustomEvent).detail
+  if (typeof detail === 'number') venueBookingsNewCount.value = detail
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('torny:venue-bookings-count', onVenueBookingsCountUpdate)
+  onBeforeUnmount(() => window.removeEventListener('torny:venue-bookings-count', onVenueBookingsCountUpdate))
+}
+
 // ── Events upcoming count ─────────────────────────────────────
 // One rolling year forward. EventsView dispatches torny:events-count after
 // its own fetch so the sidebar doesn't refetch when the user is on Events.
@@ -364,6 +397,14 @@ const manageNav = computed<NavItem[]>(() => [
     icon: 'enquiries',
     ...(enquiriesNewCount.value != null
       ? { count: enquiriesNewCount.value, countTone: enquiriesNewCount.value > 0 ? 'accent' as const : 'neutral' as const }
+      : {}),
+  },
+  {
+    to: '/crm/venue-bookings',
+    label: 'Venue bookings',
+    icon: 'venue-bookings',
+    ...(venueBookingsNewCount.value != null
+      ? { count: venueBookingsNewCount.value, countTone: venueBookingsNewCount.value > 0 ? 'accent' as const : 'neutral' as const }
       : {}),
   },
 ])
@@ -516,6 +557,7 @@ const bottomTabs = computed<TabItem[]>(() => [
             <svg v-else-if="item.icon === 'members'" width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M13 5a2.5 2.5 0 1 1 0 5M2 15v-1a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4v1M14 10a3 3 0 0 1 3 3v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
             <svg v-else-if="item.icon === 'applications'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 2H5a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 5 16h8a1.5 1.5 0 0 0 1.5-1.5V5.5L11 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M11 2v3.5h3.5M6.5 9.5h5M6.5 12h5M6.5 7h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
             <svg v-else-if="item.icon === 'enquiries'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2.5 4a1.5 1.5 0 0 1 1.5-1.5h10a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5H7l-3.5 3v-3H4A1.5 1.5 0 0 1 2.5 11V4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            <svg v-else-if="item.icon === 'venue-bookings'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 4.5h12v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 7.5h12M6 2.5v3M12 2.5v3M6 10.5h3M6 12.5h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           </span>
           <span class="sidebar__link-label">{{ item.label }}</span>
           <span

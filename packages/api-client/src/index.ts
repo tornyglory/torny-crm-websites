@@ -155,6 +155,7 @@ export type {
   ReplyEnquiryResult,
   ArchiveEnquiryInput,
   ArchiveEnquiryResult,
+  UpdateEnquiryInput,
   MarkReadResult,
   EnquirySettings,
   EnquirySettingsPatch,

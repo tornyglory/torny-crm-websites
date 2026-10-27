@@ -146,6 +146,14 @@ export type EnquirySettingsPatch = Partial<{
 }>
 
 /** Error codes documented in brief 41. */
+export interface UpdateEnquiryInput {
+  full_name?: string
+  email?: string
+  /** Pass `null` or `''` to clear. */
+  phone?: string | null
+  message?: string
+}
+
 export type EnquiryErrorCode =
   | 'missing_required'
   | 'bad_email'
@@ -160,6 +168,9 @@ export type EnquiryErrorCode =
   | 'body_too_long'
   | 'already_archived'
   | 'not_found'
+  | 'nothing_to_patch'
+  | 'bad_full_name'
+  | 'bad_phone'
 
 interface Envelope<T> {
   status: 'success'
@@ -271,6 +282,34 @@ export async function addNote(
     { method: 'POST', body: JSON.stringify({ body }), signal: opts.signal },
   )
   return res.data
+}
+
+/** PATCH /clubs/:cid/enquiries/:eid — admin+. Partial update of
+ *  `full_name`, `email`, `phone`, `message`. Returns the fresh row. */
+export async function update(
+  clubId: number,
+  enquiryId: number,
+  patch: UpdateEnquiryInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<EnquiryDetail> {
+  const res = await authedFetch<Envelope<EnquiryDetail>>(
+    `${CRM_BASE}/clubs/${clubId}/enquiries/${enquiryId}`,
+    { method: 'PATCH', body: JSON.stringify(patch), signal: opts.signal },
+  )
+  return res.data
+}
+
+/** DELETE /clubs/:cid/enquiries/:eid — admin+. Hard delete (cascades
+ *  notes + reply history). Returns 204 on success. */
+export async function del(
+  clubId: number,
+  enquiryId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<void> {
+  await authedFetch<unknown>(
+    `${CRM_BASE}/clubs/${clubId}/enquiries/${enquiryId}`,
+    { method: 'DELETE', signal: opts.signal },
+  )
 }
 
 // ── Owner settings ──────────────────────────────────────────────

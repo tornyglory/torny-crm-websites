@@ -813,8 +813,12 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 /* Chip row */
 .vb__chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .vb__chip { padding: 8px 14px; border-radius: 999px; background: transparent; border: 1px solid var(--color-hairline); font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); cursor: pointer; }
-.vb__chip:hover { background: var(--color-surface); }
+.vb__chip:hover { background: var(--color-surface); color: var(--color-ink); }
 .vb__chip--active { background: var(--color-ink); color: #fff; border-color: var(--color-ink); font-weight: 600; }
+/* Active chip hover — the base :hover above would otherwise swap the
+ * background to light while --active keeps the text white, making the
+ * label disappear. Flip to a readable outlined state. */
+.vb__chip--active:hover { background: var(--color-surface); color: var(--color-ink); border-color: var(--color-hairline); }
 
 /* Stepper */
 .vb__stepper { display: inline-flex; align-items: stretch; gap: 6px; }

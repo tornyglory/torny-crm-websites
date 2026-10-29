@@ -9,7 +9,8 @@
     "preview": "wrangler pages dev .output/public --compatibility-date=2024-10-01",
     "deploy": "nuxt build && wrangler pages deploy .output/public",
     "typecheck": "nuxt typecheck",
-    "lint": "echo ok",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
     "clean": "rm -rf .nuxt .output .turbo dist"
   },
   "dependencies": {

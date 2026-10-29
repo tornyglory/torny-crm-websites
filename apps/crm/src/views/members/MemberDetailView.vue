@@ -1199,8 +1199,8 @@ async function submitEdit() {
 .btn--outline { background: #fff; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 .btn--outline:hover:not(:disabled) { background: var(--color-surface); }
 .btn--outline:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn--primary { background: #16A34A; color: #fff; padding: 8px 16px; }
-.btn--primary:hover:not(:disabled) { background: #15803D; }
+.btn--primary { background: var(--color-ink); color: #fff; padding: 8px 16px; transition: background 0.15s ease; }
+.btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
 .btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Body layout */

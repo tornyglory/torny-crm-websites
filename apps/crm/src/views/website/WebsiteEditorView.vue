@@ -49,7 +49,6 @@ import type {
   GalleryProps,
   PeopleGridProps,
   PeopleGridPerson,
-  PeopleGridTone,
   VenueHireHeroProps,
   VenueSpacesProps,
   VenueSpaceItem,

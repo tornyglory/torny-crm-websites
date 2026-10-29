@@ -202,7 +202,7 @@ function recipientChipClass(status: CampaignRecipient['status']): string {
           <h2 class="card__title">{{ campaign.links?.length ?? 0 }} links · {{ campaign.clicks }} clicks</h2>
         </header>
         <ul class="links__list">
-          <li v-for="(lnk, i) in campaign.links ?? []" :key="lnk.url" class="links__row">
+          <li v-for="lnk in campaign.links ?? []" :key="lnk.url" class="links__row">
             <div class="links__top">
               <div class="links__url">{{ lnk.url }}</div>
               <div class="links__clicks">{{ lnk.clicks }}</div>

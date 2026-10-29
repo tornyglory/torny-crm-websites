@@ -153,15 +153,6 @@ const activeFilterCount = computed(() => {
 function formatMoney(cents: number): string {
   return `$${(cents / 100).toLocaleString('en-NZ', { maximumFractionDigits: 0 })}`
 }
-function formatDayShort(iso: string | null): { day: string; month: string; weekday: string } {
-  if (!iso) return { day: 'TBC', month: '', weekday: '' }
-  const d = new Date(iso)
-  return {
-    day: String(d.getDate()),
-    month: d.toLocaleDateString('en-NZ', { month: 'short' }).toUpperCase(),
-    weekday: d.toLocaleDateString('en-NZ', { weekday: 'short' }).toUpperCase(),
-  }
-}
 function formatRowDate(iso: string | null): string {
   if (!iso) return 'Dates TBC'
   try {

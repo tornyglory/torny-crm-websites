@@ -11,7 +11,7 @@
  * Recent-sends list is session-scoped (in-memory) — no history endpoint
  * shipped alongside the SES migration. Follow-up.
  */
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ApiError,

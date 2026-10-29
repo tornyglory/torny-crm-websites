@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterView, RouterLink, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
+import { useClickOutside } from '@/composables/useClickOutside'
 import { useClubSettingsStore } from '@/stores/clubSettings'
 import {
   members as membersApi,
@@ -112,18 +113,14 @@ function onKeydown(e: KeyboardEvent) {
   else if (drawerOpen.value) closeDrawer()
 }
 // Click-outside for the club switcher — the other popovers manage their own.
-function onDocClick(e: MouseEvent) {
-  if (!clubMenuOpen.value) return
-  const target = e.target as HTMLElement | null
-  if (target?.closest('.sidebar__club-wrap')) return
-  clubMenuOpen.value = false
-}
+// Close the club switcher popover when the click lands outside it.
+const clubWrapRef = ref<HTMLElement | null>(null)
+useClickOutside(clubWrapRef, () => { if (clubMenuOpen.value) clubMenuOpen.value = false })
+
 if (typeof window !== 'undefined') {
   window.addEventListener('keydown', onKeydown)
-  document.addEventListener('click', onDocClick)
   onBeforeUnmount(() => {
     window.removeEventListener('keydown', onKeydown)
-    document.removeEventListener('click', onDocClick)
   })
 }
 
@@ -486,7 +483,7 @@ const bottomTabs = computed<TabItem[]>(() => [
         </button>
       </div>
 
-      <div class="sidebar__club-wrap">
+      <div ref="clubWrapRef" class="sidebar__club-wrap">
         <button
           type="button"
           class="sidebar__club"

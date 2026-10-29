@@ -1,0 +1,9 @@
+**/dist/**
+**/.nuxt/**
+**/.output/**
+**/node_modules/**
+**/.turbo/**
+**/coverage/**
+**/*.d.ts
+**/public/**
+pnpm-lock.yaml

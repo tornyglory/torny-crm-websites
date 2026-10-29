@@ -71,7 +71,6 @@ const defaultData = (): OnboardingData => ({
 })
 
 const TONES: MembershipTier['tone'][] = ['accent', 'mint', 'tangerine', 'violet']
-const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
 
 /**
  * Merge a server-returned WizardData over local defaults. Server may omit
@@ -96,13 +95,6 @@ function fromServerData(remote: Partial<WizardData> | null | undefined): Onboard
     })),
     logoDataUrl: d.logoDataUrl,
   }
-}
-
-function toServerData(local: OnboardingData): WizardData {
-  // Drop `logoDataUrl` (client-only preview) — server has its own logoUrl.
-  const { logoDataUrl: _unused, ...rest } = local
-  void _unused
-  return rest
 }
 
 // WizardStep (local, mixed number/string) ↔ WizardStepValue (server, all strings).

@@ -9,7 +9,7 @@
  * View) so the owner can clear low-friction tasks without opening the
  * full section.
  */
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useClubStore } from '@/stores/club'
 import { useNotificationsStore } from '@/stores/notifications'

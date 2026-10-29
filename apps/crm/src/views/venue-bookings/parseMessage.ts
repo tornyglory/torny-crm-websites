@@ -192,3 +192,59 @@ export function formatMoney(n: number | null | undefined): string | null {
   if (n == null || !Number.isFinite(n)) return null
   return `$${n.toLocaleString()}`
 }
+
+/** Round-trip serializer. Takes the parsed shape and emits the exact
+ *  format VenueBookingBlock.buildMessage() writes, so admin edits
+ *  survive re-parsing on the next detail load. */
+export interface SerializableBooking {
+  occasion: string
+  guest_count: number | null
+  package: string
+  slot: string
+  date_label: string
+  setup: string
+  addons: ParsedAddon[]
+  notes: string
+  booking_for: string
+  total: number | null
+  deposit: number | null
+  balance: number | null
+}
+
+function fmtAmount(n: number): string {
+  // VenueBookingBlock uses plain integers (`$1765`), not formatted ones.
+  // Round-trip gracefully if the admin kept a comma though.
+  return String(Math.round(n))
+}
+
+export function serializeVenueBookingMessage(b: SerializableBooking): string {
+  const occ = b.occasion.trim()
+  const guests = b.guest_count != null ? `${b.guest_count} guests` : ''
+  const line1 = [occ, guests].filter(Boolean).join(' · ')
+
+  const pkg = b.package.trim()
+  const slot = b.slot.trim()
+  const line2 = [pkg, slot].filter(Boolean).join(' · ')
+
+  const parts: string[] = [line1, line2, b.date_label.trim(), `Setup: ${b.setup.trim()}`]
+
+  const addons = (b.addons ?? [])
+    .filter((a) => a.name.trim())
+    .map((a) =>
+      a.quantity != null
+        ? `• ${a.name.trim()} × ${a.quantity}`
+        : `• ${a.name.trim()}`,
+    )
+  if (addons.length) parts.push('Add-ons:', ...addons)
+
+  if (b.notes.trim()) parts.push(`Notes: ${b.notes.trim()}`)
+  if (b.booking_for.trim()) parts.push(`Booking on behalf of: ${b.booking_for.trim()}`)
+
+  const totalsBits: string[] = []
+  if (b.total != null) totalsBits.push(`Total: $${fmtAmount(b.total)}`)
+  if (b.deposit != null) totalsBits.push(`Deposit: $${fmtAmount(b.deposit)}`)
+  if (b.balance != null) totalsBits.push(`Balance: $${fmtAmount(b.balance)}`)
+  if (totalsBits.length) parts.push(totalsBits.join(' · '))
+
+  return parts.join('\n')
+}

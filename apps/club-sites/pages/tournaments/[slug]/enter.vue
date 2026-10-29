@@ -84,8 +84,6 @@ watchEffect(() => {
 // Gate the form when a guest lands on a Torny-members-only tournament.
 const isGated = computed(() => !isSignedIn.value && tournament.value?.open_to_visitors === false)
 
-const filledCount = computed(() => roster.value.filter((r) => r.filled).length)
-const isComplete = computed(() => roster.value.length > 0 && filledCount.value === roster.value.length)
 
 // ── Format helpers ─────────────────────────────────────────────
 
@@ -138,7 +136,6 @@ const closesLabel = computed(() => {
 const closesUrgent = computed(() => daysUntilClose.value !== null && daysUntilClose.value >= 0 && daysUntilClose.value <= 7)
 
 const totalCents = computed(() => tournament.value?.entry_fee_cents ?? 0)
-const feeLabel = computed(() => formatMoney(totalCents.value))
 const shortFeeLabel = computed(() => {
   if (totalCents.value % 100 === 0) return `$${Math.round(totalCents.value / 100)}`
   return formatMoney(totalCents.value)

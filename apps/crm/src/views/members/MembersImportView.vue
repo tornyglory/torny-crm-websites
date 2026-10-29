@@ -14,7 +14,6 @@ import {
   memberImports,
   ApiError,
   type PreviewResult,
-  type PreviewRow,
   type CommitResult,
   type NewUserStrategy,
   type ImportResolution,
@@ -50,7 +49,6 @@ const parsedHeaders = ref<string[]>([])
 const parsedRows = ref<ParsedRow[]>([])
 const parseError = ref<string | null>(null)
 
-const MAPPING_STORAGE_KEY = 'torny.import.mapping'
 const columnMapping = ref<Record<TornyField, number | null>>({
   email: null,
   phone: null,

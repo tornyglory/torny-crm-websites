@@ -311,7 +311,6 @@ function emptyForm(): EditorForm {
 }
 
 const form = reactive<EditorForm>(emptyForm())
-const formNeedsFormat = computed(() => form.event_type === 'tournament')
 
 function resetForm(next: EditorForm) {
   Object.assign(form, next)

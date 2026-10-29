@@ -121,7 +121,6 @@ const parsedRows = computed<BookingRow[]>(() =>
 )
 
 const newVisible = computed(() => rows.value.filter((e) => e.status === 'new').length)
-const totalVisible = computed(() => rows.value.length)
 
 const emptyMessage = computed(() => {
   if (debouncedSearch.value) return { title: 'No matches', hint: 'Try a different search.' }

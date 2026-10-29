@@ -5,7 +5,7 @@
  * card instead of raw plaintext when the parse succeeds, falling back
  * to the raw message otherwise.
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
@@ -18,7 +18,23 @@ import {
 } from '@torny/api-client'
 import SendEmailModal, { type EmailRecipient, type SendEmailPayload } from '@/components/modals/SendEmailModal.vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
-import { parseVenueBookingMessage, formatMoney } from './parseMessage'
+import { parseVenueBookingMessage, serializeVenueBookingMessage, formatMoney, type ParsedAddon } from './parseMessage'
+import { useClickOutside } from '@/composables/useClickOutside'
+
+interface BookingFormState {
+  occasion: string
+  guest_count: number | null
+  package: string
+  slot: string
+  date_label: string
+  setup: string
+  addons: ParsedAddon[]
+  notes: string
+  booking_for: string
+  total: number | null
+  deposit: number | null
+  balance: number | null
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -91,43 +107,6 @@ function formatDateTime(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
-}
-
-// ── Reply form ────────────────────────────────────────────────
-const replyBody = ref('')
-const replySubject = ref('')
-const replying = ref(false)
-const REPLY_MAX = 10000
-const replyOverLimit = computed(() => replyBody.value.length > REPLY_MAX)
-const defaultSubject = computed(() => {
-  const d = detail.value
-  if (!d) return ''
-  const date = parsed.value?.date_label
-  return date ? `Re: Your venue booking — ${date}` : 'Re: Your venue booking'
-})
-
-async function submitReply() {
-  const cid = clubStore.current?.id
-  if (typeof cid !== 'number' || !detail.value) return
-  const body = replyBody.value.trim()
-  if (!body) return
-  if (replyOverLimit.value) { toast.error('Reply is over 10,000 characters.'); return }
-  replying.value = true
-  try {
-    const res = await enquiriesApi.reply(cid, detail.value.id, {
-      body,
-      subject: replySubject.value.trim() || defaultSubject.value,
-    })
-    await loadDetail()
-    replyBody.value = ''
-    replySubject.value = ''
-    if ('sent' in res.email_status && res.email_status.sent) toast.success('Reply sent.')
-    else toast.info('Reply saved — email delivery failed. Retry from the thread.')
-  } catch (err) {
-    toast.error(err instanceof ApiError ? err.message : 'Could not send reply.')
-  } finally {
-    replying.value = false
-  }
 }
 
 // ── Notes ─────────────────────────────────────────────────────
@@ -207,7 +186,9 @@ async function saveCustomer() {
   if (Object.keys(patch).length === 0) { editingCustomer.value = false; return }
   savingCustomer.value = true
   try {
-    detail.value = await enquiriesApi.update(cid, detail.value.id, patch as UpdateEnquiryInput)
+    const fresh = await enquiriesApi.update(cid, detail.value.id, patch as UpdateEnquiryInput)
+    // PATCH response omits the reply/note threads — keep ours.
+    detail.value = { ...fresh, replies: detail.value.replies, notes: detail.value.notes }
     editingCustomer.value = false
     toast.success('Customer updated.')
   } catch (err) {
@@ -227,31 +208,73 @@ function customerErrorMessage(err: unknown): string {
 }
 
 // ── Booking message edit ──────────────────────────────────────
+// Structured form backed by the parser → serializer round-trip. The
+// admin edits individual fields; on save we re-serialize to the exact
+// plaintext VenueBookingBlock writes so parsing is stable next load.
 const editingMessage = ref(false)
-const messageDraft = ref('')
 const savingMessage = ref(false)
 const MESSAGE_MAX = 10000
-const messageOverLimit = computed(() => messageDraft.value.length > MESSAGE_MAX)
+
+function emptyForm(): BookingFormState {
+  return {
+    occasion: '', guest_count: null,
+    package: '', slot: '',
+    date_label: '', setup: '',
+    addons: [],
+    notes: '', booking_for: '',
+    total: null, deposit: null, balance: null,
+  }
+}
+const bookingForm = ref<BookingFormState>(emptyForm())
+
+const serializedPreview = computed(() => serializeVenueBookingMessage(bookingForm.value))
+const previewOverLimit = computed(() => serializedPreview.value.length > MESSAGE_MAX)
 
 function openMessageEdit() {
   if (!detail.value) return
-  messageDraft.value = detail.value.message
+  const p = parseVenueBookingMessage(detail.value.message)
+  // Hydrate from the parse. For junk messages (parse-fail) start blank
+  // so admins can rebuild the structure cleanly; the raw text still
+  // sits in the fallback card behind the modal.
+  bookingForm.value = {
+    occasion: p.occasion ?? '',
+    guest_count: p.guest_count,
+    package: p.package ?? '',
+    slot: p.slot ?? '',
+    date_label: p.date_label ?? '',
+    setup: p.setup ?? '',
+    addons: p.addons.map((a) => ({ name: a.name, quantity: a.quantity })),
+    notes: p.notes ?? '',
+    booking_for: p.booking_for ?? '',
+    total: p.total,
+    deposit: p.deposit,
+    balance: p.balance,
+  }
   editingMessage.value = true
 }
 function cancelMessageEdit() {
   if (savingMessage.value) return
   editingMessage.value = false
 }
+
+function addAddon() {
+  bookingForm.value.addons.push({ name: '', quantity: null })
+}
+function removeAddon(idx: number) {
+  bookingForm.value.addons.splice(idx, 1)
+}
+
 async function saveMessage() {
   const cid = clubStore.current?.id
   if (typeof cid !== 'number' || !detail.value) return
-  const body = messageDraft.value.trim()
-  if (!body) { toast.error('Booking details can\'t be empty.'); return }
-  if (messageOverLimit.value) { toast.error('Message is over 10,000 characters.'); return }
-  if (body === detail.value.message) { editingMessage.value = false; return }
+  const next = serializedPreview.value.trim()
+  if (!next) { toast.error('Add at least an occasion + package.'); return }
+  if (previewOverLimit.value) { toast.error('Message is over 10,000 characters.'); return }
+  if (next === detail.value.message) { editingMessage.value = false; return }
   savingMessage.value = true
   try {
-    detail.value = await enquiriesApi.update(cid, detail.value.id, { message: body })
+    const fresh = await enquiriesApi.update(cid, detail.value.id, { message: next })
+    detail.value = { ...fresh, replies: detail.value.replies, notes: detail.value.notes }
     editingMessage.value = false
     toast.success('Booking details updated.')
   } catch (err) {
@@ -268,7 +291,6 @@ const deleteConfirmOpen = ref(false)
 const deleting = ref(false)
 
 function toggleOverflow() { overflowOpen.value = !overflowOpen.value }
-function closeOverflow() { overflowOpen.value = false }
 function openDeleteConfirm() { overflowOpen.value = false; deleteConfirmOpen.value = true }
 function closeDeleteConfirm() { if (!deleting.value) deleteConfirmOpen.value = false }
 
@@ -286,17 +308,9 @@ async function confirmDelete() {
   }
 }
 
-// Click-outside for the overflow menu.
-function onDocClick(e: MouseEvent) {
-  if (!overflowOpen.value) return
-  const target = e.target as HTMLElement | null
-  if (target?.closest('.overflow')) return
-  overflowOpen.value = false
-}
-if (typeof window !== 'undefined') {
-  document.addEventListener('click', onDocClick)
-  onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
-}
+// Close the overflow menu when the click lands anywhere outside it.
+const overflowRef = ref<HTMLElement | null>(null)
+useClickOutside(overflowRef, () => { if (overflowOpen.value) overflowOpen.value = false })
 
 // ── Archive / unarchive ───────────────────────────────────────
 const archiving = ref(false)
@@ -347,7 +361,7 @@ async function toggleArchive() {
             </svg>
             Send email
           </button>
-          <div class="overflow">
+          <div ref="overflowRef" class="overflow">
             <button
               type="button"
               class="detail__action-btn detail__action-btn--icon"
@@ -381,7 +395,7 @@ async function toggleArchive() {
     <div v-else-if="detail" class="detail__body">
       <div class="left">
         <!-- Parsed booking summary — only when parse succeeded. -->
-        <section v-if="parsed?.ok && !editingMessage" class="booking-card">
+        <section v-if="parsed?.ok" class="booking-card">
           <div class="booking-card__head">
             <div class="booking-card__eyebrow">
               <span class="booking-card__dot" />
@@ -432,38 +446,8 @@ async function toggleArchive() {
           </div>
         </section>
 
-        <!-- Message editor — swaps in for either card when the admin
-             clicks "Edit details". Writes the raw plaintext so the
-             next parse round-trip reflects the admin's corrections. -->
-        <section v-if="editingMessage" class="booking-card booking-card--edit">
-          <div class="booking-card__head">
-            <div class="booking-card__eyebrow">
-              <span class="booking-card__dot" />
-              <span>Editing booking</span>
-            </div>
-          </div>
-          <p class="booking-card__hint">Keep the first line as <em>Occasion · N guests</em>, the second as <em>Package · Slot</em>, and the <em>Total:</em> line at the end — the parser pulls those fields back out for the summary view.</p>
-          <textarea
-            v-model="messageDraft"
-            class="booking-card__textarea"
-            rows="14"
-            :disabled="savingMessage"
-          />
-          <div class="booking-card__editfoot">
-            <span class="booking-card__counter" :class="{ 'booking-card__counter--over': messageOverLimit }">
-              {{ messageDraft.length }} / {{ MESSAGE_MAX }}
-            </span>
-            <div class="booking-card__editfoot-actions">
-              <button type="button" class="card-btn" :disabled="savingMessage" @click="cancelMessageEdit">Cancel</button>
-              <button type="button" class="card-btn card-btn--primary" :disabled="savingMessage || messageOverLimit || !messageDraft.trim()" @click="saveMessage">
-                {{ savingMessage ? 'Saving…' : 'Save details' }}
-              </button>
-            </div>
-          </div>
-        </section>
-
         <!-- Fallback: show raw plaintext if we couldn't parse. -->
-        <section v-else-if="!parsed?.ok" class="message-card">
+        <section v-else class="message-card">
           <div class="booking-card__head">
             <div class="message-card__eyebrow">
               <span class="message-card__dot" />
@@ -514,7 +498,7 @@ async function toggleArchive() {
         </section>
 
         <!-- Reply thread -->
-        <section v-if="detail.replies.length > 0" class="thread">
+        <section v-if="detail.replies?.length" class="thread">
           <div class="thread__head">
             <h3 class="thread__title">Reply thread</h3>
             <span class="thread__count">{{ detail.replies.length }}</span>
@@ -543,27 +527,6 @@ async function toggleArchive() {
           <div v-else class="rail__status-meta">Awaiting reply</div>
         </div>
 
-        <div v-if="detail.status !== 'archived'" class="rail__section">
-          <div class="rail__section-head"><h3 class="rail__section-title">Reply</h3></div>
-          <p class="rail__hint">Sends from your club address. Confirms the booking by saying so in the message.</p>
-          <form class="reply-form" @submit.prevent="submitReply">
-            <label class="field">
-              <span>Subject <em>(optional)</em></span>
-              <input v-model="replySubject" type="text" :placeholder="defaultSubject" />
-            </label>
-            <label class="field">
-              <div class="field__head">
-                <span>Message</span>
-                <span class="field__counter" :class="{ 'field__counter--over': replyOverLimit }">{{ replyBody.length }} / {{ REPLY_MAX }}</span>
-              </div>
-              <textarea v-model="replyBody" rows="6" placeholder="Write your reply…" required></textarea>
-            </label>
-            <button type="submit" class="rail-btn rail-btn--approve" :disabled="!replyBody.trim() || replyOverLimit || replying">
-              {{ replying ? 'Sending…' : 'Send reply' }}
-            </button>
-          </form>
-        </div>
-
         <button
           type="button"
           class="rail-btn"
@@ -577,7 +540,7 @@ async function toggleArchive() {
         <div class="rail__notes">
           <div class="rail__notes-head">
             <h3 class="rail__notes-title">Internal notes</h3>
-            <span class="rail__notes-count">{{ detail.notes.length }}</span>
+            <span class="rail__notes-count">{{ detail.notes?.length ?? 0 }}</span>
           </div>
           <p class="rail__hint">Only the CRM sees these. Never emailed.</p>
           <form class="note-form" @submit.prevent="submitNote">
@@ -586,7 +549,7 @@ async function toggleArchive() {
               {{ addingNote ? 'Adding…' : 'Add note' }}
             </button>
           </form>
-          <ul v-if="detail.notes.length" class="notes">
+          <ul v-if="detail.notes?.length" class="notes">
             <li v-for="n in detail.notes" :key="n.id" class="note">
               <div class="note__head">
                 <span class="note__author">{{ n.author_name ?? 'CRM' }}</span>
@@ -607,6 +570,129 @@ async function toggleArchive() {
       :send-handler="sendEmailViaReply"
       @close="sendEmailOpen = false"
     />
+
+    <CrmModal
+      :open="editingMessage"
+      eyebrow="Venue bookings"
+      :title="detail ? `Edit booking — ${detail.full_name}` : 'Edit booking'"
+      width="lg"
+      @close="cancelMessageEdit"
+    >
+      <form class="booking-form" @submit.prevent="saveMessage">
+        <div class="booking-form__section">
+          <div class="booking-form__section-label">Occasion</div>
+          <div class="booking-form__row">
+            <label class="field field--grow">
+              <span>What's the booking for</span>
+              <input v-model="bookingForm.occasion" type="text" placeholder="Birthday, Wedding, Corporate…" :disabled="savingMessage" />
+            </label>
+            <label class="field field--narrow">
+              <span>Guests</span>
+              <input v-model.number="bookingForm.guest_count" type="number" min="0" placeholder="40" :disabled="savingMessage" />
+            </label>
+          </div>
+        </div>
+
+        <div class="booking-form__section">
+          <div class="booking-form__section-label">Package + slot</div>
+          <div class="booking-form__row">
+            <label class="field field--grow">
+              <span>Package</span>
+              <input v-model="bookingForm.package" type="text" placeholder="The clubhouse" :disabled="savingMessage" />
+            </label>
+            <label class="field field--grow">
+              <span>Slot</span>
+              <input v-model="bookingForm.slot" type="text" placeholder="Afternoon · 2pm – 6pm" :disabled="savingMessage" />
+            </label>
+          </div>
+        </div>
+
+        <div class="booking-form__section">
+          <div class="booking-form__section-label">When + setup</div>
+          <div class="booking-form__row">
+            <label class="field field--grow">
+              <span>Date</span>
+              <input v-model="bookingForm.date_label" type="text" placeholder="Friday 13 November" :disabled="savingMessage" />
+            </label>
+            <label class="field field--grow">
+              <span>Setup</span>
+              <input v-model="bookingForm.setup" type="text" placeholder="Long tables + bar" :disabled="savingMessage" />
+            </label>
+          </div>
+        </div>
+
+        <div class="booking-form__section">
+          <div class="booking-form__section-label-row">
+            <div class="booking-form__section-label">Add-ons</div>
+            <button type="button" class="card-edit" :disabled="savingMessage" @click="addAddon">+ Add</button>
+          </div>
+          <ul v-if="bookingForm.addons.length" class="addon-rows">
+            <li v-for="(a, i) in bookingForm.addons" :key="i" class="addon-row">
+              <label class="field field--grow">
+                <span v-if="i === 0">Name</span>
+                <input v-model="a.name" type="text" placeholder="Grazing platters" :disabled="savingMessage" />
+              </label>
+              <label class="field field--qty">
+                <span v-if="i === 0">Qty</span>
+                <input v-model.number="a.quantity" type="number" min="0" placeholder="—" :disabled="savingMessage" />
+              </label>
+              <button type="button" class="addon-row__remove" aria-label="Remove add-on" :disabled="savingMessage" @click="removeAddon(i)">×</button>
+            </li>
+          </ul>
+          <div v-else class="booking-form__empty">No add-ons on this booking.</div>
+        </div>
+
+        <div class="booking-form__section">
+          <div class="booking-form__section-label">From the customer</div>
+          <label class="field">
+            <span>Notes</span>
+            <textarea
+              v-model="bookingForm.notes"
+              rows="3"
+              placeholder="Dietary, access, anything they called out…"
+              :disabled="savingMessage"
+            />
+          </label>
+          <label class="field">
+            <span>Booking on behalf of <em>(optional)</em></span>
+            <input v-model="bookingForm.booking_for" type="text" placeholder="Douglas Rodda" :disabled="savingMessage" />
+          </label>
+        </div>
+
+        <div class="booking-form__section">
+          <div class="booking-form__section-label">Money</div>
+          <div class="booking-form__row booking-form__row--money">
+            <label class="field">
+              <span>Total $</span>
+              <input v-model.number="bookingForm.total" type="number" min="0" step="1" placeholder="1765" :disabled="savingMessage" />
+            </label>
+            <label class="field">
+              <span>Deposit $</span>
+              <input v-model.number="bookingForm.deposit" type="number" min="0" step="1" placeholder="441" :disabled="savingMessage" />
+            </label>
+            <label class="field">
+              <span>Balance $</span>
+              <input v-model.number="bookingForm.balance" type="number" min="0" step="1" placeholder="1324" :disabled="savingMessage" />
+            </label>
+          </div>
+        </div>
+
+        <div v-if="previewOverLimit" class="booking-form__warning">
+          Message is over the 10,000-character limit — trim notes or add-ons.
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" class="card-btn" :disabled="savingMessage" @click="cancelMessageEdit">Cancel</button>
+        <button
+          type="button"
+          class="card-btn card-btn--primary"
+          :disabled="savingMessage || previewOverLimit || !serializedPreview.trim()"
+          @click="saveMessage"
+        >
+          {{ savingMessage ? 'Saving…' : 'Save details' }}
+        </button>
+      </template>
+    </CrmModal>
 
     <CrmModal
       :open="deleteConfirmOpen"
@@ -820,21 +906,60 @@ async function toggleArchive() {
 .card-btn--danger  { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }
 .card-btn--danger:hover:not(:disabled)  { background: #B91C1C; border-color: #B91C1C; }
 
-/* Booking card — edit mode */
-.booking-card--edit { gap: 14px; }
-.booking-card__hint { margin: 0; font-family: var(--font-body); font-size: 12px; color: var(--color-fog); line-height: 1.5; }
-.booking-card__hint em { color: var(--color-graphite); font-style: normal; font-weight: 600; }
-.booking-card__textarea {
-  width: 100%; box-sizing: border-box; min-height: 240px;
-  padding: 14px 16px; border: 1px solid var(--color-hairline); border-radius: 10px;
-  font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: var(--color-ink);
-  background: var(--color-surface); resize: vertical;
+/* Booking-edit modal — structured form */
+.booking-form { display: flex; flex-direction: column; gap: 20px; }
+.booking-form__section { display: flex; flex-direction: column; gap: 10px; }
+.booking-form__section-label-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.booking-form__section-label {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog);
 }
-.booking-card__textarea:focus { outline: none; border-color: var(--color-ink); background: #fff; }
-.booking-card__editfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.booking-card__editfoot-actions { display: flex; gap: 8px; }
-.booking-card__counter { font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); }
-.booking-card__counter--over { color: var(--color-danger); font-weight: 700; }
+.booking-form__row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.booking-form__row--money { gap: 10px; }
+.booking-form__row--money .field { flex: 1 1 120px; }
+.booking-form__row .field--grow { flex: 1 1 220px; }
+.booking-form__row .field--narrow { flex: 0 0 110px; }
+
+.booking-form .field { display: flex; flex-direction: column; gap: 6px; }
+.booking-form .field > span {
+  font-family: var(--font-body); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog);
+}
+.booking-form .field em { font-style: normal; color: var(--color-mute); font-weight: 400; }
+.booking-form .field input,
+.booking-form .field textarea {
+  padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px;
+  font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff;
+  box-sizing: border-box; width: 100%;
+}
+.booking-form .field textarea { line-height: 1.5; resize: vertical; min-height: 68px; }
+.booking-form .field input:focus,
+.booking-form .field textarea:focus { outline: none; border-color: var(--color-ink); }
+
+/* Add-ons list — rows with name + qty + remove */
+.addon-rows { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.addon-row { display: flex; align-items: flex-end; gap: 8px; }
+.addon-row .field--qty { flex: 0 0 90px; }
+.addon-row__remove {
+  flex: 0 0 32px; height: 36px; margin-bottom: 1px;
+  border: 1px solid var(--color-hairline); border-radius: 8px;
+  background: #fff; color: var(--color-fog);
+  font-family: var(--font-body); font-size: 18px; line-height: 1; cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.addon-row__remove:hover:not(:disabled) {
+  background: #FEE2E2; border-color: #FCA5A5; color: #991B1B;
+}
+.addon-row__remove:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.booking-form__empty {
+  padding: 12px 14px; background: var(--color-surface); border-radius: 8px;
+  font-family: var(--font-body); font-size: 12px; color: var(--color-fog); text-align: center;
+}
+.booking-form__warning {
+  padding: 10px 12px; background: #FEE2E2; border: 1px solid #FCA5A5; border-radius: 8px;
+  font-family: var(--font-body); font-size: 12px; font-weight: 600; color: #991B1B;
+}
 
 /* Customer card — edit mode */
 .customer-edit { display: flex; flex-direction: column; gap: 14px; }

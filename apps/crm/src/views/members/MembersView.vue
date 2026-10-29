@@ -6,6 +6,8 @@ import CrmEmptyState from '@/components/CrmEmptyState.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 import SendEmailModal, { type EmailRecipient } from '@/components/modals/SendEmailModal.vue'
+import NewSeasonModal from './NewSeasonModal.vue'
+import MemberSummaryStats from './MemberSummaryStats.vue'
 import { useToast } from '@/composables/useToast'
 import { useMemberSearch } from '@/composables/useMemberSearch'
 import { useClubStore } from '@/stores/club'
@@ -442,7 +444,7 @@ function hasRealAvatar(m: Member): boolean {
   return true
 }
 
-const statusTone: Record<MemberStatus, string> = {
+const _statusTone: Record<MemberStatus, string> = {
   Active: 'ok',
   Prospect: 'mute',
   Visitor: 'warn',
@@ -471,7 +473,7 @@ function feeLabel(m: Member): string {
  * - Nothing paid:    "Owes $240"
  * - No tier:         "" (nothing to show)
  */
-function duesAmountLabel(m: Member): string {
+function _duesAmountLabel(m: Member): string {
   if (m.fee == null) return ''
   const status = m.paymentStatus
   if (status === 'paid' || status === 'waived') return 'Paid'
@@ -481,7 +483,7 @@ function duesAmountLabel(m: Member): string {
   return `Owes $${owed}`
 }
 
-const duesTone: Record<DuesStatus, string> = {
+const _duesTone: Record<DuesStatus, string> = {
   Paid: 'ok',
   Due: 'warn',
   Overdue: 'danger',
@@ -656,11 +658,6 @@ async function loadTiers() {
   }
 }
 
-function fmtMoney(n: number | null | undefined): string {
-  if (n == null) return '—'
-  if (n >= 1000) return `$${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`
-  return `$${n}`
-}
 
 // ── Navigation to detail page ───────────────────────────────────
 // The detail modal was replaced by MemberDetailView (design 33).
@@ -669,7 +666,7 @@ function fmtMoney(n: number | null | undefined): string {
 // compile — they'll be re-triggered from the detail page in a follow-up.
 const activeMember = ref<Member | null>(null)
 const detailOpen = ref(false)
-function closeDetail() { detailOpen.value = false }
+function _closeDetail() { detailOpen.value = false }
 function openDetail(m: Member) {
   router.push({ name: 'member-detail', params: { id: m.id } })
 }
@@ -695,98 +692,16 @@ const callerCanManageSeasons = computed(() => {
 })
 
 // ── New season modal ───────────────────────────────────────────
+// Full modal state + submit lives in NewSeasonModal.vue. The parent
+// just toggles `open` and reacts to `@created` so the roster view can
+// reload seasons + flip the picker to the new one.
 const newSeasonOpen = ref(false)
-const newSeasonSubmitting = ref(false)
-const newSeasonError = ref<string | null>(null)
-const newSeasonFieldErrors = ref<Partial<Record<'season_name' | 'start_date' | 'end_date' | 'default_fee', string>>>({})
-const newSeasonForm = reactive({
-  season_name: '',
-  start_date: '',
-  end_date: '',
-  // `<input type="number">` + v-model gives us a number once the user
-  // types anything, falls back to '' when the field is empty. Both are
-  // handled in submitNewSeason.
-  default_fee: '' as string | number,
-  description: '',
-  set_current: true,
-})
+function openNewSeason() { newSeasonOpen.value = true }
 
-function resetNewSeasonForm() {
-  newSeasonForm.season_name = ''
-  newSeasonForm.start_date = ''
-  newSeasonForm.end_date = ''
-  newSeasonForm.default_fee = ''
-  newSeasonForm.description = ''
-  newSeasonForm.set_current = true
-  newSeasonError.value = null
-  newSeasonFieldErrors.value = {}
-}
-
-function openNewSeason() {
-  resetNewSeasonForm()
-  newSeasonOpen.value = true
-}
-function closeNewSeason() {
-  if (newSeasonSubmitting.value) return
-  newSeasonOpen.value = false
-}
-
-const canSubmitNewSeason = computed(
-  () =>
-    newSeasonForm.season_name.trim().length > 0 &&
-    newSeasonForm.start_date.length > 0 &&
-    newSeasonForm.end_date.length > 0 &&
-    newSeasonForm.end_date >= newSeasonForm.start_date,
-)
-
-async function submitNewSeason() {
-  const cid = clubStore.current?.id
-  if (cid == null || !canSubmitNewSeason.value) return
-  newSeasonSubmitting.value = true
-  newSeasonError.value = null
-  newSeasonFieldErrors.value = {}
-  try {
-    // `<input type="number">` + v-model coerces to a number at runtime,
-    // so default_fee may be a number OR a string depending on what the
-    // user did. Normalise before validating.
-    const feeRaw = newSeasonForm.default_fee
-    const feeStr = typeof feeRaw === 'number' ? String(feeRaw) : feeRaw.trim()
-    const feeNum = feeStr.length > 0 ? Number(feeStr) : undefined
-    const created = await seasonsApi.create(cid, {
-      season_name: newSeasonForm.season_name.trim(),
-      start_date: newSeasonForm.start_date,
-      end_date: newSeasonForm.end_date,
-      default_fee: feeNum != null && !Number.isNaN(feeNum) ? feeNum : undefined,
-      description: newSeasonForm.description.trim() || undefined,
-      set_current: newSeasonForm.set_current,
-    })
-    // Refetch seasons + summary; if the new one is now current, honour that,
-    // otherwise switch the picker to it so the owner sees zeroed numbers.
-    await loadSeasons()
-    selectedSeasonId.value = created.season_id
-    await loadSummary()
-    toast.success(`"${created.season_name}" created.`)
-    newSeasonOpen.value = false
-  } catch (err) {
-    if (err instanceof ApiError) {
-      const code = err.code ?? ''
-      const fieldMap: Record<string, keyof typeof newSeasonFieldErrors.value> = {
-        invalid_name: 'season_name',
-        invalid_start_date: 'start_date',
-        invalid_end_date: 'end_date',
-        invalid_date_range: 'end_date',
-        invalid_fee: 'default_fee',
-      }
-      const key = fieldMap[code]
-      if (key) newSeasonFieldErrors.value[key] = err.message
-      else if (code === 'season_exists') newSeasonError.value = 'A season with that name already exists.'
-      else newSeasonError.value = err.message
-    } else {
-      newSeasonError.value = err instanceof Error ? err.message : 'Failed to create season.'
-    }
-  } finally {
-    newSeasonSubmitting.value = false
-  }
+async function onSeasonCreated(created: Season) {
+  await loadSeasons()
+  selectedSeasonId.value = created.season_id
+  await loadSummary()
 }
 
 const editOpen = ref(false)
@@ -810,7 +725,7 @@ const POSITION_GROUPS: Array<{ value: PositionGroup; label: string; hint: string
 ]
 
 
-function openEditMember() {
+function _openEditMember() {
   if (!activeMember.value) return
   const m = activeMember.value
   // Owner can't be edited via this endpoint (backend returns 409 owner_immutable).
@@ -892,7 +807,7 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function openPayment() {
+function _openPayment() {
   if (!activeMember.value) return
   const m = activeMember.value
   if (m.apiRole && m.membershipTypeId == null) {
@@ -979,7 +894,7 @@ async function submitPayment() {
   }
 }
 
-async function removeActiveMember() {
+async function _removeActiveMember() {
   const m = activeMember.value
   const cid = clubStore.current?.id
   if (!m || cid == null) return
@@ -1193,39 +1108,9 @@ async function submit() {
       </button>
     </div>
 
-    <!-- Roster stat panels — server-side summary (brief 13 backend response) -->
-    <section v-if="summary" class="stats">
-      <div class="stat-panel">
-        <div class="stat-panel__label">
-          Expected fees
-          <span v-if="summary.season_name" class="stat-panel__label-season">
-            · {{ summary.season_name }}<template v-if="summary.is_current_season"> · current</template>
-          </span>
-        </div>
-        <div class="stat-panel__value">{{ fmtMoney(summary.expected_fees) }}</div>
-        <div class="stat-panel__sub">{{ summary.counts.active }} active member{{ summary.counts.active === 1 ? '' : 's' }}</div>
-      </div>
-      <div class="stat-panel stat-panel--ok">
-        <div class="stat-panel__label">Collected</div>
-        <div class="stat-panel__value">{{ fmtMoney(summary.collected) }}</div>
-        <div class="stat-panel__sub">
-          <span>{{ summary.collection_rate }}% of expected</span>
-        </div>
-      </div>
-      <div class="stat-panel" :class="{ 'stat-panel--warn': summary.outstanding > 0 }">
-        <div class="stat-panel__label">Outstanding</div>
-        <div class="stat-panel__value">{{ fmtMoney(summary.outstanding) }}</div>
-        <div class="stat-panel__sub">
-          <template v-if="summary.counts.lapsed > 0"><strong>{{ summary.counts.lapsed }} lapsed</strong> · </template>
-          {{ summary.counts.pending }} pending
-        </div>
-      </div>
-      <div class="stat-panel stat-panel--muted">
-        <div class="stat-panel__label">Top tier</div>
-        <div class="stat-panel__value stat-panel__value--sm">{{ summary.top_tiers[0]?.type_name ?? '—' }}</div>
-        <div class="stat-panel__sub">{{ summary.top_tiers[0]?.count ?? 0 }} member{{ summary.top_tiers[0]?.count === 1 ? '' : 's' }}</div>
-      </div>
-    </section>
+    <!-- Roster stat panels — server-side summary (brief 13).
+         Extracted to MemberSummaryStats.vue; parent still fetches the data. -->
+    <MemberSummaryStats :summary="summary" />
 
     <div class="filters">
       <div class="chips">
@@ -1672,81 +1557,13 @@ async function submit() {
       </template>
     </CrmModal>
 
-    <!-- New season modal (owner / admin only) -->
-    <CrmModal
+    <!-- New season modal (owner / admin only) — extracted to NewSeasonModal.vue. -->
+    <NewSeasonModal
       :open="newSeasonOpen"
-      eyebrow="Seasons"
-      title="New season"
-      width="md"
-      @close="closeNewSeason"
-    >
-      <form class="form" @submit.prevent="submitNewSeason">
-        <label class="field">
-          <span class="field__label">Season name</span>
-          <input
-            v-model="newSeasonForm.season_name"
-            type="text"
-            maxlength="100"
-            placeholder="2026/27 Summer"
-            autofocus
-          />
-          <span v-if="newSeasonFieldErrors.season_name" class="field__error">{{ newSeasonFieldErrors.season_name }}</span>
-        </label>
-        <div class="form__row">
-          <label class="field">
-            <span class="field__label">Start date</span>
-            <input v-model="newSeasonForm.start_date" type="date" />
-            <span v-if="newSeasonFieldErrors.start_date" class="field__error">{{ newSeasonFieldErrors.start_date }}</span>
-          </label>
-          <label class="field">
-            <span class="field__label">End date</span>
-            <input v-model="newSeasonForm.end_date" type="date" />
-            <span v-if="newSeasonFieldErrors.end_date" class="field__error">{{ newSeasonFieldErrors.end_date }}</span>
-          </label>
-        </div>
-        <label class="field">
-          <span class="field__label">Default fee</span>
-          <input
-            v-model="newSeasonForm.default_fee"
-            type="number"
-            min="0"
-            step="1"
-            placeholder="240"
-          />
-          <span v-if="newSeasonFieldErrors.default_fee" class="field__error">{{ newSeasonFieldErrors.default_fee }}</span>
-        </label>
-        <label class="field">
-          <span class="field__label">Description</span>
-          <textarea
-            v-model="newSeasonForm.description"
-            rows="3"
-            placeholder="Optional context for committee members."
-          />
-        </label>
-        <div class="switch-row">
-          <div>
-            <div class="switch-row__label">Set as current season</div>
-            <div class="switch-row__hint">New payments + finance totals attach to this season.</div>
-          </div>
-          <button
-            type="button"
-            class="switch"
-            :class="{ 'is-on': newSeasonForm.set_current }"
-            @click="newSeasonForm.set_current = !newSeasonForm.set_current"
-          ><span class="switch__knob" /></button>
-        </div>
-        <div v-if="newSeasonError" class="form__error" role="alert">{{ newSeasonError }}</div>
-      </form>
-      <template #footer>
-        <button type="button" class="btn btn--outline" :disabled="newSeasonSubmitting" @click="closeNewSeason">Cancel</button>
-        <button
-          type="button"
-          class="btn btn--primary"
-          :disabled="!canSubmitNewSeason || newSeasonSubmitting"
-          @click="submitNewSeason"
-        >{{ newSeasonSubmitting ? 'Creating…' : 'Create season' }}</button>
-      </template>
-    </CrmModal>
+      :club-id="clubStore.current?.id ?? null"
+      @close="newSeasonOpen = false"
+      @created="onSeasonCreated"
+    />
 
     <!-- Add member modal -->
     <CrmModal
@@ -1900,24 +1717,6 @@ async function submit() {
 .search--mobile { display: none; }
 
 /* Filter chips */
-/* Roster stat panels */
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.stat-panel { padding: 14px 16px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; }
-.stat-panel--ok { background: #F0FDF4; border-color: #BBF7D0; }
-.stat-panel--ok .stat-panel__value { color: #14532D; }
-.stat-panel--warn { background: #FFFBEB; border-color: #FDE68A; }
-.stat-panel--warn .stat-panel__value { color: #92400E; }
-.stat-panel--muted { background: var(--color-surface); }
-.stat-panel__label { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
-.stat-panel__value { font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: -0.01em; color: var(--color-ink); margin-top: 6px; line-height: 1.1; }
-.stat-panel__value--sm { font-size: 16px; }
-.stat-panel__sub { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 4px; }
-.stat-panel__sub strong { color: #991B1B; font-weight: 700; }
-
-@media (max-width: 900px) {
-  .stats { grid-template-columns: repeat(2, 1fr); }
-}
-
 .filters { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .chips { display: flex; gap: 6px; padding: 4px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 999px; width: fit-content; }
 .chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border: 0; background: transparent; border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-fog); cursor: pointer; }

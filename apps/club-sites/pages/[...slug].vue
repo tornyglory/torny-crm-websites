@@ -17,11 +17,6 @@ const slug = computed(() => {
   return Array.isArray(raw) ? raw.join('/') : (raw ?? '')
 })
 
-const hasBlocks = computed(() => {
-  const entry = site.value?.pages?.[slug.value]
-  return !!(entry && Array.isArray(entry.blocks) && entry.blocks.length > 0)
-})
-
 usePageMeta(slug.value)
 
 const accent = computed(

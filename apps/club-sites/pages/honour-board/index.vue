@@ -128,9 +128,6 @@ const yearRange = computed<string | null>(() => {
 })
 
 // ── Display helpers ────────────────────────────────────────────
-function teamDisplay(e: PublicHonourEntry): string {
-  return e.players.map((p) => p.display_name).join(', ')
-}
 function initialsOf(name: string): string {
   return name
     .split(/\s+/)

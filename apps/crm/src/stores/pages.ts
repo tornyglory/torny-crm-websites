@@ -95,7 +95,7 @@ export const usePagesStore = defineStore('pages', () => {
           return 'That page no longer exists.'
       }
     }
-    return err instanceof Error ? err.message : `Couldn\'t ${context} the page.`
+    return err instanceof Error ? err.message : `Couldn't ${context} the page.`
   }
 
   return {

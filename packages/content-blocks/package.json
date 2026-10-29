@@ -14,7 +14,8 @@
   ],
   "scripts": {
     "typecheck": "vue-tsc --noEmit",
-    "lint": "echo ok",
+    "lint": "eslint src --max-warnings 0",
+    "format": "prettier --write src",
     "clean": "rm -rf .turbo"
   },
   "peerDependencies": {

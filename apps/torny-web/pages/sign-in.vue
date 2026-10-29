@@ -122,15 +122,6 @@ watch(
   { immediate: true },
 )
 
-// Stats surfaced in the bottom strip (only when we have a club skin).
-const stats = computed(() => {
-  const s = skin.value
-  if (!s) return []
-  const out: Array<{ value: string; label: string }> = []
-  if (s.foundedYear) out.push({ value: `Est. '${String(s.foundedYear).slice(-2)}`, label: 'ESTABLISHED' })
-  if (s.region) out.push({ value: s.region, label: `${s.country ? `${s.country} ·` : ''} REGION` })
-  return out
-})
 </script>
 
 <template>

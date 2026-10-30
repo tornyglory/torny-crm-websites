@@ -39,6 +39,7 @@ import LogNoteModal from '@/components/modals/LogNoteModal.vue'
 import SendEmailModal from '@/components/modals/SendEmailModal.vue'
 import EmailDetailModal from '@/components/modals/EmailDetailModal.vue'
 import RecordPaymentModal from '@/components/modals/RecordPaymentModal.vue'
+import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
 import CrmEmptyState from '@/components/CrmEmptyState.vue'
 
@@ -1871,16 +1872,14 @@ async function submitEdit() {
             <span class="edit-field__label">Phone</span>
             <input v-model="editForm.phone" type="tel" class="edit-field__input" placeholder="+64 21 …" />
           </label>
-          <label class="edit-field">
+          <div class="edit-field">
             <span class="edit-field__label">Date of birth</span>
-            <input
+            <TornyDatePicker
               v-model="editForm.dob"
-              type="date"
-              class="edit-field__input"
-              :class="{ 'edit-field__input--error': editFieldErrors.dob }"
+              placeholder="Date of birth"
             />
             <div v-if="editFieldErrors.dob" class="edit-field__error">{{ editFieldErrors.dob }}</div>
-          </label>
+          </div>
           <label class="edit-field edit-field--full">
             <span class="edit-field__label">Address</span>
             <input v-model="editForm.address" type="text" class="edit-field__input" placeholder="12 Main St, Wellington" />
@@ -1961,26 +1960,22 @@ async function submitEdit() {
               <option v-for="s in MEMBERSHIP_STATUS_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
             </select>
           </label>
-          <label class="edit-field">
+          <div class="edit-field">
             <span class="edit-field__label">Joined date</span>
-            <input
+            <TornyDatePicker
               v-model="editForm.joined_date"
-              type="date"
-              class="edit-field__input"
-              :class="{ 'edit-field__input--error': editFieldErrors.joined_date }"
+              placeholder="Joined date"
             />
             <div v-if="editFieldErrors.joined_date" class="edit-field__error">{{ editFieldErrors.joined_date }}</div>
-          </label>
-          <label class="edit-field">
+          </div>
+          <div class="edit-field">
             <span class="edit-field__label">Payment due date</span>
-            <input
+            <TornyDatePicker
               v-model="editForm.payment_due_date"
-              type="date"
-              class="edit-field__input"
-              :class="{ 'edit-field__input--error': editFieldErrors.payment_due_date }"
+              placeholder="Payment due date"
             />
             <div v-if="editFieldErrors.payment_due_date" class="edit-field__error">{{ editFieldErrors.payment_due_date }}</div>
-          </label>
+          </div>
         </div>
       </section>
 

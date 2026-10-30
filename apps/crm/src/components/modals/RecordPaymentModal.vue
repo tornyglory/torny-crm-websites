@@ -13,6 +13,7 @@ import {
   type MembershipSnapshot,
 } from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import { useToast } from '@/composables/useToast'
 
 const props = defineProps<{
@@ -152,15 +153,14 @@ function onCmdEnter(e: KeyboardEvent) {
             />
           </div>
         </label>
-        <label class="record-pay__field">
+        <div class="record-pay__field">
           <span class="record-pay__label">Date</span>
-          <input
+          <TornyDatePicker
             v-model="state.date"
-            type="date"
-            class="record-pay__input"
             :disabled="saving"
+            :clearable="false"
           />
-        </label>
+        </div>
       </div>
     </section>
 

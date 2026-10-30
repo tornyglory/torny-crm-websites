@@ -3640,7 +3640,7 @@ const lastSavedLabel = computed(() => {
 .web__live-link { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-accent); text-decoration: none; padding: 4px 10px; border-radius: 8px; }
 .web__live-link:hover { background: var(--color-accent-soft); }
 
-.btn { padding: 9px 16px; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; white-space: nowrap; }
+.btn { padding: 9px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; white-space: nowrap; }
 .btn--primary { background: var(--color-ink); color: #fff; }
 .btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
 .btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }

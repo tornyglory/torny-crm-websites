@@ -223,7 +223,7 @@ function goNext() {
 .logo__title { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); }
 .logo__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 4px; }
 .logo__actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
-.logo__btn { padding: 8px 14px; background: var(--color-ink); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
+.logo__btn { padding: 8px 16px; background: var(--color-ink); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
 .logo__btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .logo__status { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
 .logo__status--ok { color: #16A34A; font-weight: 600; }

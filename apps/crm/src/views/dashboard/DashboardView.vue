@@ -535,7 +535,7 @@ const iconTone: Record<SignalIcon, { bg: string; fg: string }> = {
 .dash__actions { display: flex; gap: 8px; flex-shrink: 0; }
 .dash__eyebrow--mobile, .dash__heading--mobile, .dash__sub--mobile { display: none; }
 
-.btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s ease; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; border: none; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s ease; }
 .btn--primary { background: var(--color-ink); color: #fff; }
 .btn--primary:hover { background: var(--color-graphite); }
 .btn--ghost { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }

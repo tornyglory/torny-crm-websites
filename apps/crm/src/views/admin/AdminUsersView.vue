@@ -420,7 +420,7 @@ const modalConfig = computed(() => {
 .modal-textarea { padding: 12px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 14px; resize: vertical; color: var(--color-ink); line-height: 1.5; }
 .modal-textarea:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
 
-.btn-confirm { padding: 10px 18px; background: var(--color-ink); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-confirm { padding: 10px 20px; background: var(--color-ink); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
 .btn-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-confirm--warn { background: #F59E0B; }
 .btn-confirm--warn:hover:not(:disabled) { background: #D97706; }

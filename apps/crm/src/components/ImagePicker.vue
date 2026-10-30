@@ -217,7 +217,7 @@ async function remove() {
 @keyframes pkr-spin { to { transform: rotate(360deg); } }
 
 .picker__actions { display: flex; align-items: center; gap: 10px; }
-.picker__btn { padding: 7px 12px; background: var(--color-ink); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
+.picker__btn { padding: 7px 14px; background: var(--color-ink); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
 .picker__btn:hover:not(:disabled) { background: var(--color-graphite); }
 .picker__btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .picker__remove { background: transparent; border: 0; padding: 0; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-danger); cursor: pointer; }

@@ -204,9 +204,9 @@ function timeAgo(iso: string): string {
 .claim__sep { opacity: 0.5; }
 .claim__role { color: var(--color-graphite); font-weight: 600; }
 .claim__actions { display: inline-flex; gap: 8px; flex-shrink: 0; }
-.btn-approve { padding: 8px 14px; background: var(--color-ink); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-approve { padding: 8px 16px; background: var(--color-ink); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; }
 .btn-approve:hover { background: var(--color-graphite); }
-.btn-review { padding: 8px 14px; background: #fff; color: var(--color-ink); border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 12px; font-weight: 500; text-decoration: none; }
+.btn-review { padding: 8px 16px; background: #fff; color: var(--color-ink); border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 500; text-decoration: none; }
 .btn-review:hover { border-color: var(--color-ink); }
 
 .empty { padding: 40px 20px; text-align: center; }

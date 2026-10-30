@@ -12,11 +12,13 @@ import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
 import {
   applications as applicationsApi,
+  seasons as seasonsApi,
   ApiError,
   type ApplicationDetail,
   type ApplicationStatus,
   type RejectReason,
   type Resolution,
+  type Season,
 } from '@torny/api-client'
 
 const route = useRoute()
@@ -127,15 +129,62 @@ async function submitNote() {
 // ── Approve modal ─────────────────────────────────────────────
 const approveOpen = ref(false)
 const approveSubmitting = ref(false)
-const approveForm = ref<{ resolution: Resolution; assigned_number: string; send_welcome_email: boolean }>({
+const seasonsList = ref<Season[]>([])
+const seasonsLoading = ref(false)
+const approveForm = ref<{
+  resolution: Resolution
+  assigned_number: string
+  send_welcome_email: boolean
+  season_id: number | null
+  customize_email: boolean
+  welcome_subject: string
+  welcome_message: string
+}>({
   resolution: 'auto',
   assigned_number: '',
   send_welcome_email: true,
+  season_id: null,
+  customize_email: false,
+  welcome_subject: '',
+  welcome_message: '',
 })
 
+async function loadSeasons() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') { seasonsList.value = []; return }
+  seasonsLoading.value = true
+  try {
+    seasonsList.value = await seasonsApi.list(cid)
+  } catch {
+    // Non-fatal — modal still opens, picker just stays empty and the
+    // server will attach to the current season on submit.
+    seasonsList.value = []
+  } finally {
+    seasonsLoading.value = false
+  }
+}
+
+const currentSeason = computed<Season | null>(() =>
+  seasonsList.value.find((s) => s.is_current_season) ?? null,
+)
+const selectedSeason = computed<Season | null>(() =>
+  seasonsList.value.find((s) => s.season_id === approveForm.value.season_id)
+    ?? currentSeason.value,
+)
+
 function openApprove() {
-  approveForm.value = { resolution: 'auto', assigned_number: '', send_welcome_email: true }
+  approveForm.value = {
+    resolution: 'auto',
+    assigned_number: '',
+    send_welcome_email: true,
+    season_id: null,
+    customize_email: false,
+    welcome_subject: '',
+    welcome_message: '',
+  }
   approveOpen.value = true
+  // Lazy-load; subsequent opens use the cached list.
+  if (seasonsList.value.length === 0) void loadSeasons()
 }
 async function submitApprove() {
   const cid = clubStore.current?.id
@@ -148,10 +197,27 @@ async function submitApprove() {
       toast.error('Membership number needs to be a number, or leave it blank.')
       return
     }
+    const customSubject = approveForm.value.customize_email
+      ? approveForm.value.welcome_subject.trim()
+      : ''
+    const customMessage = approveForm.value.customize_email
+      ? approveForm.value.welcome_message.trim()
+      : ''
+    const welcomeOverride =
+      approveForm.value.send_welcome_email &&
+      approveForm.value.customize_email &&
+      (customSubject || customMessage)
+        ? {
+            subject: customSubject || null,
+            message: customMessage || null,
+          }
+        : null
     await applicationsApi.approve(cid, detail.value.id, {
       resolution: approveForm.value.resolution,
       assigned_number: parsedNum ?? null,
       send_welcome_email: approveForm.value.send_welcome_email,
+      season_id: approveForm.value.season_id ?? null,
+      welcome_email: welcomeOverride,
     })
     toast.success(`Approved ${detail.value.full_name}.`)
     approveOpen.value = false
@@ -170,6 +236,9 @@ function approveErrorMessage(err: unknown): string {
     case 'already_rejected': return 'This application was rejected earlier — reopen it first.'
     case 'email_exists': return 'That email is already a member — try linking rather than creating a stub.'
     case 'bad_link': return 'Choose a user to link this application to.'
+    case 'unknown_season': return "That season doesn't exist on this club — pick another."
+    case 'welcome_subject_too_long': return 'Welcome subject is too long — trim it and try again.'
+    case 'welcome_message_too_long': return 'Welcome message is too long — trim it and try again.'
     default: return err.message || 'Could not approve.'
   }
 }
@@ -425,6 +494,29 @@ async function submitReject() {
     >
       <div v-if="detail" class="modal-form">
         <p class="modal-hint">Creates a member record + membership row (if the applicant chose a tier). Same resolution path as the roster's add-member.</p>
+
+        <label class="field">
+          <span class="field__label">Season</span>
+          <select v-model="approveForm.season_id" :disabled="seasonsLoading || seasonsList.length === 0">
+            <option :value="null">
+              {{ currentSeason ? `Current — ${currentSeason.season_name}` : 'Current season' }}
+            </option>
+            <option
+              v-for="s in seasonsList"
+              :key="s.season_id"
+              :value="s.season_id"
+            >
+              {{ s.season_name }}{{ s.is_current_season ? ' · current' : '' }}
+            </option>
+          </select>
+          <p v-if="seasonsList.length === 0 && !seasonsLoading" class="field__hint">
+            No seasons set up yet — the server will attach to the club's current season.
+          </p>
+          <p v-else-if="selectedSeason && !selectedSeason.is_current_season" class="field__hint">
+            Accepting into a future season — the membership activates when that season starts.
+          </p>
+        </label>
+
         <label class="field">
           <span class="field__label">Resolution</span>
           <select v-model="approveForm.resolution">
@@ -433,10 +525,12 @@ async function submitReject() {
             <option value="stub">Create stub (no email match)</option>
           </select>
         </label>
+
         <label class="field">
           <span class="field__label">Membership number (optional)</span>
           <input v-model="approveForm.assigned_number" type="text" inputmode="numeric" placeholder="Leave blank to auto-assign" />
         </label>
+
         <label class="switch-row">
           <div>
             <div class="switch-row__label">Send welcome email</div>
@@ -446,6 +540,64 @@ async function submitReject() {
             <span class="switch__knob" />
           </button>
         </label>
+
+        <div v-if="approveForm.send_welcome_email" class="email-block">
+          <div class="email-block__head">
+            <div>
+              <div class="email-block__title">Welcome email</div>
+              <div class="email-block__sub">Uses your club's template. Add a personal note if you like.</div>
+            </div>
+            <button
+              type="button"
+              class="rail-btn rail-btn--outline rail-btn--sm"
+              @click="approveForm.customize_email = !approveForm.customize_email"
+            >
+              {{ approveForm.customize_email ? 'Use default' : 'Customise' }}
+            </button>
+          </div>
+
+          <div v-if="!approveForm.customize_email" class="email-preview">
+            <div class="email-preview__row">
+              <span class="email-preview__key">Subject</span>
+              <span class="email-preview__val">Welcome to {{ clubStore.current?.name ?? 'the club' }}, {{ detail.preferred_name ?? detail.full_name.split(' ')[0] }}!</span>
+            </div>
+            <div class="email-preview__row">
+              <span class="email-preview__key">Preview</span>
+              <span class="email-preview__val">
+                Hi {{ detail.preferred_name ?? detail.full_name.split(' ')[0] }} — your application for the
+                <strong>{{ detail.tier_name ?? 'club' }}</strong> tier has been approved.
+                <template v-if="approveForm.resolution === 'invite' || (approveForm.resolution === 'auto' && !detail.linked_user_id)">
+                  Click the sign-in link to finish setting up your account…
+                </template>
+                <template v-else>
+                  You're all set — see you on the green soon.
+                </template>
+              </span>
+            </div>
+          </div>
+
+          <template v-else>
+            <label class="field">
+              <span class="field__label">Subject (optional override)</span>
+              <input
+                v-model="approveForm.welcome_subject"
+                type="text"
+                :placeholder="`Welcome to ${clubStore.current?.name ?? 'the club'}, ${detail.preferred_name ?? detail.full_name.split(' ')[0]}!`"
+                maxlength="140"
+              />
+            </label>
+            <label class="field">
+              <span class="field__label">Personal message (optional)</span>
+              <textarea
+                v-model="approveForm.welcome_message"
+                rows="4"
+                placeholder="Add a note from the committee — e.g. 'Looking forward to seeing you at the opening-day roll-up on Saturday.'"
+                maxlength="800"
+              />
+              <p class="field__hint">Appears above the sign-in button in the welcome email.</p>
+            </label>
+          </template>
+        </div>
       </div>
       <template #footer>
         <button type="button" class="rail-btn rail-btn--outline" @click="approveOpen = false" :disabled="approveSubmitting">Cancel</button>
@@ -559,7 +711,7 @@ async function submitReject() {
 
 .rail__actions { display: flex; flex-direction: column; gap: 8px; }
 
-.rail-btn { padding: 12px 16px; border-radius: 10px; font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; border: 0; transition: background 120ms, color 120ms, border-color 120ms; }
+.rail-btn { padding: 12px 18px; border-radius: 999px; font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; border: 0; transition: background 120ms, color 120ms, border-color 120ms; }
 .rail-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .rail-btn--sm { padding: 8px 12px; font-size: 13px; }
 .rail-btn--approve { background: var(--color-ink); color: #fff; }
@@ -601,6 +753,18 @@ async function submitReject() {
 .field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
 .field input, .field select, .field textarea { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; resize: vertical; }
 .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--color-ink); }
+.field__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin: 2px 0 0; line-height: 1.5; }
+
+/* Welcome-email block — grouped so it reads as one unit once the toggle
+   is on, with Customise opening the fields inline. */
+.email-block { display: flex; flex-direction: column; gap: 10px; padding: 14px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 10px; }
+.email-block__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.email-block__title { font-family: var(--font-body); font-size: 13px; font-weight: 700; color: var(--color-ink); }
+.email-block__sub { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 2px; }
+.email-preview { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: #fff; border: 1px dashed var(--color-hairline); border-radius: 8px; }
+.email-preview__row { display: grid; grid-template-columns: 68px 1fr; gap: 10px; align-items: baseline; }
+.email-preview__key { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.email-preview__val { font-family: var(--font-body); font-size: 12.5px; color: var(--color-ink); line-height: 1.5; }
 .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--color-hairline); }
 .switch-row__label { font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--color-ink); }
 .switch-row__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }

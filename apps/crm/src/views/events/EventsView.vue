@@ -940,7 +940,7 @@ onBeforeUnmount(() => {
 .events__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-fog); margin: 0; }
 .events__actions { display: flex; gap: 8px; }
 
-.btn { padding: 9px 14px; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.btn { padding: 9px 14px; border: none; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .btn--primary { background: var(--color-ink); color: #fff; }
 .btn--primary:hover { background: var(--color-graphite); }
 .btn--ghost { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }

@@ -6,6 +6,7 @@ import CrmEmptyState from '@/components/CrmEmptyState.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 import SendEmailModal, { type EmailRecipient } from '@/components/modals/SendEmailModal.vue'
+import TornySelect from '@/components/TornySelect.vue'
 import NewSeasonModal from './NewSeasonModal.vue'
 import MemberSummaryStats from './MemberSummaryStats.vue'
 import { useToast } from '@/composables/useToast'
@@ -404,6 +405,17 @@ const membershipOptions = computed<Array<{ slug: string; label: string }>>(() =>
   return opts
 })
 
+/** Shaped for `<TornySelect>` — `value`/`label` keys. "All" sits on top so
+ *  the picker reads from most-permissive down. */
+const membershipSelectOptions = computed<Array<{ value: string; label: string }>>(() => [
+  { value: 'all', label: 'All' },
+  ...membershipOptions.value.map((o) => ({ value: o.slug, label: o.label })),
+])
+const duesSelectOptions: Array<{ value: 'all' | DuesStatus; label: string }> = [
+  { value: 'all', label: 'All' },
+  ...DUES_STATUSES.map((s) => ({ value: s, label: s })),
+]
+
 function initials(m: Member) {
   return m.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 }
@@ -588,7 +600,15 @@ function membershipBadge(m: Member): { label: string; tone: string } | null {
 }
 
 function roleBadge(m: Member): { label: string; tone: string } | null {
-  if (m.role === 'Committee') return { label: 'Committee', tone: 'ink' }
+  // Show the actual position_group — Board / Committee / Staff / Member.
+  // Driven by `position_group`, not `club_role` (which is the CRM
+  // permission tier, not a seat on the committee). `member` is the
+  // default and would be noise on every row, so hide it. Brief 64 §4
+  // asked the backend for a derived `is_committee` flag; the position
+  // label is more informative so we keep rendering that.
+  if (m.positionGroup === 'board')     return { label: 'Board',     tone: 'ink' }
+  if (m.positionGroup === 'committee') return { label: 'Committee', tone: 'ink' }
+  if (m.positionGroup === 'staff')     return { label: 'Staff',     tone: 'ink' }
   if (m.role === 'Coach') return { label: 'Coach', tone: 'tangerine' }
   if (m.role === 'Volunteer') return { label: 'Volunteer', tone: 'mute' }
   return null
@@ -945,6 +965,9 @@ const ADD_TYPES: { value: AddType; label: string; hint: string }[] = [
 
 function openAdd() {
   Object.assign(form, emptyForm())
+  // Prefer the club's default tier; fall back to the first available.
+  const defaultTier = availableTiers.value.find((t) => t.is_default) ?? availableTiers.value[0]
+  if (defaultTier) form.membership = defaultTier.type_name
   addError.value = null
   addOpen.value = true
 }
@@ -1123,20 +1146,16 @@ async function submit() {
         </button>
       </div>
       <div class="filters__selects">
-        <label class="filter-select">
-          <span class="filter-select__label">Membership</span>
-          <select v-model="membershipFilter">
-            <option value="all">All</option>
-            <option v-for="opt in membershipOptions" :key="opt.slug" :value="opt.slug">{{ opt.label }}</option>
-          </select>
-        </label>
-        <label class="filter-select">
-          <span class="filter-select__label">Dues</span>
-          <select v-model="duesFilter">
-            <option value="all">All</option>
-            <option v-for="opt in DUES_STATUSES" :key="opt" :value="opt">{{ opt }}</option>
-          </select>
-        </label>
+        <TornySelect
+          v-model="membershipFilter"
+          label="Membership"
+          :options="membershipSelectOptions"
+        />
+        <TornySelect
+          v-model="duesFilter"
+          label="Dues"
+          :options="duesSelectOptions"
+        />
       </div>
       <div v-if="hasActiveFilter" class="filters__result">
         {{ filtered.length }} of {{ counts.all }}
@@ -1618,13 +1637,18 @@ async function submit() {
           <input v-model="form.phone" type="tel" placeholder="021 555 0000" />
         </label>
         <label v-if="form.type === 'member'" class="field">
-          <span class="field__label">Membership</span>
-          <select v-model="form.membership">
-            <option>Playing member</option>
-            <option>Social member</option>
-            <option>Life member</option>
-            <option>Junior</option>
+          <span class="field__label">Membership tier</span>
+          <select v-if="availableTiers.length > 0" v-model="form.membership">
+            <option v-for="t in availableTiers" :key="t.id" :value="t.type_name">
+              {{ t.type_name }}<template v-if="t.fee != null"> · ${{ t.fee }}{{ t.cadence === 'annual' ? '/yr' : t.cadence === 'monthly' ? '/mo' : t.cadence === 'season' ? '/season' : '' }}</template>
+            </option>
           </select>
+          <select v-else disabled>
+            <option>{{ tiersLoading ? 'Loading tiers…' : 'No tiers defined yet' }}</option>
+          </select>
+          <span v-if="!tiersLoading && availableTiers.length === 0" class="field__hint">
+            Open Settings → Membership types to add the club's tiers first.
+          </span>
         </label>
 
         <template v-if="form.type === 'member'">
@@ -1692,7 +1716,7 @@ async function submit() {
 .members__heading { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin: 4px 0 6px; color: var(--color-ink); }
 .members__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-fog); margin: 0; }
 .members__actions { display: flex; gap: 10px; align-items: center; }
-.members__btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; background: var(--color-ink); color: #fff; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; text-decoration: none; }
+.members__btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; background: var(--color-ink); color: #fff; border: none; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; text-decoration: none; }
 .members__btn:hover { background: var(--color-graphite); }
 .members__btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 .members__btn--outline:hover { background: var(--color-surface); }
@@ -1718,10 +1742,6 @@ async function submit() {
 .filters__reset { background: none; border: 0; padding: 0; font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--color-accent); cursor: pointer; }
 .filters__reset:hover { text-decoration: underline; }
 .filters__selects { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.filter-select { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 12px; color: var(--color-ink); }
-.filter-select__label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
-.filter-select select { border: 0; outline: 0; background: transparent; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-ink); padding: 2px 4px; cursor: pointer; }
-.filter-select:focus-within { border-color: var(--color-ink); }
 
 /* Table */
 .table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; overflow: hidden; }

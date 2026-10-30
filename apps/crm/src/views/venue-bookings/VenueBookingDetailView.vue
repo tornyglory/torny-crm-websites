@@ -826,7 +826,7 @@ async function toggleArchive() {
 .field textarea { min-height: 96px; line-height: 1.5; }
 .field input:focus, .field textarea:focus { outline: none; border-color: var(--color-ink); }
 
-.rail-btn { padding: 12px 16px; border-radius: 10px; font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; border: 0; transition: background 120ms, color 120ms, border-color 120ms; }
+.rail-btn { padding: 12px 18px; border-radius: 999px; font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; border: 0; transition: background 120ms, color 120ms, border-color 120ms; }
 .rail-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .rail-btn--sm { padding: 8px 12px; font-size: 13px; }
 .rail-btn--approve { background: var(--color-ink); color: #fff; }

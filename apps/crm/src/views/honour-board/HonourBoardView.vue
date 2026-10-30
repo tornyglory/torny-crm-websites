@@ -911,7 +911,7 @@ watch(activeCategoryId, () => {
 .hb__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); margin: 0; }
 .hb__actions { display: flex; gap: 8px; }
 
-.btn { padding: 9px 14px; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn { padding: 9px 14px; border: none; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
 .btn--primary { background: var(--color-ink); color: #fff; }
 .btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn--ghost { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }

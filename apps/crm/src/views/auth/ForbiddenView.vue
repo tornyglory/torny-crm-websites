@@ -17,5 +17,5 @@ const auth = useAuthStore()
 .forbidden__eyebrow { font-family: var(--font-mono); font-size: 12px; color: var(--color-fog); }
 .forbidden__heading { font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 8px 0; color: var(--color-ink); }
 .forbidden__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); margin: 0 0 20px; }
-.forbidden__btn { padding: 10px 18px; background: var(--color-ink); color: #fff; border: none; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
+.forbidden__btn { padding: 10px 20px; background: var(--color-ink); color: #fff; border: none; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
 </style>

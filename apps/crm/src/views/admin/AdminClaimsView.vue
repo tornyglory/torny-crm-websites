@@ -439,8 +439,8 @@ const emptyMessage = computed(() => {
 .modal-field span { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
 .modal-textarea { padding: 12px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 14px; resize: vertical; color: var(--color-ink); line-height: 1.5; }
 .modal-textarea:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
-.btn-ghost { padding: 10px 18px; background: transparent; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-graphite); cursor: pointer; }
-.btn-reject-solid { padding: 10px 18px; background: var(--color-danger); color: #fff; border: 0; border-radius: 8px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-ghost { padding: 10px 20px; background: transparent; border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-graphite); cursor: pointer; }
+.btn-reject-solid { padding: 10px 20px; background: var(--color-danger); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
 .btn-reject-solid:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-reject-solid:hover:not(:disabled) { background: #B91C1C; }
 

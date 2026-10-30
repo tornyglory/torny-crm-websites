@@ -36,6 +36,7 @@ import CrmModal from '@/components/modals/CrmModal.vue'
 import LogNoteModal from '@/components/modals/LogNoteModal.vue'
 import SendEmailModal from '@/components/modals/SendEmailModal.vue'
 import EmailDetailModal from '@/components/modals/EmailDetailModal.vue'
+import RecordPaymentModal from '@/components/modals/RecordPaymentModal.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
 import CrmEmptyState from '@/components/CrmEmptyState.vue'
 
@@ -203,6 +204,59 @@ function emailTimeline(c: MemberCommunication): EmailTimelineChip[] {
     chips.push({ key: 'notopen', label: 'Not opened yet', time: '', tone: 'pending' })
   }
   return chips
+}
+
+function senderInitials(name: string | null | undefined): string {
+  if (!name) return '—'
+  const parts = name.trim().split(/\s+/).slice(0, 2)
+  return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || '—'
+}
+
+// ── Notes filter + date formatting ────────────────────────────────
+type NoteFilter = 'all' | NoteType
+const NOTE_TYPE_FILTERS: { value: NoteType; label: string }[] = [
+  { value: 'call',          label: 'Calls' },
+  { value: 'meeting',       label: 'Meetings' },
+  { value: 'visit',         label: 'Visits' },
+  { value: 'text_whatsapp', label: 'Text / WA' },
+  { value: 'general',       label: 'General' },
+]
+const noteFilter = ref<NoteFilter>('all')
+const filteredNotes = computed(() => {
+  if (noteFilter.value === 'all') return notesFeed.value
+  return notesFeed.value.filter((c) => c.note_type === noteFilter.value)
+})
+const noteCounts = computed(() => {
+  const base: Record<string, number> = { all: notesFeed.value.length }
+  for (const t of NOTE_TYPE_FILTERS) {
+    base[t.value] = notesFeed.value.filter((c) => c.note_type === t.value).length
+  }
+  return base as { all: number } & Record<NoteType, number>
+})
+
+const NOTE_DAY_FMT = new Intl.DateTimeFormat('en-NZ', { day: '2-digit', month: 'short' })
+function noteDateDay(c: MemberCommunication): string {
+  const iso = c.occurred_at ?? c.sent_at
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : NOTE_DAY_FMT.format(d)
+}
+function noteDateRel(c: MemberCommunication): string {
+  const iso = c.occurred_at ?? c.sent_at
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const now = new Date()
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  if (sameDay) return 'today'
+  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000)
+  if (diffDays === 1) return 'yesterday'
+  if (diffDays > 1 && diffDays < 7) return `${diffDays}d ago`
+  if (diffDays >= 7 && diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
+  return String(d.getFullYear())
 }
 
 // Email detail modal — opens on row click to render the full body.
@@ -439,11 +493,12 @@ const standing = computed<Standing>(() => {
 const owingAmount = computed<number | null>(() => {
   const m = member.value?.membership
   if (!m) return null
-  // Prefer server balance; otherwise infer.
   const status = m.payment_status
   if (status === 'waived' || status === 'paid') return 0
-  const fee = m.fee ?? 0
-  return fee
+  // Prefer the server-computed balance so partial payments show the real
+  // outstanding amount instead of the full fee.
+  if (m.balance_owed != null) return m.balance_owed
+  return m.fee ?? 0
 })
 
 // ── Navigation ────────────────────────────────────────────────────
@@ -455,36 +510,21 @@ function goNext() { if (nextMember.value) goToMember(nextMember.value.user_id) }
 function goBack() { router.push({ name: 'members' }) }
 
 // ── Actions ───────────────────────────────────────────────────────
-const markingPaid = ref(false)
-async function markPaid() {
+// Mark paid / + Record payment both open the Record Payment modal so
+// admins can capture method (cash / card / bank transfer / cheque /
+// other), reference, date, and notes — not hardcoded cash.
+const recordPayOpen = ref(false)
+function markPaid() {
   const m = member.value
-  const cid = clubStore.current?.id
-  if (!m || cid == null || !m.membership?.fee) return
-  if (m.membership.payment_status === 'paid' || m.membership.payment_status === 'waived') {
+  if (!m) return
+  if (m.membership?.payment_status === 'paid' || m.membership?.payment_status === 'waived') {
     toast.info('Already paid up.')
     return
   }
-  markingPaid.value = true
-  try {
-    // No season picker on this page — let the server attribute to the
-    // club's current season (brief 55). It echoes the season name back
-    // so the toast can be explicit about where the money landed.
-    const result = await membersApi.recordPayment(cid, m.user_id, {
-      amount: m.membership.fee,
-      payment_method: 'cash',
-    })
-    toast.success(
-      result.season_name
-        ? `Payment recorded against ${result.season_name}.`
-        : 'Payment recorded.',
-    )
-    await loadRoster()
-  } catch (err) {
-    const msg = err instanceof ApiError ? err.message : (err instanceof Error ? err.message : 'Could not record payment.')
-    toast.info(msg)
-  } finally {
-    markingPaid.value = false
-  }
+  recordPayOpen.value = true
+}
+async function onPaymentRecorded() {
+  await loadRoster()
 }
 
 // Log note + Send email live in their own modals. Both refresh the comms
@@ -510,21 +550,35 @@ async function onEmailSent() {
 // ── Payments history (from what the roster row exposes) ───────────
 interface PaymentRow {
   id: string
-  date: string
+  dateDay: string
+  dateYear: string
   description: string
+  sub: string
   amount: number
   status: 'paid' | 'due' | 'overdue' | 'waived'
   method?: string
 }
+const DAY_FMT = new Intl.DateTimeFormat('en-NZ', { day: '2-digit', month: 'short' })
+const YEAR_FMT = new Intl.DateTimeFormat('en-NZ', { year: 'numeric' })
+function splitDate(iso: string | null | undefined, fallback: string): { day: string; year: string } {
+  if (!iso) return { day: fallback, year: '' }
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return { day: fallback, year: '' }
+  return { day: DAY_FMT.format(d), year: YEAR_FMT.format(d) }
+}
 const paymentHistory = computed<PaymentRow[]>(() => {
   const m = member.value
   if (!m?.membership) return []
+  const tier = m.membership.type_name ?? 'Membership'
   const rows: PaymentRow[] = []
   if (m.membership.last_payment_date && m.membership.last_payment_amount) {
+    const parts = splitDate(m.membership.last_payment_date, 'Last payment')
     rows.push({
       id: 'last',
-      date: fmtShort(m.membership.last_payment_date),
-      description: `${m.membership.type_name ?? 'Membership'} fee`,
+      dateDay: parts.day,
+      dateYear: parts.year,
+      description: `${tier} fee`,
+      sub: 'Recorded via Mark paid',
       amount: m.membership.last_payment_amount,
       status: 'paid',
     })
@@ -534,12 +588,24 @@ const paymentHistory = computed<PaymentRow[]>(() => {
     m.membership.payment_status === 'overdue' ||
     m.membership.payment_status === 'partial'
   ) {
+    const parts = splitDate(m.membership.payment_due_date, 'Current')
+    const isOverdue = m.membership.payment_status === 'overdue'
+    const isPartial = m.membership.payment_status === 'partial'
+    const fee = m.membership.fee ?? 0
+    const paid = m.membership.total_paid_this_season ?? 0
+    const balance = m.membership.balance_owed ?? (fee - paid)
     rows.push({
       id: 'current',
-      date: fmtShort(m.membership.payment_due_date) || 'Current period',
-      description: `${m.membership.type_name ?? 'Membership'} fee`,
-      amount: m.membership.fee ?? 0,
-      status: m.membership.payment_status === 'overdue' ? 'overdue' : 'due',
+      dateDay: parts.day,
+      dateYear: parts.year,
+      description: `${tier} fee`,
+      sub: isPartial
+        ? `Partial · $${paid} paid of $${fee}`
+        : isOverdue
+          ? 'Payment overdue — follow up'
+          : 'Upcoming — not yet paid',
+      amount: isPartial ? balance : fee,
+      status: isOverdue ? 'overdue' : 'due',
     })
   }
   return rows
@@ -547,6 +613,58 @@ const paymentHistory = computed<PaymentRow[]>(() => {
 const totalCollected = computed(() =>
   paymentHistory.value.filter((r) => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0),
 )
+const totalOwing = computed(() =>
+  paymentHistory.value
+    .filter((r) => r.status === 'due' || r.status === 'overdue')
+    .reduce((sum, r) => sum + r.amount, 0),
+)
+
+/** Group payments by season. Until the backend ships brief 64 §3 we only
+ *  know current-season state from the roster row, so everything collapses
+ *  into one "current season" bucket. */
+interface PaymentSeason {
+  key: string
+  title: string
+  current: boolean
+  collected: number
+  owing: number
+  rows: PaymentRow[]
+}
+const paymentSeasons = computed<PaymentSeason[]>(() => {
+  if (paymentHistory.value.length === 0) return []
+  return [
+    {
+      key: 'current',
+      title: 'Current season',
+      current: true,
+      collected: totalCollected.value,
+      owing: totalOwing.value,
+      rows: paymentHistory.value,
+    },
+  ]
+})
+
+// Position-group pill — surfaces the actual seat (Board / Committee /
+// Staff). `member` is the default and hidden on all surfaces as noise.
+// Brief 64 §4 asked for a derived `is_committee` flag; the position
+// label is more informative, so we keep rendering that.
+const POSITION_LABELS: Record<PositionGroup, string> = {
+  board: 'Board',
+  committee: 'Committee',
+  staff: 'Staff',
+  member: 'Member',
+}
+const positionBadge = computed<{ label: string } | null>(() => {
+  const g = member.value?.position_group
+  if (g === 'board' || g === 'committee' || g === 'staff') return { label: POSITION_LABELS[g] }
+  return null
+})
+/** Live-derived position pill the Edit modal echoes back to the admin. */
+const editFormPositionBadge = computed<{ label: string } | null>(() => {
+  const g = editForm.position_group
+  if (g === 'board' || g === 'committee' || g === 'staff') return { label: POSITION_LABELS[g] }
+  return null
+})
 
 // ── Auth gating ───────────────────────────────────────────────────
 const callerCanEdit = computed(() => {
@@ -889,10 +1007,10 @@ async function submitEdit() {
           v-if="callerCanEdit"
           type="button"
           class="btn btn--primary"
-          :disabled="markingPaid || !member?.membership?.fee"
+          :disabled="!member?.membership?.fee"
           @click="markPaid"
         >
-          {{ markingPaid ? 'Recording…' : 'Mark paid' }}
+          Mark paid
         </button>
       </div>
     </header>
@@ -966,6 +1084,7 @@ async function submitEdit() {
             </div>
             <div class="member-detail__hero-meta">
               <span v-if="member.membership?.type_name" class="member-detail__tier">{{ member.membership.type_name }}</span>
+              <span v-if="positionBadge" class="committee-pill">{{ positionBadge.label }}</span>
               <template v-if="feeLabel">
                 <span v-if="member.membership?.type_name" class="member-detail__meta-dot">·</span>
                 <span class="member-detail__fee">{{ feeLabel }}</span>
@@ -1002,11 +1121,10 @@ async function submitEdit() {
             v-if="callerCanEdit && member.membership?.fee"
             type="button"
             class="owing-banner__cta"
-            :disabled="markingPaid"
             @click="markPaid"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 4L6 11l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            {{ markingPaid ? 'Recording…' : 'Mark paid' }}
+            Mark paid
           </button>
         </section>
 
@@ -1029,9 +1147,26 @@ async function submitEdit() {
 
             <!-- Payments -->
             <article v-if="activeTab === 'payments'" class="member-detail__card">
-              <header class="member-detail__card-head">
-                <div class="member-detail__card-label">Payment history</div>
-                <button type="button" class="btn btn--outline btn--sm" disabled>+ Send invoice</button>
+              <header class="member-detail__card-head member-detail__card-head--stacked">
+                <div class="member-detail__card-head-main">
+                  <div class="member-detail__card-label">Payment history</div>
+                  <div v-if="paymentSeasons.length > 0" class="pay-counts">
+                    <span class="pay-counts__total">
+                      ${{ totalCollected }}<span class="pay-counts__total-sub">· {{ paymentSeasons.length }} season{{ paymentSeasons.length === 1 ? '' : 's' }}</span>
+                    </span>
+                  </div>
+                </div>
+                <div class="pay-head-actions">
+                  <button type="button" class="btn btn--outline btn--sm" disabled>Filter · All seasons</button>
+                  <button
+                    v-if="callerCanEdit && member.membership?.fee"
+                    type="button"
+                    class="btn btn--primary btn--sm"
+                    @click="markPaid"
+                  >
+                    + Record payment
+                  </button>
+                </div>
               </header>
 
               <div v-if="paymentHistory.length === 0" class="member-detail__card-empty">
@@ -1053,61 +1188,58 @@ async function submitEdit() {
                 />
               </div>
 
-              <template v-else>
-                <!-- Desktop/tablet table -->
-                <table class="pay-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Description</th>
-                      <th class="pay-table__amount">Amount</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="p in paymentHistory" :key="p.id" class="pay-table__row">
-                      <td class="pay-table__date">{{ p.date }}</td>
-                      <td>{{ p.description }}</td>
-                      <td class="pay-table__amount">${{ p.amount.toFixed(2) }}</td>
-                      <td>
-                        <span v-if="p.status === 'paid'" class="pay-pill pay-pill--paid">Paid<template v-if="p.method"> · {{ p.method }}</template></span>
-                        <span v-else-if="p.status === 'overdue'" class="pay-pill pay-pill--overdue">Overdue</span>
-                        <span v-else-if="p.status === 'waived'" class="pay-pill pay-pill--waived">Waived</span>
-                        <span v-else class="pay-pill pay-pill--due">Due</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                  <tfoot v-if="totalCollected > 0">
-                    <tr class="pay-table__foot-row">
-                      <td colspan="4" class="pay-table__foot-cell">
-                        <span class="pay-table__foot-label">Total collected</span>
-                        <span class="pay-table__foot-total">${{ totalCollected.toFixed(2) }}</span>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-
-                <!-- Mobile card list -->
-                <ul class="pay-list">
-                  <li v-for="p in paymentHistory" :key="p.id" class="pay-list__item">
-                    <div class="pay-list__top">
-                      <div class="pay-list__desc">{{ p.description }}</div>
-                      <div class="pay-list__amount">${{ p.amount.toFixed(2) }}</div>
+              <div v-else class="pay-seasons">
+                <section
+                  v-for="group in paymentSeasons"
+                  :key="group.key"
+                  class="pay-season"
+                  :class="{ 'pay-season--past': !group.current }"
+                >
+                  <header class="pay-season__head">
+                    <div class="pay-season__title-row">
+                      <h3 class="pay-season__title">{{ group.title }}</h3>
+                      <span v-if="group.current" class="pay-season__pill">Current</span>
                     </div>
-                    <div class="pay-list__meta">
-                      <span class="pay-list__date">{{ p.date }}</span>
-                      <span v-if="p.status === 'paid'" class="pay-pill pay-pill--paid">Paid<template v-if="p.method"> · {{ p.method }}</template></span>
-                      <span v-else-if="p.status === 'overdue'" class="pay-pill pay-pill--overdue">Overdue</span>
-                      <span v-else-if="p.status === 'waived'" class="pay-pill pay-pill--waived">Waived</span>
-                      <span v-else class="pay-pill pay-pill--due">Due</span>
+                    <div class="pay-season__meta">
+                      <template v-if="group.collected > 0">${{ group.collected }} collected</template>
+                      <template v-else>Nothing collected yet</template>
+                      <template v-if="group.owing > 0"> · ${{ group.owing }} owing</template>
+                      <template v-else-if="!group.current"> · settled</template>
                     </div>
-                  </li>
-                  <li v-if="totalCollected > 0" class="pay-list__total">
-                    <span class="pay-list__total-label">Total collected</span>
-                    <span class="pay-list__total-value">${{ totalCollected.toFixed(2) }}</span>
-                  </li>
-                </ul>
-              </template>
+                  </header>
+                  <div
+                    v-for="p in group.rows"
+                    :key="p.id"
+                    class="pay-row"
+                  >
+                    <div class="pay-row__date">
+                      <div class="pay-row__date-day">{{ p.dateDay }}</div>
+                      <div v-if="p.dateYear" class="pay-row__date-year">{{ p.dateYear }}</div>
+                    </div>
+                    <div class="pay-row__body">
+                      <div class="pay-row__desc">{{ p.description }}</div>
+                      <div class="pay-row__sub">{{ p.sub }}</div>
+                    </div>
+                    <div class="pay-row__amount">${{ p.amount.toFixed(2) }}</div>
+                    <div class="pay-row__status">
+                      <span
+                        v-if="p.status === 'paid'"
+                        class="pay-row__pill pay-row__pill--paid"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 4L6 11l-3-3" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Paid
+                      </span>
+                      <span v-else-if="p.status === 'overdue'" class="pay-row__pill pay-row__pill--overdue">
+                        <span class="pay-row__pill-dot"></span>
+                        Overdue
+                      </span>
+                      <span v-else-if="p.status === 'waived'" class="pay-row__pill pay-row__pill--waived">Waived</span>
+                      <span v-else class="pay-row__pill pay-row__pill--due">Due</span>
+                      <div v-if="p.method" class="pay-row__method">{{ p.method }}</div>
+                    </div>
+                  </div>
+                </section>
+              </div>
             </article>
 
             <!-- Communications -->
@@ -1159,59 +1291,92 @@ async function submitEdit() {
                 <li
                   v-for="c in emailsFeed"
                   :key="c.communication_id"
-                  class="comms-feed__item comms-feed__item--clickable"
+                  class="comms-row"
+                  :class="{ 'comms-row--fail': c.status === 'bounced' || c.status === 'complained' || c.status === 'failed' }"
                   tabindex="0"
                   @click="openEmail(c)"
                   @keydown.enter="openEmail(c)"
                 >
-                  <div class="comms-feed__row">
-                    <span class="comms-feed__pill comms-feed__pill--email">Email</span>
-                    <span class="comms-feed__subject">{{ c.subject || '(no subject)' }}</span>
-                    <span class="comms-feed__chevron" aria-hidden="true">›</span>
+                  <div
+                    class="comms-row__avatar"
+                    :class="{
+                      'comms-row__avatar--fail': c.status === 'bounced' || c.status === 'complained' || c.status === 'failed',
+                      'comms-row__avatar--system': c.sent_by == null,
+                    }"
+                  >{{ senderInitials(c.sent_by_name) }}</div>
+                  <div class="comms-row__body">
+                    <div class="comms-row__subject">{{ c.subject || '(no subject)' }}</div>
+                    <div class="comms-row__meta">
+                      <span class="comms-row__meta-text">
+                        <span>{{ commsDate(c) }} · {{ commsTime(c.sent_at) }}</span>
+                        <template v-if="c.sent_by_name"><span class="comms-row__meta-dot">·</span><span>{{ c.sent_by_name }}</span></template>
+                      </span>
+                      <span class="comms-row__chips">
+                        <span
+                          v-for="chip in emailTimeline(c)"
+                          :key="chip.key"
+                          class="comms-feed__chip"
+                          :class="`comms-feed__chip--${chip.tone}`"
+                        >
+                          <svg v-if="chip.tone === 'ok'" width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                            <path d="M13 4L6 11l-3-3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                          </svg>
+                          <svg v-else-if="chip.tone === 'engaged'" width="12" height="11" viewBox="0 0 16 12" fill="none" aria-hidden="true">
+                            <path d="M1 6s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.6"/>
+                            <circle cx="8" cy="6" r="2" fill="currentColor"/>
+                          </svg>
+                          <svg v-else-if="chip.tone === 'fail'" width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                          </svg>
+                          <span>{{ chip.label }}</span>
+                          <span v-if="chip.time" class="comms-feed__chip-time">{{ chip.time }}</span>
+                          <span v-if="chip.suffix" class="comms-feed__chip-suffix">· {{ chip.suffix }}</span>
+                        </span>
+                      </span>
+                    </div>
                   </div>
-                  <div class="comms-feed__meta">
-                    <span>{{ commsDate(c) }} · {{ commsTime(c.sent_at) }}</span>
-                    <template v-if="c.sent_by_name"><span>·</span><span>by {{ c.sent_by_name }}</span></template>
-                  </div>
-                  <div class="comms-feed__timeline">
-                    <span
-                      v-for="chip in emailTimeline(c)"
-                      :key="chip.key"
-                      class="comms-feed__chip"
-                      :class="`comms-feed__chip--${chip.tone}`"
-                    >
-                      <svg v-if="chip.tone === 'ok'" width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                        <path d="M13 4L6 11l-3-3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-                      </svg>
-                      <svg v-else-if="chip.tone === 'engaged'" width="12" height="11" viewBox="0 0 16 12" fill="none" aria-hidden="true">
-                        <path d="M1 6s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.6"/>
-                        <circle cx="8" cy="6" r="2" fill="currentColor"/>
-                      </svg>
-                      <svg v-else-if="chip.tone === 'fail'" width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                        <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-                      </svg>
-                      <span>{{ chip.label }}</span>
-                      <span v-if="chip.time" class="comms-feed__chip-time">{{ chip.time }}</span>
-                      <span v-if="chip.suffix" class="comms-feed__chip-suffix">· {{ chip.suffix }}</span>
-                    </span>
-                  </div>
+                  <div class="comms-row__chevron" aria-hidden="true">›</div>
                 </li>
               </ul>
             </article>
 
             <!-- Notes -->
             <article v-else-if="activeTab === 'notes'" class="member-detail__card">
-              <header class="member-detail__card-head">
-                <div class="member-detail__card-label">Notes</div>
+              <header class="member-detail__card-head member-detail__card-head--stacked">
+                <div class="member-detail__card-head-main">
+                  <div class="member-detail__card-label">Notes</div>
+                  <div v-if="notesFeed.length > 0" class="pay-counts">
+                    <span class="pay-counts__total">
+                      {{ notesFeed.length }}<span class="pay-counts__total-sub">· logged</span>
+                    </span>
+                  </div>
+                </div>
                 <button
                   v-if="callerCanEdit"
                   type="button"
-                  class="btn btn--outline btn--sm"
+                  class="btn btn--primary btn--sm"
                   @click="logNote"
                 >
-                  Log a note
+                  + Log a note
                 </button>
               </header>
+
+              <div v-if="notesFeed.length > 0" class="notes-filters">
+                <button
+                  type="button"
+                  class="notes-filter"
+                  :class="{ 'notes-filter--active': noteFilter === 'all' }"
+                  @click="noteFilter = 'all'"
+                >All <span class="notes-filter__count">{{ noteCounts.all }}</span></button>
+                <button
+                  v-for="t in NOTE_TYPE_FILTERS"
+                  :key="t.value"
+                  type="button"
+                  class="notes-filter"
+                  :class="{ 'notes-filter--active': noteFilter === t.value }"
+                  @click="noteFilter = t.value"
+                >{{ t.label }} <span class="notes-filter__count">{{ noteCounts[t.value] }}</span></button>
+              </div>
 
               <div v-if="commsLoading && notesFeed.length === 0" class="member-detail__card-empty">
                 <CrmSkeleton shape="text" width="80%" height="14px" />
@@ -1227,54 +1392,62 @@ async function submitEdit() {
                   @action="loadComms"
                 />
               </div>
-              <div v-else-if="notesFeed.length === 0" class="member-detail__card-empty">
+              <div v-else-if="filteredNotes.length === 0" class="member-detail__card-empty">
                 <CrmEmptyState
                   variant="empty"
-                  title="No notes yet"
-                  description="Log a call, meeting, or context so the next admin doesn't have to guess."
-                  :action-label="callerCanEdit ? 'Log a note' : null"
+                  :title="noteFilter === 'all' ? 'No notes yet' : 'No notes in this filter'"
+                  :description="noteFilter === 'all' ? 'Log a call, meeting, or context so the next admin doesn\'t have to guess.' : 'Switch to All to see every note.'"
+                  :action-label="noteFilter === 'all' && callerCanEdit ? 'Log a note' : null"
                   @action="logNote"
                 />
               </div>
-              <ul v-else class="comms-feed">
-                <li v-for="c in notesFeed" :key="c.communication_id" class="comms-feed__item">
-                  <div class="comms-feed__row">
-                    <span class="comms-feed__pill comms-feed__pill--note">{{ noteTypeLabel(c.note_type) }}</span>
-                    <span class="comms-feed__meta">
-                      <span>{{ commsDate(c) }}</span>
-                      <template v-if="c.sent_by_name"><span>·</span><span>by {{ c.sent_by_name }}</span></template>
-                    </span>
-                    <div v-if="canEditNote(c)" class="comms-feed__actions">
-                      <button
-                        v-if="editingNoteId !== c.communication_id"
-                        type="button"
-                        class="comms-feed__action"
-                        @click="startEditNote(c)"
-                      >Edit</button>
-                      <button
-                        v-if="editingNoteId !== c.communication_id"
-                        type="button"
-                        class="comms-feed__action comms-feed__action--danger"
-                        @click="deleteNote(c)"
-                      >Delete</button>
-                    </div>
+              <ul v-else class="notes-feed">
+                <li v-for="c in filteredNotes" :key="c.communication_id" class="notes-row">
+                  <div class="notes-row__rail">
+                    <div class="notes-row__date-day">{{ noteDateDay(c) }}</div>
+                    <div class="notes-row__date-sub">{{ noteDateRel(c) }}</div>
+                    <span
+                      class="notes-row__pill"
+                      :class="`notes-row__pill--${c.note_type ?? 'general'}`"
+                    >{{ noteTypeLabel(c.note_type) }}</span>
                   </div>
-                  <template v-if="editingNoteId === c.communication_id">
-                    <textarea
-                      v-model="editNoteBody"
-                      class="comms-feed__textarea"
-                      rows="3"
-                      maxlength="4000"
-                      :disabled="editNoteSaving"
-                    />
-                    <div class="comms-feed__edit-actions">
-                      <button type="button" class="btn btn--outline btn--sm" :disabled="editNoteSaving" @click="cancelEditNote">Cancel</button>
-                      <button type="button" class="btn btn--primary btn--sm" :disabled="editNoteSaving" @click="saveEditNote(c)">
-                        {{ editNoteSaving ? 'Saving…' : 'Save' }}
-                      </button>
+                  <div class="notes-row__body">
+                    <div class="notes-row__head">
+                      <div v-if="c.sent_by_name" class="notes-row__author">
+                        <div class="notes-row__avatar">{{ senderInitials(c.sent_by_name) }}</div>
+                        <span class="notes-row__author-name">{{ c.sent_by_name }}</span>
+                        <span class="notes-row__author-time">· {{ commsTime(c.sent_at) }}</span>
+                      </div>
+                      <div v-if="canEditNote(c) && editingNoteId !== c.communication_id" class="notes-row__actions">
+                        <button
+                          type="button"
+                          class="notes-row__action"
+                          @click="startEditNote(c)"
+                        >Edit</button>
+                        <button
+                          type="button"
+                          class="notes-row__action notes-row__action--danger"
+                          @click="deleteNote(c)"
+                        >Delete</button>
+                      </div>
                     </div>
-                  </template>
-                  <p v-else class="comms-feed__body">{{ c.body }}</p>
+                    <template v-if="editingNoteId === c.communication_id">
+                      <textarea
+                        v-model="editNoteBody"
+                        class="notes-row__textarea"
+                        rows="3"
+                        maxlength="4000"
+                        :disabled="editNoteSaving"
+                      />
+                      <div class="notes-row__edit-actions">
+                        <button type="button" class="btn btn--outline btn--sm" :disabled="editNoteSaving" @click="cancelEditNote">Cancel</button>
+                        <button type="button" class="btn btn--primary btn--sm" :disabled="editNoteSaving" @click="saveEditNote(c)">
+                          {{ editNoteSaving ? 'Saving…' : 'Save' }}
+                        </button>
+                      </div>
+                    </template>
+                    <p v-else class="notes-row__text">{{ c.body }}</p>
+                  </div>
                 </li>
               </ul>
             </article>
@@ -1313,6 +1486,13 @@ async function submitEdit() {
               <div class="profile-group">
                 <div class="profile-group__eyebrow">Roster</div>
                 <dl class="profile-grid">
+                  <div v-if="positionBadge" class="profile-cell profile-cell--full">
+                    <dt>Seat</dt>
+                    <dd>
+                      <span class="committee-pill committee-pill--inline">{{ positionBadge.label }}</span>
+                      <template v-if="member.title"> · {{ member.title }}</template>
+                    </dd>
+                  </div>
                   <div class="profile-cell">
                     <dt>Role</dt>
                     <dd class="profile-cap">{{ member.club_role }}</dd>
@@ -1453,10 +1633,20 @@ async function submitEdit() {
             <input v-model="editForm.title" type="text" class="edit-field__input" placeholder="Secretary" />
           </label>
           <label class="edit-field">
-            <span class="edit-field__label">Position group</span>
+            <span class="edit-field__label">
+              Position group
+              <span
+                v-if="editFormPositionBadge"
+                class="committee-pill committee-pill--inline edit-field__label-pill"
+              >{{ editFormPositionBadge.label }}</span>
+            </span>
             <select v-model="editForm.position_group" class="edit-field__input">
               <option v-for="g in POSITION_GROUP_OPTIONS" :key="g.value" :value="g.value">{{ g.label }}</option>
             </select>
+            <span class="edit-field__hint">
+              <template v-if="editFormPositionBadge">{{ editFormPositionBadge.label }} seats appear on the roster list and the member record with a {{ editFormPositionBadge.label }} badge.</template>
+              <template v-else>Member sits outside the committee. Pick Board, Committee, or Staff to flag them.</template>
+            </span>
           </label>
           <label class="edit-field">
             <span class="edit-field__label">Playing level</span>
@@ -1555,6 +1745,14 @@ async function submitEdit() {
       :fallback="emailDetailFallback"
       @close="closeEmailDetail"
     />
+
+    <RecordPaymentModal
+      :open="recordPayOpen"
+      :club-id="clubStore.current?.id ?? null"
+      :member="member"
+      @close="recordPayOpen = false"
+      @recorded="onPaymentRecorded"
+    />
   </div>
 </template>
 
@@ -1582,7 +1780,7 @@ async function submitEdit() {
 .member-detail__nav-pos { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-left: 6px; }
 
 .member-detail__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; white-space: nowrap; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; white-space: nowrap; }
 .btn--sm { padding: 6px 12px; font-size: 12px; }
 .btn--ghost { background: #fff; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 .btn--ghost:hover:not(:disabled) { background: var(--color-surface); }
@@ -1649,7 +1847,7 @@ async function submitEdit() {
 .member-detail__contact-item a:hover { text-decoration: underline; }
 
 .member-detail__hero-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
-.member-detail__tier { padding: 3px 10px; border-radius: 999px; background: var(--color-accent-soft); color: var(--color-accent); font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
+.member-detail__tier { padding: 3px 10px; border-radius: 999px; background: var(--color-accent-soft); color: var(--color-accent); font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 .member-detail__meta-dot { opacity: 0.5; }
 .member-detail__fee { font-family: var(--font-mono); font-size: 11px; }
 .member-detail__member-no { font-family: var(--font-mono); font-size: 11px; }
@@ -1662,6 +1860,8 @@ async function submitEdit() {
 
 /* Standing pill (re-uses tokens from MembersView) */
 .standing-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.committee-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; background: var(--color-ink); color: #fff; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.committee-pill--inline { margin-right: 4px; }
 .standing-pill--paid    { background: #DCFCE7; color: #14532D; }
 .standing-pill--due     { background: #FEF3C7; color: #92400E; }
 .standing-pill--overdue { background: #FEE2E2; color: #991B1B; }
@@ -1707,13 +1907,24 @@ async function submitEdit() {
 .comms-counts__pip--mute    { color: var(--color-mute); }
 
 /* Communications + notes feed */
-.comms-feed { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; }
-.comms-feed__item { padding: 12px 14px; border: 1px solid var(--color-hairline); border-radius: 12px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
-.comms-feed__item--clickable { cursor: pointer; transition: border-color 0.12s ease, background 0.12s ease; }
-.comms-feed__item--clickable:hover,
-.comms-feed__item--clickable:focus-visible { border-color: var(--color-ink); outline: none; background: var(--color-surface); }
-.comms-feed__chevron { margin-left: auto; color: var(--color-mute); font-size: 18px; line-height: 1; }
-.comms-feed__timeline { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 4px; }
+.comms-feed { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
+.comms-feed > li + li { border-top: 1px solid var(--color-hairline); }
+
+/* Email row — Paper design 33b: avatar · subject + meta w/ delivery chips · chevron. */
+.comms-row { display: flex; align-items: flex-start; gap: 14px; padding: 18px 0; cursor: pointer; transition: background 0.12s ease; }
+.comms-row:hover,
+.comms-row:focus-visible { outline: none; background: var(--color-surface); margin: 0 -24px; padding-left: 24px; padding-right: 24px; }
+.comms-row__avatar { width: 36px; height: 36px; flex-shrink: 0; border-radius: 999px; background: #EDE9FE; color: #5B21B6; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 13px; font-weight: 600; letter-spacing: 0; }
+.comms-row__avatar--fail   { background: #FEE2E2; color: #991B1B; }
+.comms-row__avatar--system { background: #DCFCE7; color: #14532D; }
+.comms-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.comms-row__subject { font-family: var(--font-body); font-size: 15px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comms-row__meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-family: var(--font-body); font-size: 11px; color: var(--color-fog); }
+.comms-row__meta-text { display: inline-flex; align-items: center; gap: 6px; }
+.comms-row__meta-dot { color: var(--color-mute); }
+.comms-row__chips { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
+.comms-row__chevron { flex-shrink: 0; color: var(--color-mute); font-size: 18px; line-height: 36px; align-self: center; }
+
 .comms-feed__chip { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-body); font-size: 11px; font-weight: 600; }
 .comms-feed__chip--ok      { color: #14532D; }
 .comms-feed__chip--engaged { color: #1E40AF; }
@@ -1721,6 +1932,41 @@ async function submitEdit() {
 .comms-feed__chip--pending { color: var(--color-mute); }
 .comms-feed__chip-time { font-family: var(--font-mono); font-weight: 500; letter-spacing: 0.02em; }
 .comms-feed__chip-suffix { color: var(--color-fog); font-weight: 500; }
+
+/* Notes feed — Paper design 33c */
+.notes-filters { display: flex; align-items: center; gap: 8px; padding: 14px 0; border-top: 1px solid var(--color-hairline); border-bottom: 1px solid var(--color-hairline); margin: 0 0 4px; flex-wrap: wrap; }
+.notes-filter { display: inline-flex; align-items: center; height: 26px; padding: 0 12px; border-radius: 999px; background: #fff; color: var(--color-ink); border: 1px solid var(--color-hairline); font-family: var(--font-body); font-size: 12px; font-weight: 500; cursor: pointer; }
+.notes-filter:hover { background: var(--color-surface); }
+.notes-filter--active { background: var(--color-ink); color: #fff; border-color: var(--color-ink); }
+.notes-filter__count { margin-left: 4px; color: var(--color-fog); }
+.notes-filter--active .notes-filter__count { color: rgba(255,255,255,0.6); }
+
+.notes-feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.notes-feed > li + li { border-top: 1px solid var(--color-hairline); }
+.notes-row { display: flex; gap: 16px; padding: 20px 0; }
+.notes-row__rail { width: 76px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
+.notes-row__date-day { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--color-ink); letter-spacing: 0.02em; }
+.notes-row__date-sub { font-family: var(--font-mono); font-size: 10px; color: var(--color-fog); letter-spacing: 0.02em; }
+.notes-row__pill { margin-top: 8px; display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; width: fit-content; }
+.notes-row__pill--call          { background: #F3E8FF; color: #5B21B6; }
+.notes-row__pill--meeting       { background: #DCFCE7; color: #14532D; }
+.notes-row__pill--visit         { background: #DBEAFE; color: #1E40AF; }
+.notes-row__pill--text_whatsapp { background: #FFEDD5; color: #9A3412; }
+.notes-row__pill--general       { background: var(--color-surface); color: var(--color-ink); border: 1px solid var(--color-hairline); }
+.notes-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.notes-row__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.notes-row__author { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-ink); }
+.notes-row__avatar { width: 24px; height: 24px; flex-shrink: 0; border-radius: 999px; background: #EDE9FE; color: #5B21B6; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 10px; font-weight: 600; }
+.notes-row__author-name { font-weight: 600; }
+.notes-row__author-time { color: var(--color-fog); font-weight: 400; font-size: 12px; }
+.notes-row__actions { display: inline-flex; align-items: center; gap: 12px; }
+.notes-row__action { background: none; border: 0; color: var(--color-accent); font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; padding: 0; }
+.notes-row__action:hover { text-decoration: underline; }
+.notes-row__action--danger { color: #991B1B; }
+.notes-row__text { font-family: var(--font-body); font-size: 15px; line-height: 1.5; color: var(--color-ink); margin: 0; white-space: pre-wrap; }
+.notes-row__textarea { width: 100%; min-height: 90px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--color-hairline); background: #fff; font-family: var(--font-body); font-size: 14px; line-height: 1.5; color: var(--color-ink); resize: vertical; }
+.notes-row__textarea:focus { outline: none; border-color: var(--color-ink); }
+.notes-row__edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .comms-feed__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .comms-feed__pill { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .comms-feed__pill--note { background: var(--color-surface); color: var(--color-ink); border: 1px solid var(--color-hairline); }
@@ -1739,21 +1985,38 @@ async function submitEdit() {
 .comms-feed__textarea:focus { outline: none; border-color: var(--color-ink); }
 .comms-feed__edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
-/* Payment table */
-.pay-table { width: 100%; border-collapse: collapse; font-family: var(--font-body); font-size: 13px; }
-.pay-table th { text-align: left; padding: 10px 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); border-bottom: 1px solid var(--color-hairline); background: var(--color-surface); }
-.pay-table td { padding: 12px; border-bottom: 1px solid var(--color-hairline); color: var(--color-ink); }
-.pay-table__row:last-child td { border-bottom: 0; }
-.pay-table__date { font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); letter-spacing: 0.02em; }
-.pay-table__amount { text-align: right; font-family: var(--font-mono); font-weight: 600; }
-.pay-table__foot-cell { border-bottom: 0; padding: 14px 12px; }
-.pay-table__foot-label { color: var(--color-fog); font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; margin-right: 14px; }
-.pay-table__foot-total { color: var(--color-ink); font-family: var(--font-mono); font-size: 16px; font-weight: 700; }
-.pay-pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
-.pay-pill--paid { background: #DCFCE7; color: #14532D; }
-.pay-pill--due { background: #FEF3C7; color: #92400E; }
-.pay-pill--overdue { background: #FEE2E2; color: #991B1B; }
-.pay-pill--waived { background: var(--color-surface); color: var(--color-graphite); border: 1px solid var(--color-hairline); }
+/* Payment history — Paper design 33a */
+.pay-counts { display: flex; align-items: baseline; gap: 12px; }
+.pay-counts__total { font-family: var(--font-display); font-size: 28px; font-weight: 600; letter-spacing: -0.02em; color: var(--color-ink); line-height: 1; }
+.pay-counts__total-sub { color: var(--color-mute); font-weight: 400; font-size: 14px; letter-spacing: 0; margin-left: 6px; }
+.pay-head-actions { display: inline-flex; align-items: center; gap: 8px; }
+
+.pay-seasons { margin: 0 -24px -24px; display: flex; flex-direction: column; border-top: 1px solid var(--color-hairline); }
+.pay-season { display: flex; flex-direction: column; }
+.pay-season + .pay-season { border-top: 1px solid var(--color-hairline); }
+.pay-season--past { background: var(--color-surface); }
+.pay-season__head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 20px 24px 10px; flex-wrap: wrap; }
+.pay-season__title-row { display: inline-flex; align-items: center; gap: 10px; }
+.pay-season__title { font-family: var(--font-display); font-size: 18px; font-weight: 600; letter-spacing: -0.01em; color: var(--color-ink); margin: 0; line-height: 1.1; }
+.pay-season__pill { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; background: var(--color-ink); color: #fff; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.pay-season__meta { font-family: var(--font-mono); font-size: 12px; color: var(--color-fog); letter-spacing: 0.02em; }
+
+.pay-row { display: flex; align-items: center; gap: 16px; padding: 14px 24px; border-top: 1px solid var(--color-hairline); }
+.pay-row__date { width: 68px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }
+.pay-row__date-day { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--color-ink); letter-spacing: 0.02em; }
+.pay-row__date-year { font-family: var(--font-mono); font-size: 10px; color: var(--color-fog); letter-spacing: 0.02em; }
+.pay-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pay-row__desc { font-family: var(--font-body); font-size: 14px; font-weight: 500; color: var(--color-ink); }
+.pay-row__sub { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
+.pay-row__amount { width: 88px; flex-shrink: 0; text-align: right; font-family: var(--font-mono); font-size: 15px; font-weight: 600; color: var(--color-ink); letter-spacing: 0.01em; }
+.pay-row__status { width: 120px; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.pay-row__pill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: 999px; font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.pay-row__pill--paid    { background: #DCFCE7; color: #14532D; }
+.pay-row__pill--due     { background: #FEF3C7; color: #92400E; }
+.pay-row__pill--overdue { background: #FEE2E2; color: #991B1B; }
+.pay-row__pill--waived  { background: var(--color-surface); color: var(--color-graphite); border: 1px solid var(--color-hairline); }
+.pay-row__pill-dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.pay-row__method { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); }
 
 /* Rail cards */
 .member-detail__rail-empty { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 6px 0 4px; }
@@ -1773,9 +2036,8 @@ async function submitEdit() {
 
 .member-detail__nomatch { max-width: 480px; }
 
-/* ── Owing banner (mobile) + payment list (mobile) ───────────── */
+/* ── Owing banner (mobile) ───────────── */
 .member-detail__owing-banner { display: none; }
-.pay-list { display: none; }
 
 /* Responsive */
 @media (max-width: 1023px) {
@@ -1828,18 +2090,13 @@ async function submitEdit() {
   .member-detail__tabs::-webkit-scrollbar { display: none; }
   .member-detail__tab { flex-shrink: 0; }
 
-  /* Payment history — swap table for a card list. */
-  .pay-table { display: none; }
-  .pay-list { display: flex; flex-direction: column; gap: 10px; list-style: none; margin: 0; padding: 0; }
-  .pay-list__item { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--color-hairline); border-radius: 12px; }
-  .pay-list__top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-  .pay-list__desc { font-family: var(--font-body); font-size: 15px; font-weight: 600; color: var(--color-ink); line-height: 1.3; }
-  .pay-list__amount { font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: var(--color-ink); white-space: nowrap; flex-shrink: 0; }
-  .pay-list__meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .pay-list__date { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
-  .pay-list__total { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; border-top: 1px solid var(--color-hairline); }
-  .pay-list__total-label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
-  .pay-list__total-value { font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--color-ink); }
+  /* Payment history — collapse the right status lane under the amount on mobile. */
+  .pay-row { flex-wrap: wrap; gap: 10px; padding: 14px 18px; }
+  .pay-row__date { width: 60px; }
+  .pay-row__amount { width: auto; margin-left: auto; }
+  .pay-row__status { width: auto; }
+  .pay-season__head { padding: 16px 18px 8px; }
+  .pay-seasons { margin: 0 -18px -18px; }
 }
 
 /* ── Member profile card (rail) ──────────────────────────────── */
@@ -1966,6 +2223,16 @@ async function submitEdit() {
   font-size: 12px;
   font-weight: 600;
   color: var(--color-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.edit-field__label-pill { font-size: 9px; padding: 2px 8px; }
+.edit-field__hint {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--color-fog);
+  line-height: 1.4;
 }
 .edit-field__input {
   padding: 10px 12px;

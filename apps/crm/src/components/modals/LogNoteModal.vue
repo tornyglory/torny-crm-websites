@@ -223,10 +223,18 @@ function onCmdEnter(e: KeyboardEvent) {
   font-weight: 500;
   cursor: pointer;
 }
-.log-note__chip:hover { background: var(--color-surface); }
+.log-note__chip:hover { background: var(--color-surface); color: var(--color-ink); border-color: var(--color-ink); }
 .log-note__chip--active {
   background: var(--color-ink);
   color: #fff;
+  border-color: var(--color-ink);
+}
+/* Hover of the already-selected chip flips to white + ink text so the
+ * label stays legible and the chip reads as a "click to switch"
+ * affordance (matches the Record Payment method tiles). */
+.log-note__chip--active:hover {
+  background: #fff;
+  color: var(--color-ink);
   border-color: var(--color-ink);
 }
 .log-note__textarea {

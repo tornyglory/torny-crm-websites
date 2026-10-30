@@ -28,6 +28,8 @@ import {
   type UpdateMemberErrorCode,
   type MemberCommunication,
   type NoteType,
+  type MemberPaymentRow,
+  type MembershipSnapshot,
 } from '@torny/api-client'
 import { useClubStore } from '@/stores/club'
 import { useAuthStore } from '@/stores/auth'
@@ -523,8 +525,105 @@ function markPaid() {
   }
   recordPayOpen.value = true
 }
-async function onPaymentRecorded() {
-  await loadRoster()
+
+/** Patch the local roster row's membership block from a server-echoed
+ *  snapshot (brief 68) so the hero + Payments tab update in place without
+ *  a full roster reload. Only touches the four aggregate fields. */
+function applyMembershipSnapshot(snapshot: MembershipSnapshot | null | undefined) {
+  if (!snapshot) return
+  const m = member.value
+  if (!m?.membership) return
+  m.membership.payment_status = snapshot.payment_status
+  m.membership.total_paid_this_season = snapshot.total_paid_this_season
+  m.membership.balance_owed = snapshot.balance_owed
+  m.membership.last_payment_date = snapshot.last_payment_date
+  m.membership.last_payment_amount = snapshot.last_payment_amount
+  if (snapshot.fee != null) m.membership.fee = snapshot.fee
+}
+
+async function onPaymentRecorded(ev?: { membership?: MembershipSnapshot | null }) {
+  // Refresh the per-member payments list so the new row renders inline.
+  await loadPayments()
+  if (ev?.membership) {
+    applyMembershipSnapshot(ev.membership)
+  } else {
+    // Backend older than brief 68 — fall back to a roster reload.
+    await loadRoster()
+  }
+}
+
+// ── Remove member (soft-delete) ──────────────────────────────────
+// Opens from the Edit modal footer — paired with Save so admins who are
+// already editing can tombstone the row without a hunting trip. Soft
+// delete: member moves to Lapsed; roster re-fetches afterwards.
+const confirmRemoveOpen = ref(false)
+const removing = ref(false)
+function askRemoveMember() { confirmRemoveOpen.value = true }
+function cancelRemoveMember() {
+  if (removing.value) return
+  confirmRemoveOpen.value = false
+}
+async function confirmRemoveMember() {
+  const m = member.value
+  const cid = clubStore.current?.id
+  if (!m || cid == null) return
+  removing.value = true
+  try {
+    await membersApi.remove(cid, m.user_id)
+    toast.success(`${m.name} removed.`)
+    confirmRemoveOpen.value = false
+    editOpen.value = false
+    router.push({ name: 'members' })
+  } catch (err) {
+    const msg = err instanceof ApiError
+      ? err.code === 'owner_immutable'    ? "You can't remove the club owner. Transfer ownership first."
+      : err.code === 'cannot_remove_self' ? "You can't remove yourself. Use the leave-club flow."
+      : err.code === 'already_revoked'    ? 'They were already removed. Refreshing the roster.'
+      : err.code === 'forbidden'          ? "You don't have permission to remove this member."
+      : err.message
+      : err instanceof Error ? err.message : 'Could not remove the member.'
+    toast.error(msg)
+  } finally {
+    removing.value = false
+  }
+}
+
+// Per-row delete (brief 68). Admin + owner only. Confirmation lives in a
+// CrmModal so we match the rest of the CRM's dialog shell instead of the
+// native browser alert.
+const deletingPaymentId = ref<number | null>(null)
+const confirmDeleteRow = ref<PaymentRow | null>(null)
+function askDeletePayment(row: PaymentRow) {
+  if (row.paymentId == null) return
+  confirmDeleteRow.value = row
+}
+function cancelDeletePayment() {
+  if (deletingPaymentId.value != null) return
+  confirmDeleteRow.value = null
+}
+async function confirmDeletePayment() {
+  const row = confirmDeleteRow.value
+  if (!row || row.paymentId == null) return
+  const cid = clubStore.current?.id
+  const uid = memberId.value
+  if (cid == null || !uid) return
+  deletingPaymentId.value = row.paymentId
+  try {
+    const result = await membersApi.deletePayment(cid, uid, row.paymentId)
+    applyMembershipSnapshot(result.membership)
+    await loadPayments()
+    toast.success('Payment deleted.')
+    confirmDeleteRow.value = null
+  } catch (err) {
+    const msg = err instanceof ApiError
+      ? err.code === 'payment_not_found'
+        ? 'That payment was already deleted. Refresh to see the current state.'
+        : err.message
+      : err instanceof Error ? err.message : 'Could not delete the payment.'
+    toast.error(msg)
+  } finally {
+    deletingPaymentId.value = null
+  }
 }
 
 // Log note + Send email live in their own modals. Both refresh the comms
@@ -550,13 +649,19 @@ async function onEmailSent() {
 // ── Payments history (from what the roster row exposes) ───────────
 interface PaymentRow {
   id: string
+  /** Real server-side id when the row is a persisted payment. Null for
+   *  synthesized "upcoming due" or legacy roster-derived rows. */
+  paymentId: number | null
   dateDay: string
   dateYear: string
   description: string
   sub: string
   amount: number
-  status: 'paid' | 'due' | 'overdue' | 'waived'
+  status: 'paid' | 'due' | 'overdue' | 'waived' | 'partial'
   method?: string
+  seasonKey: string
+  seasonName: string
+  seasonIsCurrent: boolean
 }
 const DAY_FMT = new Intl.DateTimeFormat('en-NZ', { day: '2-digit', month: 'short' })
 const YEAR_FMT = new Intl.DateTimeFormat('en-NZ', { year: 'numeric' })
@@ -566,21 +671,134 @@ function splitDate(iso: string | null | undefined, fallback: string): { day: str
   if (Number.isNaN(d.getTime())) return { day: fallback, year: '' }
   return { day: DAY_FMT.format(d), year: YEAR_FMT.format(d) }
 }
+
+const METHOD_LABEL: Record<string, string> = {
+  cash: 'Cash',
+  card: 'Card',
+  bank_transfer: 'Bank transfer',
+  cheque: 'Cheque',
+  other: 'Other',
+  waived: 'Waived',
+}
+
+// ── Server-side payments list (brief 64 §3 / brief 68) ───────────
+const paymentsList = ref<MemberPaymentRow[]>([])
+const paymentsOutstanding = ref<{ season_id: number; season_name: string; fee: number; collected: number; balance: number } | null>(null)
+const paymentsAllTime = ref<number>(0)
+const paymentsLoading = ref(false)
+const paymentsError = ref<string | null>(null)
+/** True when the per-member payments endpoint responded with real rows. */
+const paymentsListLoaded = computed(() => paymentsList.value.length > 0 || paymentsOutstanding.value != null)
+
+async function loadPayments() {
+  const cid = clubStore.current?.id
+  const uid = memberId.value
+  if (cid == null || !uid) {
+    paymentsList.value = []
+    paymentsOutstanding.value = null
+    paymentsAllTime.value = 0
+    return
+  }
+  paymentsLoading.value = true
+  paymentsError.value = null
+  try {
+    const res = await membersApi.listPayments(cid, uid, { limit: 100 })
+    paymentsList.value = res.payments
+    paymentsOutstanding.value = res.outstanding
+    paymentsAllTime.value = res.totals.all_time
+  } catch (err) {
+    // 404 fallback — the endpoint may not be enabled for this club yet.
+    if (err instanceof ApiError && err.status === 404) {
+      paymentsList.value = []
+      paymentsOutstanding.value = null
+    } else {
+      paymentsError.value = err instanceof Error ? err.message : 'Could not load payments.'
+    }
+  } finally {
+    paymentsLoading.value = false
+  }
+}
+
+onMounted(loadPayments)
+watch(() => clubStore.current?.id, loadPayments)
+watch(memberId, loadPayments)
+
+function paymentRowFromServer(p: MemberPaymentRow): PaymentRow {
+  const parts = splitDate(p.payment_date, '—')
+  const seasonKey = p.season_id != null ? `s${p.season_id}` : 'unknown'
+  return {
+    id: `p${p.payment_id}`,
+    paymentId: p.payment_id,
+    dateDay: parts.day,
+    dateYear: parts.year,
+    description: `${p.membership.type_name ?? 'Membership'} fee`,
+    sub: p.payment_reference
+      ? `Ref ${p.payment_reference}${p.recorded_by.name ? ` · by ${p.recorded_by.name}` : ''}`
+      : p.recorded_by.name
+        ? `Recorded by ${p.recorded_by.name}`
+        : 'Recorded manually',
+    amount: p.amount,
+    status: p.payment_status === 'partial' ? 'partial'
+      : p.payment_status === 'waived' ? 'waived'
+      : p.payment_status === 'overdue' ? 'overdue'
+      : p.payment_status === 'unpaid' ? 'due'
+      : 'paid',
+    method: p.payment_method ? METHOD_LABEL[p.payment_method] ?? p.payment_method : undefined,
+    seasonKey,
+    seasonName: p.season_name ?? 'Unknown season',
+    seasonIsCurrent: false,
+  }
+}
+
 const paymentHistory = computed<PaymentRow[]>(() => {
   const m = member.value
   if (!m?.membership) return []
+
+  // ── Server list path: real rows + optional synthetic "due" tail ──
+  if (paymentsListLoaded.value) {
+    const rows = paymentsList.value.map(paymentRowFromServer)
+    // Append a synthetic "due" row if the server reports outstanding balance.
+    const o = paymentsOutstanding.value
+    if (o && o.balance > 0) {
+      const parts = splitDate(m.membership.payment_due_date, 'Current')
+      rows.push({
+        id: 'synth-due',
+        paymentId: null,
+        dateDay: parts.day,
+        dateYear: parts.year,
+        description: `${m.membership.type_name ?? 'Membership'} fee`,
+        sub: o.collected > 0
+          ? `Partial · $${o.collected} paid of $${o.fee}`
+          : m.membership.payment_status === 'overdue'
+            ? 'Payment overdue — follow up'
+            : 'Upcoming — not yet paid',
+        amount: o.balance,
+        status: m.membership.payment_status === 'overdue' ? 'overdue' : 'due',
+        seasonKey: `s${o.season_id}`,
+        seasonName: o.season_name,
+        seasonIsCurrent: true,
+      })
+    }
+    return rows
+  }
+
+  // ── Fallback path: synthesize from the roster row ──
   const tier = m.membership.type_name ?? 'Membership'
   const rows: PaymentRow[] = []
   if (m.membership.last_payment_date && m.membership.last_payment_amount) {
     const parts = splitDate(m.membership.last_payment_date, 'Last payment')
     rows.push({
       id: 'last',
+      paymentId: null,
       dateDay: parts.day,
       dateYear: parts.year,
       description: `${tier} fee`,
       sub: 'Recorded via Mark paid',
       amount: m.membership.last_payment_amount,
       status: 'paid',
+      seasonKey: 'current',
+      seasonName: 'Current season',
+      seasonIsCurrent: true,
     })
   }
   if (
@@ -596,6 +814,7 @@ const paymentHistory = computed<PaymentRow[]>(() => {
     const balance = m.membership.balance_owed ?? (fee - paid)
     rows.push({
       id: 'current',
+      paymentId: null,
       dateDay: parts.day,
       dateYear: parts.year,
       description: `${tier} fee`,
@@ -606,22 +825,29 @@ const paymentHistory = computed<PaymentRow[]>(() => {
           : 'Upcoming — not yet paid',
       amount: isPartial ? balance : fee,
       status: isOverdue ? 'overdue' : 'due',
+      seasonKey: 'current',
+      seasonName: 'Current season',
+      seasonIsCurrent: true,
     })
   }
   return rows
 })
-const totalCollected = computed(() =>
-  paymentHistory.value.filter((r) => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0),
-)
-const totalOwing = computed(() =>
-  paymentHistory.value
+const totalCollected = computed(() => {
+  if (paymentsListLoaded.value) return paymentsAllTime.value
+  return paymentHistory.value
+    .filter((r) => r.status === 'paid' || r.status === 'partial' || r.status === 'waived')
+    .reduce((sum, r) => sum + r.amount, 0)
+})
+const totalOwing = computed(() => {
+  if (paymentsListLoaded.value && paymentsOutstanding.value) {
+    return paymentsOutstanding.value.balance
+  }
+  return paymentHistory.value
     .filter((r) => r.status === 'due' || r.status === 'overdue')
-    .reduce((sum, r) => sum + r.amount, 0),
-)
+    .reduce((sum, r) => sum + r.amount, 0)
+})
 
-/** Group payments by season. Until the backend ships brief 64 §3 we only
- *  know current-season state from the roster row, so everything collapses
- *  into one "current season" bucket. */
+/** Group payments by season — preserves server ordering (newest first). */
 interface PaymentSeason {
   key: string
   title: string
@@ -631,17 +857,31 @@ interface PaymentSeason {
   rows: PaymentRow[]
 }
 const paymentSeasons = computed<PaymentSeason[]>(() => {
-  if (paymentHistory.value.length === 0) return []
-  return [
-    {
-      key: 'current',
-      title: 'Current season',
-      current: true,
-      collected: totalCollected.value,
-      owing: totalOwing.value,
-      rows: paymentHistory.value,
-    },
-  ]
+  const rows = paymentHistory.value
+  if (rows.length === 0) return []
+  const groups = new Map<string, PaymentSeason>()
+  for (const r of rows) {
+    let g = groups.get(r.seasonKey)
+    if (!g) {
+      g = {
+        key: r.seasonKey,
+        title: r.seasonName,
+        current: r.seasonIsCurrent,
+        collected: 0,
+        owing: 0,
+        rows: [],
+      }
+      groups.set(r.seasonKey, g)
+    }
+    g.current = g.current || r.seasonIsCurrent
+    g.rows.push(r)
+    if (r.status === 'paid' || r.status === 'partial' || r.status === 'waived') {
+      g.collected += r.amount
+    } else if (r.status === 'due' || r.status === 'overdue') {
+      g.owing += r.amount
+    }
+  }
+  return Array.from(groups.values())
 })
 
 // Position-group pill — surfaces the actual seat (Board / Committee /
@@ -1228,15 +1468,38 @@ async function submitEdit() {
                       >
                         <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 4L6 11l-3-3" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         Paid
+                        <span v-if="p.method" class="pay-row__pill-method">· {{ p.method }}</span>
+                      </span>
+                      <span v-else-if="p.status === 'partial'" class="pay-row__pill pay-row__pill--partial">
+                        <span class="pay-row__pill-dot"></span>
+                        Partial
+                        <span v-if="p.method" class="pay-row__pill-method">· {{ p.method }}</span>
                       </span>
                       <span v-else-if="p.status === 'overdue'" class="pay-row__pill pay-row__pill--overdue">
                         <span class="pay-row__pill-dot"></span>
                         Overdue
                       </span>
-                      <span v-else-if="p.status === 'waived'" class="pay-row__pill pay-row__pill--waived">Waived</span>
+                      <span v-else-if="p.status === 'waived'" class="pay-row__pill pay-row__pill--waived">
+                        Waived
+                        <span v-if="p.method" class="pay-row__pill-method">· {{ p.method }}</span>
+                      </span>
                       <span v-else class="pay-row__pill pay-row__pill--due">Due</span>
-                      <div v-if="p.method" class="pay-row__method">{{ p.method }}</div>
                     </div>
+                    <template v-if="callerCanEdit">
+                      <button
+                        v-if="p.paymentId != null"
+                        type="button"
+                        class="pay-row__delete"
+                        :disabled="deletingPaymentId === p.paymentId"
+                        :aria-label="`Delete this $${p.amount.toFixed(2)} payment`"
+                        @click="askDeletePayment(p)"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4l1 9a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1l1-9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                      </button>
+                      <span v-else class="pay-row__delete pay-row__delete--spacer" aria-hidden="true"></span>
+                    </template>
                   </div>
                 </section>
               </div>
@@ -1256,11 +1519,11 @@ async function submitEdit() {
                 </div>
                 <button
                   type="button"
-                  class="btn btn--outline btn--sm"
+                  class="btn btn--primary btn--sm"
                   :disabled="!member.email"
                   @click="sendEmail"
                 >
-                  Send email
+                  + Send email
                 </button>
               </header>
 
@@ -1422,13 +1685,21 @@ async function submitEdit() {
                         <button
                           type="button"
                           class="notes-row__action"
+                          aria-label="Edit note"
                           @click="startEditNote(c)"
-                        >Edit</button>
+                        >
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11 2.5l2.5 2.5-8 8-3 .5.5-3 8-8z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                          Edit
+                        </button>
                         <button
                           type="button"
                           class="notes-row__action notes-row__action--danger"
+                          aria-label="Delete note"
                           @click="deleteNote(c)"
-                        >Delete</button>
+                        >
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4l1 9a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1l1-9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                          Delete
+                        </button>
                       </div>
                     </div>
                     <template v-if="editingNoteId === c.communication_id">
@@ -1714,6 +1985,16 @@ async function submitEdit() {
       </section>
 
       <template #footer>
+        <button
+          v-if="callerCanEdit"
+          type="button"
+          class="btn btn--danger-ghost"
+          :disabled="editSaving"
+          @click="askRemoveMember"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4l1 9a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1l1-9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Remove member
+        </button>
         <button type="button" class="btn btn--outline" :disabled="editSaving" @click="closeEdit">Cancel</button>
         <button type="button" class="btn btn--primary" :disabled="editSaving" @click="submitEdit">
           {{ editSaving ? 'Saving…' : 'Save changes' }}
@@ -1753,6 +2034,88 @@ async function submitEdit() {
       @close="recordPayOpen = false"
       @recorded="onPaymentRecorded"
     />
+
+    <CrmModal
+      :open="confirmDeleteRow != null"
+      eyebrow="Payment"
+      title="Delete this payment?"
+      width="sm"
+      @close="cancelDeletePayment"
+    >
+      <p v-if="confirmDeleteRow" class="confirm-delete__body">
+        <span class="confirm-delete__lead">${{ confirmDeleteRow.amount.toFixed(2) }}<template v-if="confirmDeleteRow.method"> · {{ confirmDeleteRow.method }}</template></span>
+        <span v-if="confirmDeleteRow.dateDay" class="confirm-delete__date">{{ confirmDeleteRow.dateDay }}<template v-if="confirmDeleteRow.dateYear"> {{ confirmDeleteRow.dateYear }}</template></span>
+      </p>
+      <p class="confirm-delete__meta">
+        <template v-if="confirmDeleteRow">The season total will drop by ${{ confirmDeleteRow.amount.toFixed(2) }} and the member's payment status will recalculate from the remaining rows.</template>
+      </p>
+      <p class="confirm-delete__meta confirm-delete__meta--muted">
+        The payment stays in the audit log — it's soft-deleted, not permanently erased.
+      </p>
+
+      <template #footer>
+        <button
+          type="button"
+          class="btn btn--outline"
+          :disabled="deletingPaymentId != null"
+          @click="cancelDeletePayment"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="btn btn--primary confirm-delete__danger"
+          :disabled="deletingPaymentId != null"
+          @click="confirmDeletePayment"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4l1 9a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1l1-9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          {{ deletingPaymentId != null ? 'Deleting…' : 'Delete payment' }}
+        </button>
+      </template>
+    </CrmModal>
+
+    <CrmModal
+      :open="confirmRemoveOpen"
+      eyebrow="Member"
+      :title="`Remove ${member?.name ?? 'this member'}?`"
+      width="sm"
+      @close="cancelRemoveMember"
+    >
+      <p v-if="member" class="confirm-delete__body">
+        <span class="confirm-delete__lead">{{ member.name }}</span>
+        <span v-if="member.email" class="confirm-delete__date">{{ member.email }}</span>
+      </p>
+      <p class="confirm-delete__meta">
+        They'll move to the Lapsed roster. Their payment history, notes, and communications stay for the audit trail — you can re-link them later from Members → Add if they come back.
+      </p>
+      <p class="confirm-delete__meta confirm-delete__meta--muted">
+        Soft delete only. The member record isn't erased.
+      </p>
+
+      <template #footer>
+        <button
+          type="button"
+          class="btn btn--outline"
+          :disabled="removing"
+          @click="cancelRemoveMember"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="btn btn--primary confirm-delete__danger"
+          :disabled="removing"
+          @click="confirmRemoveMember"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4l1 9a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1l1-9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          {{ removing ? 'Removing…' : 'Remove member' }}
+        </button>
+      </template>
+    </CrmModal>
   </div>
 </template>
 
@@ -1790,6 +2153,9 @@ async function submitEdit() {
 .btn--primary { background: var(--color-ink); color: #fff; padding: 8px 16px; transition: background 0.15s ease; }
 .btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
 .btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn--danger-ghost { background: transparent; color: #991B1B; margin-right: auto; }
+.btn--danger-ghost:hover:not(:disabled) { background: #FEE2E2; }
+.btn--danger-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Body layout */
 .member-detail__body { padding-top: 20px; display: flex; flex-direction: column; gap: 20px; }
@@ -1885,7 +2251,7 @@ async function submitEdit() {
 .member-detail__tab.is-active { color: var(--color-ink); font-weight: 600; border-bottom-color: var(--color-ink); }
 
 /* Card */
-.member-detail__card { background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; padding: 20px 22px; }
+.member-detail__card { background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; padding: 20px 22px; overflow: hidden; }
 .member-detail__card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .member-detail__card-label { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
 .member-detail__card-hint { font-family: var(--font-body); font-size: 11px; color: var(--color-mute); font-style: italic; }
@@ -1938,8 +2304,13 @@ async function submitEdit() {
 .notes-filter { display: inline-flex; align-items: center; height: 26px; padding: 0 12px; border-radius: 999px; background: #fff; color: var(--color-ink); border: 1px solid var(--color-hairline); font-family: var(--font-body); font-size: 12px; font-weight: 500; cursor: pointer; }
 .notes-filter:hover { background: var(--color-surface); }
 .notes-filter--active { background: var(--color-ink); color: #fff; border-color: var(--color-ink); }
+/* Hovering the already-selected filter flips to a white chip with ink
+ * text — reads as a "click to switch" affordance and keeps the count
+ * fully legible. */
+.notes-filter--active:hover { background: #fff; color: var(--color-ink); border-color: var(--color-ink); }
 .notes-filter__count { margin-left: 4px; color: var(--color-fog); }
 .notes-filter--active .notes-filter__count { color: rgba(255,255,255,0.6); }
+.notes-filter--active:hover .notes-filter__count { color: var(--color-ink); }
 
 .notes-feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .notes-feed > li + li { border-top: 1px solid var(--color-hairline); }
@@ -1947,7 +2318,7 @@ async function submitEdit() {
 .notes-row__rail { width: 76px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
 .notes-row__date-day { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--color-ink); letter-spacing: 0.02em; }
 .notes-row__date-sub { font-family: var(--font-mono); font-size: 10px; color: var(--color-fog); letter-spacing: 0.02em; }
-.notes-row__pill { margin-top: 8px; display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; width: fit-content; }
+.notes-row__pill { margin-top: 10px; display: inline-flex; align-items: center; height: 26px; padding: 0 14px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; width: fit-content; white-space: nowrap; }
 .notes-row__pill--call          { background: #F3E8FF; color: #5B21B6; }
 .notes-row__pill--meeting       { background: #DCFCE7; color: #14532D; }
 .notes-row__pill--visit         { background: #DBEAFE; color: #1E40AF; }
@@ -1959,10 +2330,26 @@ async function submitEdit() {
 .notes-row__avatar { width: 24px; height: 24px; flex-shrink: 0; border-radius: 999px; background: #EDE9FE; color: #5B21B6; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 10px; font-weight: 600; }
 .notes-row__author-name { font-weight: 600; }
 .notes-row__author-time { color: var(--color-fog); font-weight: 400; font-size: 12px; }
-.notes-row__actions { display: inline-flex; align-items: center; gap: 12px; }
-.notes-row__action { background: none; border: 0; color: var(--color-accent); font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; padding: 0; }
-.notes-row__action:hover { text-decoration: underline; }
+.notes-row__actions { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.notes-row__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  background: #fff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 999px;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.notes-row__action:hover { background: var(--color-surface); border-color: var(--color-ink); }
 .notes-row__action--danger { color: #991B1B; }
+.notes-row__action--danger:hover { background: #FEE2E2; border-color: #991B1B; color: #991B1B; }
 .notes-row__text { font-family: var(--font-body); font-size: 15px; line-height: 1.5; color: var(--color-ink); margin: 0; white-space: pre-wrap; }
 .notes-row__textarea { width: 100%; min-height: 90px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--color-hairline); background: #fff; font-family: var(--font-body); font-size: 14px; line-height: 1.5; color: var(--color-ink); resize: vertical; }
 .notes-row__textarea:focus { outline: none; border-color: var(--color-ink); }
@@ -1991,8 +2378,8 @@ async function submitEdit() {
 .pay-counts__total-sub { color: var(--color-mute); font-weight: 400; font-size: 14px; letter-spacing: 0; margin-left: 6px; }
 .pay-head-actions { display: inline-flex; align-items: center; gap: 8px; }
 
-.pay-seasons { margin: 0 -24px -24px; display: flex; flex-direction: column; border-top: 1px solid var(--color-hairline); }
-.pay-season { display: flex; flex-direction: column; }
+.pay-seasons { margin: 0 -22px -20px; display: flex; flex-direction: column; border-top: 1px solid var(--color-hairline); }
+.pay-season { display: flex; flex-direction: column; background: #fff; }
 .pay-season + .pay-season { border-top: 1px solid var(--color-hairline); }
 .pay-season--past { background: var(--color-surface); }
 .pay-season__head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 20px 24px 10px; flex-wrap: wrap; }
@@ -2009,14 +2396,69 @@ async function submitEdit() {
 .pay-row__desc { font-family: var(--font-body); font-size: 14px; font-weight: 500; color: var(--color-ink); }
 .pay-row__sub { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
 .pay-row__amount { width: 88px; flex-shrink: 0; text-align: right; font-family: var(--font-mono); font-size: 15px; font-weight: 600; color: var(--color-ink); letter-spacing: 0.01em; }
-.pay-row__status { width: 120px; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.pay-row__status { width: 160px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; }
 .pay-row__pill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: 999px; font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
 .pay-row__pill--paid    { background: #DCFCE7; color: #14532D; }
+.pay-row__pill--partial { background: #FEF3C7; color: #92400E; }
 .pay-row__pill--due     { background: #FEF3C7; color: #92400E; }
 .pay-row__pill--overdue { background: #FEE2E2; color: #991B1B; }
 .pay-row__pill--waived  { background: var(--color-surface); color: var(--color-graphite); border: 1px solid var(--color-hairline); }
 .pay-row__pill-dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
-.pay-row__method { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); }
+.pay-row__pill-method { opacity: 0.72; font-weight: 600; margin-left: 2px; }
+.pay-row__delete {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-mute);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.pay-row__delete:hover:not(:disabled) { background: #FEE2E2; color: #991B1B; }
+.pay-row__delete:disabled { opacity: 0.4; cursor: not-allowed; }
+.pay-row__delete--spacer { background: transparent; pointer-events: none; cursor: default; }
+.pay-row__delete--spacer:hover { background: transparent; color: var(--color-mute); }
+
+/* Confirm-delete modal body */
+.confirm-delete__body {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  background: var(--color-surface);
+  border-radius: 12px;
+}
+.confirm-delete__lead {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+.confirm-delete__date {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-fog);
+}
+.confirm-delete__meta {
+  margin: 0 0 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-ink);
+}
+.confirm-delete__meta--muted { color: var(--color-fog); font-size: 12px; }
+.confirm-delete__danger { background: #991B1B; color: #fff; }
+.confirm-delete__danger:hover:not(:disabled) { background: #7F1D1D; }
+.confirm-delete__danger:disabled { background: #991B1B; opacity: 0.6; cursor: not-allowed; }
 
 /* Rail cards */
 .member-detail__rail-empty { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 6px 0 4px; }

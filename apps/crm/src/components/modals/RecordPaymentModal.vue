@@ -10,6 +10,7 @@ import {
   ApiError,
   type RosterMember,
   type PaymentMethod,
+  type MembershipSnapshot,
 } from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import { useToast } from '@/composables/useToast'
@@ -22,7 +23,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'recorded', result: { amount: number; method: PaymentMethod; season_name: string | null }): void
+  (e: 'recorded', result: { amount: number; method: PaymentMethod; season_name: string | null; membership: MembershipSnapshot | null }): void
 }>()
 
 const toast = useToast()
@@ -98,7 +99,12 @@ async function save() {
     const methodLabel = METHODS.find((m) => m.value === state.method)?.label ?? state.method
     const seasonSuffix = result.season_name ? ` to ${result.season_name}` : ''
     toast.success(`$${amount} · ${methodLabel} recorded${seasonSuffix}.`)
-    emit('recorded', { amount, method: state.method, season_name: result.season_name ?? null })
+    emit('recorded', {
+      amount,
+      method: state.method,
+      season_name: result.season_name ?? null,
+      membership: result.membership ?? null,
+    })
     emit('close')
   } catch (err) {
     error.value = err instanceof ApiError
@@ -214,7 +220,7 @@ function onCmdEnter(e: KeyboardEvent) {
       </div>
       <button
         type="button"
-        class="btn btn--outline"
+        class="pill-btn pill-btn--ghost"
         :disabled="saving"
         @click="emit('close')"
       >
@@ -222,7 +228,7 @@ function onCmdEnter(e: KeyboardEvent) {
       </button>
       <button
         type="button"
-        class="btn btn--primary"
+        class="pill-btn pill-btn--ink"
         :disabled="saving || !state.amount"
         @click="save"
       >
@@ -303,14 +309,27 @@ function onCmdEnter(e: KeyboardEvent) {
   border-radius: 14px;
   border: 1px solid var(--color-hairline);
   background: #fff;
+  color: var(--color-ink);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
-.record-pay__method:hover { background: var(--color-surface); }
+.record-pay__method:hover {
+  background: var(--color-surface);
+  border-color: var(--color-ink);
+  color: var(--color-ink);
+}
 .record-pay__method--active {
   background: var(--color-ink);
   color: #fff;
+  border-color: var(--color-ink);
+}
+/* Hovering the already-selected tile flips it back to white + ink text so
+ * admins see an affordance that reads "click to switch". Both label and
+ * hint go ink. */
+.record-pay__method--active:hover {
+  background: #fff;
+  color: var(--color-ink);
   border-color: var(--color-ink);
 }
 .record-pay__method-label {
@@ -318,13 +337,17 @@ function onCmdEnter(e: KeyboardEvent) {
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
+  color: inherit;
 }
 .record-pay__method-hint {
   font-family: var(--font-body);
   font-size: 11px;
   color: var(--color-fog);
+  transition: color 0.12s ease;
 }
+.record-pay__method:hover .record-pay__method-hint { color: var(--color-ink); }
 .record-pay__method--active .record-pay__method-hint { color: rgba(255, 255, 255, 0.65); }
+.record-pay__method--active:hover .record-pay__method-hint { color: var(--color-ink); }
 
 .record-pay__textarea {
   width: 100%;
@@ -374,6 +397,29 @@ function onCmdEnter(e: KeyboardEvent) {
   font-size: 11px;
   color: var(--color-ink);
 }
+
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.pill-btn:focus-visible { outline: 2px solid var(--color-ink); outline-offset: 2px; }
+.pill-btn--ghost { background: transparent; color: var(--color-ink); }
+.pill-btn--ghost:hover:not(:disabled) { background: var(--color-hairline); }
+.pill-btn--ghost:disabled { color: var(--color-mute); cursor: not-allowed; }
+.pill-btn--ink { background: var(--color-ink); color: #fff; padding: 0 22px; }
+.pill-btn--ink:hover:not(:disabled) { background: var(--color-graphite); }
+.pill-btn--ink:disabled { background: var(--color-mute); color: #fff; cursor: not-allowed; }
 
 @media (max-width: 540px) {
   .record-pay__row { grid-template-columns: 1fr; }

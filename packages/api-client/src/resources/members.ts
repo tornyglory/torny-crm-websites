@@ -6,8 +6,12 @@
 // controls whether the response's `pending_invites[]` is populated —
 // the `members[]` array is unaffected either way.
 
-import { CRM_BASE } from '../config'
+import { CRM_BASE, MEDIA_BASE } from '../config'
 import { authedFetch, publicFetch } from '../http'
+// The CDK stack (same host as media + block uploads) carries a few routes
+// that overflowed the CRM stack's CloudFormation resource cap. `DELETE
+// /payments/{id}` is one — reuse MEDIA_BASE until the backend unifies.
+const CDK_BASE = MEDIA_BASE
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -500,6 +504,20 @@ export interface RecordPaymentInput {
   season_id?: number
 }
 
+/** Recomputed membership snapshot the server returns after any payment
+ *  write (brief 68 §2). Lets the CRM update the hero + Payments tab in
+ *  place without a roster re-fetch. */
+export interface MembershipSnapshot {
+  membership_id: number
+  type_id: number | null
+  fee: number | null
+  payment_status: PaymentStatus
+  total_paid_this_season: number
+  balance_owed: number
+  last_payment_date: string | null
+  last_payment_amount: number | null
+}
+
 export interface RecordPaymentResult {
   payment_id: number
   membership_id: number
@@ -515,7 +533,27 @@ export interface RecordPaymentResult {
    *  transition if the server hasn't shipped season attribution yet. */
   season_id?: number | null
   season_name?: string | null
+  /** Recomputed membership state after this write (brief 68). Optional on
+   *  older backends; the CRM falls back to a roster reload when absent. */
+  membership?: MembershipSnapshot
 }
+
+export interface DeletePaymentResult {
+  payment_id: number
+  deleted_at: string
+  membership: MembershipSnapshot
+}
+
+export type PaymentErrorCode =
+  | 'invalid_amount'
+  | 'invalid_method'
+  | 'invalid_date'
+  | 'invalid_season_id'
+  | 'unknown_season'
+  | 'no_current_season'
+  | 'forbidden'
+  | 'payment_not_found'
+  | 'bad_params'
 
 /** POST /clubs/:clubId/members — add one. Handles link / invite / stub paths. */
 export async function add(
@@ -557,6 +595,97 @@ export async function recordPayment(
   const res = await authedFetch<Envelope<RecordPaymentResult>>(
     `${CRM_BASE}/clubs/${clubId}/members/${userId}/payments`,
     { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+  )
+  return res.data
+}
+
+/** DELETE /clubs/:clubId/members/:userId/payments/:paymentId — soft-delete
+ *  the payment and recompute the member's aggregates (brief 68). Admin / owner
+ *  only. Returns the fresh `membership` snapshot so the FE can refresh the
+ *  hero + Payments tab in place.
+ *
+ *  Note the base URL — DELETE lives on the CDK stack (same host as media)
+ *  because the CRM stack hit the CloudFormation resource cap. POST + GET of
+ *  the same resource stay on `CRM_BASE`. Flip the one line back to CRM_BASE
+ *  if/when the backend consolidates. */
+export async function deletePayment(
+  clubId: number,
+  userId: number,
+  paymentId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<DeletePaymentResult> {
+  const res = await authedFetch<Envelope<DeletePaymentResult>>(
+    `${CDK_BASE}/clubs/${clubId}/members/${userId}/payments/${paymentId}`,
+    { method: 'DELETE', signal: opts.signal },
+  )
+  return res.data
+}
+
+// ── Per-member payments list — brief 64 §3 + brief 68 §5 ─────────
+
+export interface MemberPaymentRow {
+  payment_id: number
+  amount: number
+  payment_date: string
+  payment_method: PaymentMethod
+  payment_reference: string | null
+  payment_status: PaymentStatus
+  notes: string | null
+  season_id: number | null
+  season_name: string | null
+  membership: {
+    type_id: number | null
+    type_name: string | null
+    fee: number | null
+    cadence: MembershipCadence | null
+  }
+  recorded_by: { user_id: number | null; name: string | null }
+  created_at: string
+}
+
+export interface MemberPaymentsTotals {
+  all_time: number
+  by_season: Array<{ season_id: number | null; season_name: string | null; collected: number }>
+}
+
+export interface MemberPaymentsOutstanding {
+  season_id: number
+  season_name: string
+  fee: number
+  collected: number
+  balance: number
+  status: PaymentStatus
+}
+
+export interface MemberPaymentsResponse {
+  payments: MemberPaymentRow[]
+  next_cursor: string | null
+  totals: MemberPaymentsTotals
+  outstanding: MemberPaymentsOutstanding | null
+}
+
+export interface ListMemberPaymentsParams {
+  limit?: number
+  cursor?: string
+  season_id?: number
+}
+
+/** GET /clubs/:clubId/members/:userId/payments — paginated history, newest
+ *  first. Soft-deleted rows (brief 68) are excluded. */
+export async function listPayments(
+  clubId: number,
+  userId: number,
+  params: ListMemberPaymentsParams = {},
+  opts: { signal?: AbortSignal } = {},
+): Promise<MemberPaymentsResponse> {
+  const q = new URLSearchParams()
+  if (params.limit != null) q.set('limit', String(params.limit))
+  if (params.cursor) q.set('cursor', params.cursor)
+  if (params.season_id != null) q.set('season_id', String(params.season_id))
+  const query = q.toString()
+  const res = await authedFetch<Envelope<MemberPaymentsResponse>>(
+    `${CRM_BASE}/clubs/${clubId}/members/${userId}/payments${query ? `?${query}` : ''}`,
+    { method: 'GET', signal: opts.signal },
   )
   return res.data
 }

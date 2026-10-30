@@ -15,6 +15,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   members as membersApi,
   media as mediaApi,
+  communications as communicationsApi,
   ApiError,
   type RosterMember,
   type MemberRole,
@@ -25,6 +26,8 @@ import {
   type PreferredPosition,
   type UpdateMemberPatch,
   type UpdateMemberErrorCode,
+  type MemberCommunication,
+  type NoteType,
 } from '@torny/api-client'
 import { useClubStore } from '@/stores/club'
 import { useAuthStore } from '@/stores/auth'
@@ -32,6 +35,7 @@ import { useToast } from '@/composables/useToast'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import LogNoteModal from '@/components/modals/LogNoteModal.vue'
 import SendEmailModal from '@/components/modals/SendEmailModal.vue'
+import EmailDetailModal from '@/components/modals/EmailDetailModal.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
 import CrmEmptyState from '@/components/CrmEmptyState.vue'
 
@@ -41,7 +45,7 @@ const clubStore = useClubStore()
 const authStore = useAuthStore()
 const toast = useToast()
 
-type Tab = 'payments' | 'communications' | 'notes' | 'settings'
+type Tab = 'payments' | 'communications' | 'notes'
 type StandingTone = 'paid' | 'due' | 'overdue' | 'waived' | 'partial' | 'invited' | 'lapsed' | 'prospect' | 'visitor' | 'none'
 interface Standing { tone: StandingTone; label: string; sub: string }
 
@@ -88,6 +92,236 @@ async function loadRoster() {
 
 onMounted(loadRoster)
 watch(() => clubStore.current?.id, loadRoster)
+
+// ── Communications feed (notes + email history) ───────────────────
+// Backend writes one row per note (POST .../communications) and one per
+// successful email send (bulk-email handler side-effect), so this feed
+// backs both the Notes and Communications tabs — just filtered.
+const comms = ref<MemberCommunication[]>([])
+const commsLoading = ref(false)
+const commsError = ref<string | null>(null)
+
+async function loadComms() {
+  const cid = clubStore.current?.id
+  const uid = memberId.value
+  if (cid == null || !uid) {
+    comms.value = []
+    return
+  }
+  commsLoading.value = true
+  commsError.value = null
+  try {
+    const res = await communicationsApi.listForMember(cid, uid, { limit: 100 })
+    comms.value = res.communications
+  } catch (err) {
+    commsError.value = err instanceof Error ? err.message : 'Could not load communications.'
+    comms.value = []
+  } finally {
+    commsLoading.value = false
+  }
+}
+
+onMounted(loadComms)
+watch(() => clubStore.current?.id, loadComms)
+watch(memberId, loadComms)
+
+const notesFeed = computed(() =>
+  comms.value.filter((c) => c.channel === 'note'),
+)
+const emailsFeed = computed(() =>
+  comms.value.filter((c) => c.channel === 'email'),
+)
+
+const emailCounts = computed(() => {
+  const list = emailsFeed.value
+  const total = list.length
+  const delivered = list.filter(
+    (c) => c.status === 'delivered' || c.status === 'opened',
+  ).length
+  const opened = list.filter((c) => c.status === 'opened').length
+  const bounced = list.filter((c) => c.status === 'bounced').length
+  return { total, delivered, opened, bounced }
+})
+
+interface EmailTimelineChip {
+  key: string
+  label: string
+  time: string
+  tone: 'ok' | 'engaged' | 'fail' | 'pending'
+  suffix?: string
+}
+function emailTimeline(c: MemberCommunication): EmailTimelineChip[] {
+  const chips: EmailTimelineChip[] = []
+  if (c.status === 'bounced') {
+    chips.push({
+      key: 'bounced',
+      label: 'Bounced',
+      time: commsTime(c.bounced_at ?? c.sent_at),
+      tone: 'fail',
+      suffix: c.failure_reason ?? undefined,
+    })
+    return chips
+  }
+  if (c.status === 'complained') {
+    chips.push({
+      key: 'complained',
+      label: 'Complained',
+      time: commsTime(c.complained_at ?? c.sent_at),
+      tone: 'fail',
+    })
+    return chips
+  }
+  if (c.status === 'failed') {
+    chips.push({
+      key: 'failed',
+      label: 'Failed',
+      time: commsTime(c.sent_at),
+      tone: 'fail',
+      suffix: c.failure_reason ?? undefined,
+    })
+    return chips
+  }
+  if (c.delivered_at) {
+    chips.push({
+      key: 'delivered',
+      label: 'Delivered',
+      time: commsTime(c.delivered_at),
+      tone: 'ok',
+    })
+  } else {
+    chips.push({ key: 'sent', label: 'Sent', time: commsTime(c.sent_at), tone: 'ok' })
+  }
+  if (c.opened_at) {
+    chips.push({
+      key: 'opened',
+      label: 'Opened',
+      time: commsTime(c.opened_at),
+      tone: 'engaged',
+      suffix: c.open_count > 1 ? `${c.open_count}×` : undefined,
+    })
+  } else if (c.delivered_at) {
+    chips.push({ key: 'notopen', label: 'Not opened yet', time: '', tone: 'pending' })
+  }
+  return chips
+}
+
+// Email detail modal — opens on row click to render the full body.
+const emailDetailOpen = ref(false)
+const emailDetailBatchId = ref<number | null>(null)
+const emailDetailFallback = ref<{
+  subject: string | null
+  sent_at: string | null
+  sent_by_name: string | null
+  status: string | null
+  failure_reason: string | null
+  delivered_at: string | null
+  opened_at: string | null
+  open_count: number | null
+  bounced_at: string | null
+  complained_at: string | null
+} | null>(null)
+function openEmail(c: MemberCommunication) {
+  if (c.channel !== 'email') return
+  emailDetailBatchId.value = c.batch_id
+  emailDetailFallback.value = {
+    subject: c.subject,
+    sent_at: c.sent_at,
+    sent_by_name: c.sent_by_name,
+    status: c.status,
+    failure_reason: c.failure_reason,
+    delivered_at: c.delivered_at,
+    opened_at: c.opened_at,
+    open_count: c.open_count,
+    bounced_at: c.bounced_at,
+    complained_at: c.complained_at,
+  }
+  emailDetailOpen.value = true
+}
+function closeEmailDetail() {
+  emailDetailOpen.value = false
+}
+
+const NOTE_TYPE_LABEL: Record<NoteType, string> = {
+  call: 'Call',
+  meeting: 'Meeting',
+  visit: 'Visit',
+  text_whatsapp: 'Text / WhatsApp',
+  general: 'General',
+}
+function noteTypeLabel(t: NoteType | null): string {
+  return t ? NOTE_TYPE_LABEL[t] : 'General'
+}
+
+const COMMS_DATE_FMT = new Intl.DateTimeFormat(undefined, {
+  day: 'numeric', month: 'short', year: 'numeric',
+})
+const COMMS_TIME_FMT = new Intl.DateTimeFormat(undefined, {
+  hour: 'numeric', minute: '2-digit',
+})
+function commsDate(c: MemberCommunication): string {
+  const iso = c.occurred_at ?? c.sent_at
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : COMMS_DATE_FMT.format(d)
+}
+function commsTime(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : COMMS_TIME_FMT.format(d)
+}
+
+// Row-level edit / delete for notes. Admin or the original author.
+const editingNoteId = ref<number | null>(null)
+const editNoteBody = ref('')
+const editNoteSaving = ref(false)
+function startEditNote(c: MemberCommunication) {
+  editingNoteId.value = c.communication_id
+  editNoteBody.value = c.body ?? ''
+}
+function cancelEditNote() {
+  editingNoteId.value = null
+  editNoteBody.value = ''
+}
+async function saveEditNote(c: MemberCommunication) {
+  const cid = clubStore.current?.id
+  const uid = memberId.value
+  if (cid == null || !uid) return
+  const body = editNoteBody.value.trim()
+  if (!body) {
+    toast.info('Note body cannot be empty.')
+    return
+  }
+  editNoteSaving.value = true
+  try {
+    await communicationsApi.patchCommunication(cid, uid, c.communication_id, { body })
+    toast.success('Note updated.')
+    cancelEditNote()
+    await loadComms()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Could not update note.')
+  } finally {
+    editNoteSaving.value = false
+  }
+}
+async function deleteNote(c: MemberCommunication) {
+  const cid = clubStore.current?.id
+  const uid = memberId.value
+  if (cid == null || !uid) return
+  if (!window.confirm('Delete this note? This cannot be undone from the UI.')) return
+  try {
+    await communicationsApi.removeCommunication(cid, uid, c.communication_id)
+    toast.success('Note deleted.')
+    await loadComms()
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Could not delete note.')
+  }
+}
+function canEditNote(c: MemberCommunication): boolean {
+  if (!callerCanEdit.value) {
+    return c.sent_by != null && authStore.user?.id === c.sent_by
+  }
+  return true
+}
 
 // ── Derived member view fields ────────────────────────────────────
 const initials = computed(() => {
@@ -253,17 +487,24 @@ async function markPaid() {
   }
 }
 
-// Log note + Send email live in their own modals. Both refresh the roster
-// on save so the hero / Notes tab reflect the write immediately.
+// Log note + Send email live in their own modals. Both refresh the comms
+// feed on save so the Notes / Communications tab reflect the write.
 const logNoteOpen = ref(false)
 const sendEmailOpen = ref(false)
 function logNote() {
   if (!member.value) return
+  activeTab.value = 'notes'
   logNoteOpen.value = true
 }
 function sendEmail() {
   if (!member.value?.email) return
   sendEmailOpen.value = true
+}
+async function onNoteSaved() {
+  await loadComms()
+}
+async function onEmailSent() {
+  await loadComms()
 }
 
 // ── Payments history (from what the roster row exposes) ───────────
@@ -318,7 +559,6 @@ const TABS: { value: Tab; label: string; count?: number }[] = [
   { value: 'payments', label: 'Payments' },
   { value: 'communications', label: 'Communications' },
   { value: 'notes', label: 'Notes' },
-  { value: 'settings', label: 'Settings' },
 ]
 
 // ── Avatar upload / remove ────────────────────────────────────────
@@ -872,31 +1112,171 @@ async function submitEdit() {
 
             <!-- Communications -->
             <article v-else-if="activeTab === 'communications'" class="member-detail__card">
-              <CrmEmptyState
-                variant="empty"
-                title="No communications yet"
-                description="Emails, calls, and notes to this member will appear here once the Communications brief lands."
-              />
+              <header class="member-detail__card-head member-detail__card-head--stacked">
+                <div class="member-detail__card-head-main">
+                  <div class="member-detail__card-label">Email history</div>
+                  <div v-if="emailsFeed.length > 0" class="comms-counts">
+                    <span class="comms-counts__total">{{ emailCounts.total }} <span class="comms-counts__total-sub">sent</span></span>
+                    <span class="comms-counts__pip comms-counts__pip--ok"><span class="comms-counts__dot"></span>{{ emailCounts.delivered }} delivered</span>
+                    <span class="comms-counts__pip comms-counts__pip--engaged"><span class="comms-counts__dot"></span>{{ emailCounts.opened }} opened</span>
+                    <span class="comms-counts__pip comms-counts__pip--mute"><span class="comms-counts__dot"></span>{{ emailCounts.bounced }} bounced</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="btn btn--outline btn--sm"
+                  :disabled="!member.email"
+                  @click="sendEmail"
+                >
+                  Send email
+                </button>
+              </header>
+
+              <div v-if="commsLoading && emailsFeed.length === 0" class="member-detail__card-empty">
+                <CrmSkeleton shape="text" width="80%" height="14px" />
+                <CrmSkeleton shape="text" width="60%" height="14px" />
+                <CrmSkeleton shape="text" width="70%" height="14px" />
+              </div>
+              <div v-else-if="commsError" class="member-detail__card-empty">
+                <CrmEmptyState
+                  variant="error"
+                  title="Couldn't load communications"
+                  :description="commsError"
+                  action-label="Try again"
+                  @action="loadComms"
+                />
+              </div>
+              <div v-else-if="emailsFeed.length === 0" class="member-detail__card-empty">
+                <CrmEmptyState
+                  variant="empty"
+                  title="No emails sent yet"
+                  description="Emails sent via Send email or bulk send will appear here."
+                  :action-label="member.email ? 'Send an email' : null"
+                  @action="sendEmail"
+                />
+              </div>
+              <ul v-else class="comms-feed">
+                <li
+                  v-for="c in emailsFeed"
+                  :key="c.communication_id"
+                  class="comms-feed__item comms-feed__item--clickable"
+                  tabindex="0"
+                  @click="openEmail(c)"
+                  @keydown.enter="openEmail(c)"
+                >
+                  <div class="comms-feed__row">
+                    <span class="comms-feed__pill comms-feed__pill--email">Email</span>
+                    <span class="comms-feed__subject">{{ c.subject || '(no subject)' }}</span>
+                    <span class="comms-feed__chevron" aria-hidden="true">›</span>
+                  </div>
+                  <div class="comms-feed__meta">
+                    <span>{{ commsDate(c) }} · {{ commsTime(c.sent_at) }}</span>
+                    <template v-if="c.sent_by_name"><span>·</span><span>by {{ c.sent_by_name }}</span></template>
+                  </div>
+                  <div class="comms-feed__timeline">
+                    <span
+                      v-for="chip in emailTimeline(c)"
+                      :key="chip.key"
+                      class="comms-feed__chip"
+                      :class="`comms-feed__chip--${chip.tone}`"
+                    >
+                      <svg v-if="chip.tone === 'ok'" width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M13 4L6 11l-3-3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <svg v-else-if="chip.tone === 'engaged'" width="12" height="11" viewBox="0 0 16 12" fill="none" aria-hidden="true">
+                        <path d="M1 6s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.6"/>
+                        <circle cx="8" cy="6" r="2" fill="currentColor"/>
+                      </svg>
+                      <svg v-else-if="chip.tone === 'fail'" width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                      </svg>
+                      <span>{{ chip.label }}</span>
+                      <span v-if="chip.time" class="comms-feed__chip-time">{{ chip.time }}</span>
+                      <span v-if="chip.suffix" class="comms-feed__chip-suffix">· {{ chip.suffix }}</span>
+                    </span>
+                  </div>
+                </li>
+              </ul>
             </article>
 
             <!-- Notes -->
             <article v-else-if="activeTab === 'notes'" class="member-detail__card">
-              <CrmEmptyState
-                variant="empty"
-                title="No notes yet"
-                description="Log a call, meeting, or context so the next admin doesn't have to guess."
-                :action-label="callerCanEdit ? 'Log a note' : null"
-                @action="logNote"
-              />
-            </article>
+              <header class="member-detail__card-head">
+                <div class="member-detail__card-label">Notes</div>
+                <button
+                  v-if="callerCanEdit"
+                  type="button"
+                  class="btn btn--outline btn--sm"
+                  @click="logNote"
+                >
+                  Log a note
+                </button>
+              </header>
 
-            <!-- Settings -->
-            <article v-else-if="activeTab === 'settings'" class="member-detail__card">
-              <CrmEmptyState
-                variant="empty"
-                title="Settings coming next"
-                description="Role, title, and tier changes ship with the Communications sprint."
-              />
+              <div v-if="commsLoading && notesFeed.length === 0" class="member-detail__card-empty">
+                <CrmSkeleton shape="text" width="80%" height="14px" />
+                <CrmSkeleton shape="text" width="60%" height="14px" />
+                <CrmSkeleton shape="text" width="70%" height="14px" />
+              </div>
+              <div v-else-if="commsError" class="member-detail__card-empty">
+                <CrmEmptyState
+                  variant="error"
+                  title="Couldn't load notes"
+                  :description="commsError"
+                  action-label="Try again"
+                  @action="loadComms"
+                />
+              </div>
+              <div v-else-if="notesFeed.length === 0" class="member-detail__card-empty">
+                <CrmEmptyState
+                  variant="empty"
+                  title="No notes yet"
+                  description="Log a call, meeting, or context so the next admin doesn't have to guess."
+                  :action-label="callerCanEdit ? 'Log a note' : null"
+                  @action="logNote"
+                />
+              </div>
+              <ul v-else class="comms-feed">
+                <li v-for="c in notesFeed" :key="c.communication_id" class="comms-feed__item">
+                  <div class="comms-feed__row">
+                    <span class="comms-feed__pill comms-feed__pill--note">{{ noteTypeLabel(c.note_type) }}</span>
+                    <span class="comms-feed__meta">
+                      <span>{{ commsDate(c) }}</span>
+                      <template v-if="c.sent_by_name"><span>·</span><span>by {{ c.sent_by_name }}</span></template>
+                    </span>
+                    <div v-if="canEditNote(c)" class="comms-feed__actions">
+                      <button
+                        v-if="editingNoteId !== c.communication_id"
+                        type="button"
+                        class="comms-feed__action"
+                        @click="startEditNote(c)"
+                      >Edit</button>
+                      <button
+                        v-if="editingNoteId !== c.communication_id"
+                        type="button"
+                        class="comms-feed__action comms-feed__action--danger"
+                        @click="deleteNote(c)"
+                      >Delete</button>
+                    </div>
+                  </div>
+                  <template v-if="editingNoteId === c.communication_id">
+                    <textarea
+                      v-model="editNoteBody"
+                      class="comms-feed__textarea"
+                      rows="3"
+                      maxlength="4000"
+                      :disabled="editNoteSaving"
+                    />
+                    <div class="comms-feed__edit-actions">
+                      <button type="button" class="btn btn--outline btn--sm" :disabled="editNoteSaving" @click="cancelEditNote">Cancel</button>
+                      <button type="button" class="btn btn--primary btn--sm" :disabled="editNoteSaving" @click="saveEditNote(c)">
+                        {{ editNoteSaving ? 'Saving…' : 'Save' }}
+                      </button>
+                    </div>
+                  </template>
+                  <p v-else class="comms-feed__body">{{ c.body }}</p>
+                </li>
+              </ul>
             </article>
           </section>
 
@@ -1156,7 +1536,7 @@ async function submitEdit() {
       :club-id="clubStore.current?.id ?? null"
       :member="member"
       @close="logNoteOpen = false"
-      @saved="loadRoster"
+      @saved="onNoteSaved"
     />
 
     <SendEmailModal
@@ -1164,6 +1544,16 @@ async function submitEdit() {
       :club-id="clubStore.current?.id ?? null"
       :member="member"
       @close="sendEmailOpen = false"
+      @sent="onEmailSent"
+    />
+
+    <EmailDetailModal
+      :open="emailDetailOpen"
+      :club-id="clubStore.current?.id ?? null"
+      :user-id="memberId"
+      :batch-id="emailDetailBatchId"
+      :fallback="emailDetailFallback"
+      @close="closeEmailDetail"
     />
   </div>
 </template>
@@ -1303,6 +1693,51 @@ async function submitEdit() {
 .member-detail__view-all:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .member-detail__card-empty { padding: 8px 0; }
+
+/* Communications tab — stacked header with aggregate counts */
+.member-detail__card-head--stacked { align-items: flex-start; }
+.member-detail__card-head-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.comms-counts { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; font-family: var(--font-body); font-size: 12px; color: var(--color-fog); }
+.comms-counts__total { font-family: var(--font-display); font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: var(--color-ink); line-height: 1; }
+.comms-counts__total-sub { color: var(--color-mute); font-weight: 400; font-size: 14px; letter-spacing: 0; }
+.comms-counts__pip { display: inline-flex; align-items: center; gap: 6px; }
+.comms-counts__dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.comms-counts__pip--ok      { color: #2E5D3C; }
+.comms-counts__pip--engaged { color: #1E40AF; }
+.comms-counts__pip--mute    { color: var(--color-mute); }
+
+/* Communications + notes feed */
+.comms-feed { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; }
+.comms-feed__item { padding: 12px 14px; border: 1px solid var(--color-hairline); border-radius: 12px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
+.comms-feed__item--clickable { cursor: pointer; transition: border-color 0.12s ease, background 0.12s ease; }
+.comms-feed__item--clickable:hover,
+.comms-feed__item--clickable:focus-visible { border-color: var(--color-ink); outline: none; background: var(--color-surface); }
+.comms-feed__chevron { margin-left: auto; color: var(--color-mute); font-size: 18px; line-height: 1; }
+.comms-feed__timeline { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 4px; }
+.comms-feed__chip { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-body); font-size: 11px; font-weight: 600; }
+.comms-feed__chip--ok      { color: #14532D; }
+.comms-feed__chip--engaged { color: #1E40AF; }
+.comms-feed__chip--fail    { color: #991B1B; }
+.comms-feed__chip--pending { color: var(--color-mute); }
+.comms-feed__chip-time { font-family: var(--font-mono); font-weight: 500; letter-spacing: 0.02em; }
+.comms-feed__chip-suffix { color: var(--color-fog); font-weight: 500; }
+.comms-feed__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.comms-feed__pill { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.comms-feed__pill--note { background: var(--color-surface); color: var(--color-ink); border: 1px solid var(--color-hairline); }
+.comms-feed__pill--email { background: #EDE9FE; color: #5B21B6; }
+.comms-feed__subject { font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--color-ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comms-feed__status { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.comms-feed__status--ok { background: #DCFCE7; color: #14532D; }
+.comms-feed__status--fail { background: #FEE2E2; color: #991B1B; }
+.comms-feed__meta { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.comms-feed__actions { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
+.comms-feed__action { background: none; border: 0; color: var(--color-accent); font-family: var(--font-body); font-size: 12px; font-weight: 600; cursor: pointer; padding: 0; }
+.comms-feed__action:hover { text-decoration: underline; }
+.comms-feed__action--danger { color: #991B1B; }
+.comms-feed__body { font-family: var(--font-body); font-size: 14px; line-height: 1.5; color: var(--color-ink); margin: 0; white-space: pre-wrap; }
+.comms-feed__textarea { width: 100%; min-height: 90px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--color-hairline); background: #fff; font-family: var(--font-body); font-size: 14px; line-height: 1.5; color: var(--color-ink); resize: vertical; }
+.comms-feed__textarea:focus { outline: none; border-color: var(--color-ink); }
+.comms-feed__edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* Payment table */
 .pay-table { width: 100%; border-collapse: collapse; font-family: var(--font-body); font-size: 13px; }

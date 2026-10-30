@@ -710,7 +710,6 @@ const editError = ref<string | null>(null)
 const editForm = reactive({
   role: 'player' as 'admin' | 'committee' | 'player',
   title: '' as string,
-  notes: '' as string,
   typeId: null as number | null,
   positionGroup: 'member' as PositionGroup,
   publicVisible: true,
@@ -735,7 +734,6 @@ function _openEditMember() {
   }
   editForm.role = (m.apiRole === 'admin' || m.apiRole === 'committee' || m.apiRole === 'player') ? m.apiRole : 'player'
   editForm.title = m.title ?? ''
-  editForm.notes = m.notes ?? ''
   editForm.typeId = m.membershipTypeId ?? null
   editForm.positionGroup = m.positionGroup ?? 'member'
   editForm.publicVisible = m.publicVisible ?? true
@@ -758,7 +756,6 @@ async function submitEdit() {
     await membersApi.patchMember(cid, Number(m.id), {
       role: editForm.role,
       title: editForm.title.trim() || null,
-      notes: editForm.notes.trim() || null,
       membership_type_id: editForm.typeId,
       position_group: editForm.positionGroup,
       public_visible: editForm.publicVisible,
@@ -1453,12 +1450,6 @@ async function submit() {
           <span class="field__label">Public bio</span>
           <textarea v-model="editForm.bio" rows="4" maxlength="1000" placeholder="A short intro shown on this member's public player profile." />
           <span class="field__hint">Visible to anyone on the public site. Max 1000 characters.</span>
-        </label>
-
-        <label class="field">
-          <span class="field__label">Notes (admin-only)</span>
-          <textarea v-model="editForm.notes" rows="3" placeholder="e.g. Prefers cheque payments. Life member since 2018." />
-          <span class="field__hint">Not visible to the member — for club admins only.</span>
         </label>
 
         <p v-if="editError" class="add-error">{{ editError }}</p>

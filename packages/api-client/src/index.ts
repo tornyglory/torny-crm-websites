@@ -86,6 +86,22 @@ export type {
   PlayerHonourResponse,
 } from './resources/honour-board'
 export * as communications from './resources/communications'
+export type {
+  CommunicationChannel,
+  NoteType,
+  EmailStatus,
+  CommunicationStatus,
+  MemberCommunication,
+  MemberCommunicationsCounts,
+  MemberCommunicationsResponse,
+  LogNoteInput,
+  PatchCommunicationInput,
+  BatchSender,
+  BatchRecipient,
+  BatchCounts,
+  BatchDetail,
+  GetBatchParams,
+} from './resources/communications'
 export * as devices from './resources/devices'
 export * as clubs from './resources/clubs'
 export type {

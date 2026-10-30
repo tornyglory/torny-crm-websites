@@ -2,14 +2,17 @@
 /**
  * LogNoteModal — admin-only timestamped note on a member.
  *
- * Backend reality: `members.notes` is a single free-text field, not an
- * activity log. Each saved entry appends to that string with a date +
- * type prefix so the Notes tab can show a readable history. Once the
- * Communications brief lands with a real activity log, swap the save
- * path and keep the UI.
+ * Writes to the member_communications table via
+ * POST /clubs/{cid}/members/{uid}/communications with channel='note'.
+ * The Notes tab reads the same table filtered to channel='note'.
  */
 import { nextTick, reactive, ref, watch } from 'vue'
-import { members as membersApi, ApiError, type RosterMember } from '@torny/api-client'
+import {
+  communications as communicationsApi,
+  ApiError,
+  type RosterMember,
+  type NoteType,
+} from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import { useToast } from '@/composables/useToast'
 
@@ -26,13 +29,12 @@ const emit = defineEmits<{
 
 const toast = useToast()
 
-type NoteType = 'call' | 'meeting' | 'visit' | 'text' | 'general'
 const TYPES: { value: NoteType; label: string }[] = [
-  { value: 'call',    label: 'Call' },
-  { value: 'meeting', label: 'Meeting' },
-  { value: 'visit',   label: 'Visit' },
-  { value: 'text',    label: 'Text / WhatsApp' },
-  { value: 'general', label: 'General' },
+  { value: 'call',          label: 'Call' },
+  { value: 'meeting',       label: 'Meeting' },
+  { value: 'visit',         label: 'Visit' },
+  { value: 'text_whatsapp', label: 'Text / WhatsApp' },
+  { value: 'general',       label: 'General' },
 ]
 
 const state = reactive({ type: 'call' as NoteType, body: '' })
@@ -58,14 +60,12 @@ const TODAY_FMT = new Intl.DateTimeFormat(undefined, {
 })
 const todayLabel = TODAY_FMT.format(new Date())
 
-function typeLabel(value: NoteType): string {
-  return TYPES.find((t) => t.value === value)?.label ?? 'General'
-}
-
-function formatEntry(): string {
-  const body = state.body.trim()
-  if (!body) return ''
-  return `${todayLabel} · ${typeLabel(state.type)} · ${body}`
+function todayIso(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 async function save() {
@@ -73,16 +73,19 @@ async function save() {
   const member = props.member
   const cid = props.clubId
   if (!member || cid == null) return
-  const entry = formatEntry()
-  if (!entry) {
+  const body = state.body.trim()
+  if (!body) {
     toast.info('Add a note before saving.')
     return
   }
-  const prior = (member.notes ?? '').trim()
-  const next = prior ? `${prior}\n\n${entry}` : entry
   saving.value = true
   try {
-    await membersApi.patchMember(cid, member.user_id, { notes: next })
+    await communicationsApi.logNote(cid, member.user_id, {
+      channel: 'note',
+      note_type: state.type,
+      body,
+      occurred_at: todayIso(),
+    })
     toast.success('Note saved.')
     emit('saved')
     emit('close')

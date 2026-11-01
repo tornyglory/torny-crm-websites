@@ -6,36 +6,68 @@
 
 export type CampaignStatus = 'sent' | 'scheduled' | 'draft'
 
+/** Per-link breakdown — mirrors brief 70 §1a `links[]`. */
 export interface CampaignLink {
   url: string
   clicks: number
+  unique_clickers: number
+  ctr: number       // 0..1, delivered-base
 }
+
+/** Mirrors brief 67 BatchRecipient. */
+export type RecipientStatus =
+  | 'clicked'
+  | 'opened'
+  | 'delivered'
+  | 'bounced'
+  | 'unsubscribed'
+  | 'complained'
+  | 'suppressed'
 
 export interface CampaignRecipient {
   user_id: number
   name: string
   email: string
   initials: string
-  avatar_tone: 'ink' | 'graphite' | 'fog'
-  status: 'clicked' | 'opened' | 'delivered' | 'bounced' | 'unsubscribed'
-  last_activity_label: string
-  last_activity_detail: string
-  clicks: number
+  avatar_tone: 'ink' | 'graphite' | 'fog' | 'violet'
+  status: RecipientStatus
+  // Short-form timestamps for the detail-page table (hero design).
+  delivered_label: string | null   // '7:02a' or null
+  opened_label: string | null      // '7:14a' or null
+  opened_count: number
+  clicked_label: string | null     // '7:11a' or null
+  clicked_count: number
+  // Legacy fields kept for the mock index page compatibility.
+  last_activity_label?: string
+  last_activity_detail?: string
+  clicks?: number
+}
+
+/** Mirrors brief 70 §1a `analytics` block. */
+export interface CampaignAnalytics {
+  first_open_at_label: string | null         // '7:08a (6m)'
+  peak_hour_label: string | null             // '7–8a (72 opens)'
+  avg_opens_per_opened: number | null
+  delivered_not_opened: number
 }
 
 export interface Campaign {
   id: string
   subject: string
   status: CampaignStatus
+  flavor_label?: string          // 'Broadcast'
   audience_label: string
   audience_count: number
   author_name: string
   author_initials: string
+  reply_to?: string
+  sender_email?: string
   // Sent fields — present for 'sent'; 'scheduled' uses sent_label as the
   // future send time; 'draft' leaves them undefined.
   sent_at_label?: string
   sent_at_relative?: string
   sent_at_time?: string
+  sent_at_date?: string          // '30 Oct · 7:02a'
   // Metrics — only populated for 'sent'.
   delivered?: number
   opens?: number
@@ -44,101 +76,163 @@ export interface Campaign {
   click_rate?: number
   bounces?: number
   unsubscribes?: number
+  suppressed?: number
   // Content preview + per-link breakdown for the detail page.
   body_lines?: string[]
   cta_label?: string
   links?: CampaignLink[]
-  device_split?: { mobile: number; desktop: number; tablet: number }
   recipients?: CampaignRecipient[]
+  analytics?: CampaignAnalytics
+  archived_at?: string | null
 }
 
 export const CAMPAIGNS: Campaign[] = [
   {
     id: 'season-kick-off',
-    subject: 'Season kick-off — Saturday',
+    subject: 'Season kick-off — Saturday 7 November · roll-up + sausage sizzle',
     status: 'sent',
-    audience_label: 'All members',
+    flavor_label: 'Broadcast',
+    audience_label: 'All active members',
     audience_count: 142,
     author_name: 'Grace Whittaker',
     author_initials: 'GW',
-    sent_at_label: '18 Oct',
-    sent_at_relative: '4 days ago',
-    sent_at_time: 'Fri 18 Oct 2026 at 7:12am',
-    delivered: 142,
+    reply_to: 'grace@naenaebowls.nz',
+    sender_email: 'hello@naenaebowls.nz',
+    sent_at_label: '30 Oct',
+    sent_at_relative: 'today',
+    sent_at_time: 'Fri 30 Oct 2026 at 7:02am',
+    sent_at_date: '30 Oct · 7:02a',
+    delivered: 140,
     opens: 111,
     open_rate: 78,
     clicks: 46,
     click_rate: 32,
-    bounces: 0,
+    bounces: 2,
     unsubscribes: 1,
+    suppressed: 8,
     body_lines: [
-      'Hi Sarah,',
-      'The green is officially open from **10am this Saturday**. Grace will be running the sausage sizzle; bring your own rink wipes.',
-      'See you on the greens,',
+      'Kia ora Grace,',
+      'Mark your calendar — the greens open **Saturday 7 November from 10am**. Roll-up + sausage sizzle, bring a plate.',
+      'Hope to see you there,',
       'Grace',
     ],
-    cta_label: 'RSVP for Saturday →',
+    cta_label: 'RSVP on the member site',
     links: [
-      { url: 'naenaebowls.nz/calendar/open-day', clicks: 28 },
-      { url: 'naenaebowls.nz/rsvp/kick-off', clicks: 12 },
-      { url: 'naenaebowls.nz/pay', clicks: 6 },
+      { url: 'naenaebowls.nz/signin', clicks: 31, unique_clickers: 24, ctr: 0.171 },
+      { url: 'naenaebowls.nz/events/twilight-triples', clicks: 12, unique_clickers: 11, ctr: 0.079 },
+      { url: 'goo.gl/maps/clubroom', clicks: 3, unique_clickers: 3, ctr: 0.021 },
     ],
-    device_split: { mobile: 62, desktop: 30, tablet: 8 },
+    analytics: {
+      first_open_at_label: '7:08a (6m)',
+      peak_hour_label: '7–8a (72 opens)',
+      avg_opens_per_opened: 2.1,
+      delivered_not_opened: 20,
+    },
+    archived_at: null,
     recipients: [
       {
         user_id: 1,
-        name: 'Sarah Chen',
-        email: 'sarah.chen@gmail.com',
-        initials: 'SC',
-        avatar_tone: 'ink',
+        name: 'Grace Whittaker',
+        email: 'grace.whittaker@gmail.com',
+        initials: 'GW',
+        avatar_tone: 'violet',
         status: 'clicked',
-        last_activity_label: 'Fri 18 Oct · 8:42am',
-        last_activity_detail: 'clicked 2 links',
-        clicks: 2,
+        delivered_label: '7:02a',
+        opened_label: '7:08a',
+        opened_count: 3,
+        clicked_label: '7:11a',
+        clicked_count: 2,
       },
       {
         user_id: 2,
-        name: 'Nev Rodda',
-        email: 'nev@qubestudio.co.nz',
-        initials: 'NR',
-        avatar_tone: 'graphite',
+        name: 'Rangi Paora',
+        email: 'rangi.paora@xtra.co.nz',
+        initials: 'RP',
+        avatar_tone: 'fog',
         status: 'opened',
-        last_activity_label: 'Fri 18 Oct · 7:14am',
-        last_activity_detail: 'opened 3× on iPhone',
-        clicks: 0,
+        delivered_label: '7:02a',
+        opened_label: '7:14a',
+        opened_count: 1,
+        clicked_label: null,
+        clicked_count: 0,
       },
       {
         user_id: 3,
-        name: 'Frances Roydon-Miller',
-        email: 'frances.rm@xtra.co.nz',
-        initials: 'FR',
-        avatar_tone: 'ink',
-        status: 'clicked',
-        last_activity_label: 'Fri 18 Oct · 9:02am',
-        last_activity_detail: 'clicked /calendar',
-        clicks: 1,
+        name: 'Mike Harrington',
+        email: 'm.harrington@outlook.com',
+        initials: 'MH',
+        avatar_tone: 'fog',
+        status: 'delivered',
+        delivered_label: '7:02a',
+        opened_label: null,
+        opened_count: 0,
+        clicked_label: null,
+        clicked_count: 0,
       },
       {
         user_id: 4,
-        name: 'Keith Thorburn',
-        email: 'keith@thorburn.co.nz',
-        initials: 'KT',
+        name: 'Barbara Tipene',
+        email: 'b.tipene@hotmail.com',
+        initials: 'BT',
         avatar_tone: 'fog',
-        status: 'delivered',
-        last_activity_label: 'Fri 18 Oct · 7:13am',
-        last_activity_detail: 'not opened yet',
-        clicks: 0,
+        status: 'bounced',
+        delivered_label: null,
+        opened_label: null,
+        opened_count: 0,
+        clicked_label: null,
+        clicked_count: 0,
       },
       {
         user_id: 5,
-        name: 'Anika Patel',
-        email: 'anika.p@gmail.com',
-        initials: 'AP',
+        name: 'Alan McKenzie',
+        email: 'alan.mck@gmail.com',
+        initials: 'AM',
         avatar_tone: 'fog',
         status: 'unsubscribed',
-        last_activity_label: 'Fri 18 Oct · 11:08am',
-        last_activity_detail: 'opted out of broadcasts',
-        clicks: 0,
+        delivered_label: '7:02a',
+        opened_label: '7:40a',
+        opened_count: 1,
+        clicked_label: null,
+        clicked_count: 0,
+      },
+      {
+        user_id: 6,
+        name: 'Sarah Chen',
+        email: 'sarah.chen@gmail.com',
+        initials: 'SC',
+        avatar_tone: 'violet',
+        status: 'clicked',
+        delivered_label: '7:02a',
+        opened_label: '8:42a',
+        opened_count: 2,
+        clicked_label: '8:44a',
+        clicked_count: 2,
+      },
+      {
+        user_id: 7,
+        name: 'Nev Rodda',
+        email: 'nev@qubestudio.co.nz',
+        initials: 'NR',
+        avatar_tone: 'fog',
+        status: 'opened',
+        delivered_label: '7:02a',
+        opened_label: '7:19a',
+        opened_count: 3,
+        clicked_label: null,
+        clicked_count: 0,
+      },
+      {
+        user_id: 8,
+        name: 'Frances Roydon-Miller',
+        email: 'frances.rm@xtra.co.nz',
+        initials: 'FR',
+        avatar_tone: 'violet',
+        status: 'clicked',
+        delivered_label: '7:02a',
+        opened_label: '9:02a',
+        opened_count: 1,
+        clicked_label: '9:04a',
+        clicked_count: 1,
       },
     ],
   },

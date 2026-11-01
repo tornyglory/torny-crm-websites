@@ -93,6 +93,29 @@ export type {
   PlayerHonourClub,
   PlayerHonourResponse,
 } from './resources/honour-board'
+export * as campaigns from './resources/campaigns'
+export type {
+  CampaignStatus,
+  CampaignSort,
+  CampaignMetricsWindow,
+  CampaignAuthor,
+  CampaignMetrics,
+  CampaignRow,
+  CampaignsCountsByStatus,
+  CampaignsListResponse,
+  CampaignsMetricsAggregate,
+  CampaignsMetricsDeltas,
+  CampaignsMetricsResponse,
+  ListCampaignsParams,
+  MetricsParams,
+  CampaignRecipient,
+  CampaignAnalytics,
+  CampaignLink,
+  CampaignDetail,
+  ResendUnopenedResult,
+  ArchiveResult,
+  ResendUnopenedInput,
+} from './resources/campaigns'
 export * as communications from './resources/communications'
 export type {
   CommunicationChannel,
@@ -120,7 +143,17 @@ export * as directory from './resources/directory'
 export type { DirectoryClub, ClubSearchParams, ClubSearchResult } from './resources/directory'
 export * as auth from './resources/auth'
 export { AuthError } from './resources/auth'
-export type { AuthUser, LoginResponse, RegisterInput, Role, UserClub } from './resources/auth'
+export type {
+  AuthUser,
+  LoginResponse,
+  RegisterInput,
+  Role,
+  UserClub,
+  UpdateMeInput,
+  EmailChangeRequestResult,
+  PasswordChangeInput,
+  PasswordChangeResult,
+} from './resources/auth'
 export * as notifications from './resources/notifications'
 export type {
   NotificationKind,

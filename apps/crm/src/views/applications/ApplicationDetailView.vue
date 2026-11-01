@@ -17,7 +17,6 @@ import {
   type ApplicationDetail,
   type ApplicationStatus,
   type RejectReason,
-  type Resolution,
   type Season,
 } from '@torny/api-client'
 
@@ -132,16 +131,12 @@ const approveSubmitting = ref(false)
 const seasonsList = ref<Season[]>([])
 const seasonsLoading = ref(false)
 const approveForm = ref<{
-  resolution: Resolution
-  assigned_number: string
   send_welcome_email: boolean
   season_id: number | null
   customize_email: boolean
   welcome_subject: string
   welcome_message: string
 }>({
-  resolution: 'auto',
-  assigned_number: '',
   send_welcome_email: true,
   season_id: null,
   customize_email: false,
@@ -174,8 +169,6 @@ const selectedSeason = computed<Season | null>(() =>
 
 function openApprove() {
   approveForm.value = {
-    resolution: 'auto',
-    assigned_number: '',
     send_welcome_email: true,
     season_id: null,
     customize_email: false,
@@ -191,12 +184,6 @@ async function submitApprove() {
   if (typeof cid !== 'number' || !detail.value) return
   approveSubmitting.value = true
   try {
-    const num = approveForm.value.assigned_number.trim()
-    const parsedNum = num ? Number(num) : null
-    if (num && (parsedNum == null || Number.isNaN(parsedNum))) {
-      toast.error('Membership number needs to be a number, or leave it blank.')
-      return
-    }
     const customSubject = approveForm.value.customize_email
       ? approveForm.value.welcome_subject.trim()
       : ''
@@ -213,8 +200,8 @@ async function submitApprove() {
           }
         : null
     await applicationsApi.approve(cid, detail.value.id, {
-      resolution: approveForm.value.resolution,
-      assigned_number: parsedNum ?? null,
+      resolution: 'auto',
+      assigned_number: null,
       send_welcome_email: approveForm.value.send_welcome_email,
       season_id: approveForm.value.season_id ?? null,
       welcome_email: welcomeOverride,
@@ -517,20 +504,6 @@ async function submitReject() {
           </p>
         </label>
 
-        <label class="field">
-          <span class="field__label">Resolution</span>
-          <select v-model="approveForm.resolution">
-            <option value="auto">Auto — link if email matches, otherwise invite</option>
-            <option value="invite">Invite by email</option>
-            <option value="stub">Create stub (no email match)</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span class="field__label">Membership number (optional)</span>
-          <input v-model="approveForm.assigned_number" type="text" inputmode="numeric" placeholder="Leave blank to auto-assign" />
-        </label>
-
         <label class="switch-row">
           <div>
             <div class="switch-row__label">Send welcome email</div>
@@ -566,7 +539,7 @@ async function submitReject() {
               <span class="email-preview__val">
                 Hi {{ detail.preferred_name ?? detail.full_name.split(' ')[0] }} — your application for the
                 <strong>{{ detail.tier_name ?? 'club' }}</strong> tier has been approved.
-                <template v-if="approveForm.resolution === 'invite' || (approveForm.resolution === 'auto' && !detail.linked_user_id)">
+                <template v-if="!detail.linked_user_id">
                   Click the sign-in link to finish setting up your account…
                 </template>
                 <template v-else>

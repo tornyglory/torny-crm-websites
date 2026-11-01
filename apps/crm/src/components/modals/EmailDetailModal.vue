@@ -35,8 +35,11 @@ const props = defineProps<{
     delivered_at: string | null
     opened_at: string | null
     open_count: number | null
+    clicked_at: string | null
+    click_count: number | null
     bounced_at: string | null
     complained_at: string | null
+    unsubscribed_at: string | null
   } | null
 }>()
 
@@ -121,6 +124,24 @@ function buildTimeline(row: BatchRecipient | null, fallback: typeof props.fallba
       time: fmtTime(r.opened_at),
       tone: 'engaged',
       suffix: count > 1 ? `${count}×` : undefined,
+    })
+  }
+  if (r.clicked_at) {
+    const count = (row?.click_count ?? fallback?.click_count ?? 0) as number
+    chips.push({
+      key: 'clicked',
+      label: 'Clicked',
+      time: fmtTime(r.clicked_at),
+      tone: 'engaged',
+      suffix: count > 1 ? `${count}×` : undefined,
+    })
+  }
+  if (r.unsubscribed_at) {
+    chips.push({
+      key: 'unsubscribed',
+      label: 'Unsubscribed',
+      time: fmtTime(r.unsubscribed_at),
+      tone: 'fail',
     })
   }
   if (r.bounced_at || status === 'bounced') {

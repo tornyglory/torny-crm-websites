@@ -18,16 +18,19 @@ export type CommunicationChannel = 'note' | 'email' | 'call'
 export type NoteType = 'call' | 'meeting' | 'visit' | 'text_whatsapp' | 'general'
 
 /** Note rows carry `status='logged'`. Email rows walk the SES timeline:
- *  sent → delivered → opened. bounced / complained block upgrade to opened. */
+ *  sent → delivered → opened → clicked. bounced / complained / unsubscribed
+ *  block upgrade. */
 export type EmailStatus =
   | 'queued'
   | 'sent'
   | 'delivered'
   | 'opened'
+  | 'clicked'
   | 'bounced'
   | 'complained'
   | 'failed'
   | 'suppressed'
+  | 'unsubscribed'
 
 /** Union of email status + the `'logged'` sentinel used on note rows. */
 export type CommunicationStatus = EmailStatus | 'logged'
@@ -61,8 +64,16 @@ export interface MemberCommunication {
   delivered_at: string | null
   opened_at: string | null
   open_count: number
+  /** First-click timestamp. Later clicks grow click_count but leave this
+   *  frozen (brief 69 §3b). Null on notes + emails that haven't been
+   *  clicked yet. */
+  clicked_at: string | null
+  click_count: number
   bounced_at: string | null
   complained_at: string | null
+  /** Set when the recipient has opted out via the public unsubscribe
+   *  link. Future broadcasts to this address will be suppressed. */
+  unsubscribed_at: string | null
   provider_message_id: string | null
 }
 
@@ -79,10 +90,12 @@ export interface MemberCommunicationsCounts {
   total: number
   delivered: number
   opened: number
+  clicked: number
   bounced: number
   complained: number
   failed: number
   queued: number
+  unsubscribed: number
 }
 
 export interface MemberCommunicationsResponse {
@@ -112,8 +125,11 @@ export interface BatchRecipient {
   delivered_at: string | null
   opened_at: string | null
   open_count: number
+  clicked_at: string | null
+  click_count: number
   bounced_at: string | null
   complained_at: string | null
+  unsubscribed_at: string | null
 }
 
 export interface BatchCounts {
@@ -122,9 +138,26 @@ export interface BatchCounts {
   failed: number
   delivered: number
   opened: number
+  clicked: number
   bounced: number
   complained: number
   suppressed: number
+  unsubscribed: number
+}
+
+// ── Brief 70 additions (not yet shipped on the backend) ──────────
+export interface BatchAnalytics {
+  first_open_at: string | null
+  peak_open_hour: { hour: string; opens: number } | null
+  avg_opens_per_opened: number | null
+  delivered_not_opened: number
+}
+
+export interface BatchLink {
+  url: string
+  clicks: number
+  unique_clickers: number
+  ctr: number
 }
 
 export interface BatchDetail {
@@ -146,6 +179,12 @@ export interface BatchDetail {
   your_row: BatchRecipient | null
   recipients: BatchRecipient[]
   pagination: { limit: number; offset: number; returned: number }
+  // ── Brief 70 (optional until shipped) ──────────────────────────
+  audience_label?: string
+  sent_at?: string
+  archived_at?: string | null
+  analytics?: BatchAnalytics
+  links?: BatchLink[]
 }
 
 export interface GetBatchParams {

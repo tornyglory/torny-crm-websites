@@ -37,7 +37,7 @@ function close() {
 
 function goProfile() {
   close()
-  router.push({ name: 'settings' })
+  router.push({ name: 'account' })
 }
 function goSettings() {
   close()

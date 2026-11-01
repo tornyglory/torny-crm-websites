@@ -139,3 +139,103 @@ export async function resetPassword(
   })
   if (!res.ok) await throwOnError(res)
 }
+
+// ── Account self-service — backend brief 71 ───────────────────────
+// Signed-in user editing their own account. All endpoints under /me on
+// SAM_BASE. Until brief 71 ships these will 404 — callers catch and
+// surface a "coming soon" message.
+
+import { SAM_BASE } from '../config'
+import { authedFetch } from '../http'
+
+interface SuccessEnvelope<T> {
+  status: 'success'
+  data: T
+}
+
+export interface UpdateMeInput {
+  /** Full display name. Trimmed, 1–120 chars. */
+  name?: string
+  /** Media host URL, or `null` to clear. */
+  avatar_url?: string | null
+}
+
+/** PATCH /me — change name + avatar. */
+export async function patchMe(
+  input: UpdateMeInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<AuthUser> {
+  const res = await authedFetch<SuccessEnvelope<{ user: AuthUser }>>(
+    `${SAM_BASE}/me`,
+    { method: 'PATCH', body: JSON.stringify(input), signal: opts.signal },
+  )
+  return res.data.user
+}
+
+export interface EmailChangeRequestResult {
+  pending_email: string
+  expires_at: string
+  notice_sent_to_old: boolean
+}
+
+/** POST /me/email-change — kick off a double-opt-in email change. */
+export async function requestEmailChange(
+  newEmail: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<EmailChangeRequestResult> {
+  const res = await authedFetch<SuccessEnvelope<EmailChangeRequestResult>>(
+    `${SAM_BASE}/me/email-change`,
+    { method: 'POST', body: JSON.stringify({ new_email: newEmail }), signal: opts.signal },
+  )
+  return res.data
+}
+
+/** POST /me/email-change/confirm — public, no auth. */
+export async function confirmEmailChange(
+  token: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<{ email: string; confirmed_at: string }> {
+  const res = await fetch(`${SAM_BASE}/me/email-change/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+    signal: opts.signal,
+  })
+  const body = await readJson<AuthErrorBody & { data?: { email: string; confirmed_at: string } }>(res)
+  if (!res.ok || body.status === 'error' || !body.data) {
+    throw new AuthError(res.status, body.message ?? 'Confirmation failed', body.code)
+  }
+  return body.data
+}
+
+/** POST /me/email-change/cancel — abort pending change. */
+export async function cancelEmailChange(
+  opts: { signal?: AbortSignal } = {},
+): Promise<void> {
+  await authedFetch<SuccessEnvelope<{ cancelled: boolean }>>(
+    `${SAM_BASE}/me/email-change/cancel`,
+    { method: 'POST', signal: opts.signal },
+  )
+}
+
+export interface PasswordChangeInput {
+  current_password: string
+  new_password: string
+}
+
+export interface PasswordChangeResult {
+  changed_at: string
+  other_sessions_revoked: number
+}
+
+/** POST /me/password-change — rotate password while signed in. */
+export async function changePassword(
+  input: PasswordChangeInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<PasswordChangeResult> {
+  const res = await authedFetch<SuccessEnvelope<PasswordChangeResult>>(
+    `${SAM_BASE}/me/password-change`,
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+  )
+  return res.data
+}

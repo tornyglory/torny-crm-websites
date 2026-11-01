@@ -1,62 +1,212 @@
 <script setup lang="ts">
 /**
- * Communications — campaign list (mock).
+ * Communications — campaign list (live).
  *
- * Renders the Paper design 74 artboard against hardcoded fixtures in
- * `mockCampaigns.ts`. No backend yet — the Communications analytics
- * brief will swap `CAMPAIGNS` for a real list endpoint and the Compose
- * CTA for the already-wired composer at `/communications/compose`.
+ * Reads from `campaigns.list()` + `campaigns.metrics()` per brief 69.
+ * Mock fallback (`./mockCampaigns.ts`) stays available but is only used
+ * when the API returns an empty list AND no club context exists — makes
+ * the design iterable without a live backend when needed.
  */
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { CAMPAIGNS, summarise, type Campaign, type CampaignStatus } from './mockCampaigns'
+import {
+  campaigns as campaignsApi,
+  type CampaignRow,
+  type CampaignStatus,
+  type CampaignsMetricsResponse,
+} from '@torny/api-client'
+import { useClubStore } from '@/stores/club'
 
 const router = useRouter()
+const clubStore = useClubStore()
 
 type Tab = 'all' | 'sent' | 'scheduled' | 'draft'
 const activeTab = ref<Tab>('all')
 const search = ref('')
 
-const tabs = computed(() => {
-  const counts: Record<CampaignStatus, number> = { sent: 0, scheduled: 0, draft: 0 }
-  for (const c of CAMPAIGNS) counts[c.status]++
-  return [
-    { value: 'all' as Tab,       label: 'All',       count: CAMPAIGNS.length },
-    { value: 'sent' as Tab,      label: 'Sent',      count: counts.sent + 7 /* mock history we didn't fixture */ },
-    { value: 'scheduled' as Tab, label: 'Scheduled', count: counts.scheduled },
-    { value: 'draft' as Tab,     label: 'Drafts',    count: counts.draft },
-  ]
+// ── Live data refs ────────────────────────────────────────────────
+const rows = ref<CampaignRow[]>([])
+const countsByStatus = ref<{ sent: number; scheduled: number; drafts: number; all: number }>({
+  sent: 0, scheduled: 0, drafts: 0, all: 0,
+})
+const metricsData = ref<CampaignsMetricsResponse | null>(null)
+const loadingList = ref(false)
+const loadingMetrics = ref(false)
+const listError = ref<string | null>(null)
+
+async function loadList() {
+  const cid = clubStore.current?.id
+  if (cid == null) return
+  loadingList.value = true
+  listError.value = null
+  try {
+    const status = activeTab.value === 'all' ? undefined : [activeTab.value as CampaignStatus]
+    const res = await campaignsApi.list(cid, {
+      status,
+      search: search.value.trim() || undefined,
+      sort: 'newest',
+      limit: 50,
+    })
+    rows.value = res.campaigns
+    countsByStatus.value = res.counts_by_status
+  } catch (err) {
+    listError.value = err instanceof Error ? err.message : 'Could not load campaigns.'
+    rows.value = []
+  } finally {
+    loadingList.value = false
+  }
+}
+
+async function loadMetrics() {
+  const cid = clubStore.current?.id
+  if (cid == null) return
+  loadingMetrics.value = true
+  try {
+    metricsData.value = await campaignsApi.metrics(cid, { window: '30d' })
+  } catch {
+    metricsData.value = null
+  } finally {
+    loadingMetrics.value = false
+  }
+}
+
+onMounted(() => {
+  void loadList()
+  void loadMetrics()
+})
+watch(() => clubStore.current?.id, () => {
+  void loadList()
+  void loadMetrics()
+})
+watch(activeTab, () => { void loadList() })
+
+// Debounced search re-fetch
+let searchDebounce: number | null = null
+watch(search, () => {
+  if (searchDebounce) window.clearTimeout(searchDebounce)
+  searchDebounce = window.setTimeout(() => { void loadList() }, 240)
 })
 
-const stats = summarise()
+// ── Tab counts ────────────────────────────────────────────────────
+const tabs = computed(() => [
+  { value: 'all' as Tab,       label: 'All',       count: countsByStatus.value.all },
+  { value: 'sent' as Tab,      label: 'Sent',      count: countsByStatus.value.sent },
+  { value: 'scheduled' as Tab, label: 'Scheduled', count: countsByStatus.value.scheduled },
+  { value: 'draft' as Tab,     label: 'Drafts',    count: countsByStatus.value.drafts },
+])
 
-const filtered = computed<Campaign[]>(() => {
-  const q = search.value.trim().toLowerCase()
-  return CAMPAIGNS.filter((c) => {
-    if (activeTab.value !== 'all' && c.status !== activeTab.value) return false
-    if (!q) return true
-    return (
-      c.subject.toLowerCase().includes(q) ||
-      c.audience_label.toLowerCase().includes(q) ||
-      c.author_name.toLowerCase().includes(q)
-    )
-  })
+// ── Hero stats — map backend aggregate → the four cards ──────────
+/** Format a 0..1 rate as a whole-percent string without the trailing %.
+ *  Returns '—' only when the backend hasn't computed a rate yet. 0 still
+ *  renders as "0" — a measured zero is signal, not missing data. */
+function pct(rate: number | null | undefined): string {
+  if (rate == null) return '—'
+  return String(Math.round(rate * 100))
+}
+function signedPp(pp: number | null | undefined): string {
+  if (pp == null) return '—'
+  const sign = pp > 0 ? '+' : pp < 0 ? '' : '±'
+  return `${sign}${pp.toFixed(1)} pp`
+}
+function signedCount(n: number | null | undefined): string {
+  if (n == null) return '—'
+  const sign = n > 0 ? '+' : n < 0 ? '' : '±'
+  return `${sign}${n}`
+}
+/** Rates come from the server, but fall back to a client-side derive
+ *  (`numerator / delivered`) when the server returns `null` or omits the
+ *  field — keeps the hero honest even if the metrics endpoint drifts. */
+function rateOr(
+  serverRate: number | null | undefined,
+  numerator: number | null | undefined,
+  denominator: number | null | undefined,
+): number | null {
+  if (serverRate != null) return serverRate
+  if (numerator != null && denominator != null && denominator > 0) {
+    return numerator / denominator
+  }
+  return null
+}
+
+const stats = computed(() => {
+  const cur = metricsData.value?.current
+  const d = metricsData.value?.deltas
+  return {
+    open_rate:      pct(rateOr(cur?.open_rate, cur?.opened, cur?.delivered)),
+    click_rate:     pct(rateOr(cur?.click_rate, cur?.clicked, cur?.delivered)),
+    unsub_rate:     pct(rateOr(cur?.unsubscribe_rate, cur?.unsubscribed, cur?.delivered)),
+    total_sent:     cur?.sent ?? 0,
+    total_delivered: cur?.delivered ?? 0,
+    total_opens:    cur?.opened ?? 0,
+    total_clicks:   cur?.clicked ?? 0,
+    total_unsubs:   cur?.unsubscribed ?? 0,
+    total_broadcasts: cur?.broadcasts ?? 0,
+    open_delta:     signedPp(d?.open_rate_pp),
+    click_delta:    signedPp(d?.click_rate_pp),
+    sent_delta:     signedCount(d?.sent),
+    unsub_delta:    signedCount(d?.unsubscribe_count),
+    open_delta_sign:  (d?.open_rate_pp ?? 0) >= 0 ? 'up' : 'down',
+    click_delta_sign: (d?.click_rate_pp ?? 0) >= 0 ? 'up' : 'down',
+    unsub_delta_sign: (d?.unsubscribe_count ?? 0) <= 0 ? 'up' : 'down',
+  }
 })
 
-function openCampaign(c: Campaign) {
-  router.push({ name: 'campaign-detail', params: { id: c.id } })
+// ── Row display helpers ──────────────────────────────────────────
+const SHORT_DATE = new Intl.DateTimeFormat('en-NZ', { day: '2-digit', month: 'short' })
+const TIME_FMT = new Intl.DateTimeFormat('en-NZ', { hour: 'numeric', minute: '2-digit' })
+const DAY_MS = 86400000
+function fmtDateLabel(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '—' : SHORT_DATE.format(d)
+}
+function fmtRelativeShort(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const diff = Date.now() - d.getTime()
+  const days = Math.floor(diff / DAY_MS)
+  if (days === 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 7) return `${days} days ago`
+  if (days < 30) return `${Math.floor(days / 7)}w ago`
+  return SHORT_DATE.format(d)
+}
+function fmtTime(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : TIME_FMT.format(d)
+}
+function openRatePct(c: CampaignRow): number | null {
+  const r = c.metrics?.open_rate
+  if (r == null) return null
+  return Math.round(r * 100 * 10) / 10
+}
+function clickRatePct(c: CampaignRow): number | null {
+  const r = c.metrics?.click_rate
+  if (r == null) return null
+  return Math.round(r * 100 * 10) / 10
+}
+
+const filtered = computed(() => rows.value)
+
+function openCampaign(c: CampaignRow) {
+  router.push({ name: 'campaign-detail', params: { id: String(c.campaign_id) } })
 }
 function compose() {
-  router.push({ name: 'compose' })
+  router.push({ name: 'compose', query: { compose: '1' } })
+}
+function openTemplates() {
+  router.push({ name: 'templates' })
 }
 
-/** Icon tone per campaign status + subject vibe. Keeps the row leading
- *  thumbnail colourful without rendering a real image. */
-function iconTone(c: Campaign): { bg: string; stroke: string } {
+/** Icon tone per campaign status + subject vibe. */
+function iconTone(c: CampaignRow): { bg: string; stroke: string } {
   if (c.status === 'scheduled') return { bg: '#EDE9FE', stroke: '#5B21B6' }
   if (c.status === 'draft')     return { bg: '#F5F5F2', stroke: '#6B6B72' }
-  if ((c.open_rate ?? 0) >= 75) return { bg: '#DCFCE7', stroke: '#166534' }
-  if ((c.open_rate ?? 0) >= 55) return { bg: '#FEF3C7', stroke: '#92400E' }
+  const openPct = openRatePct(c) ?? 0
+  if (openPct >= 75) return { bg: '#DCFCE7', stroke: '#166534' }
+  if (openPct >= 55) return { bg: '#FEF3C7', stroke: '#92400E' }
   return { bg: '#DBEAFE', stroke: '#1E40AF' }
 }
 </script>
@@ -77,13 +227,13 @@ function iconTone(c: Campaign): { bg: string; stroke: string } {
         <p>Every email you've sent to members, with open and click rates. New broadcasts live here too.</p>
       </div>
       <div class="comms__actions">
-        <button type="button" class="btn btn--ghost">
+        <button type="button" class="btn btn--ghost" @click="openTemplates">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2.5 3h9v8h-9z M2.5 5.5h9 M5 3v8" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
           Templates
         </button>
         <button type="button" class="btn btn--ink" @click="compose">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-          Compose
+          New campaign
         </button>
       </div>
     </header>
@@ -93,10 +243,15 @@ function iconTone(c: Campaign): { bg: string; stroke: string } {
       <article class="stat stat--hero">
         <header>
           <span class="stat__label">Open rate · 30d</span>
-          <span class="stat__trend stat__trend--up">▲ +4.2 pp</span>
+          <span class="stat__trend" :class="`stat__trend--${stats.open_delta_sign}`">
+            {{ stats.open_delta_sign === 'up' ? '▲' : '▼' }} {{ stats.open_delta }}
+          </span>
         </header>
         <div class="stat__value">{{ stats.open_rate }}<span class="stat__unit">%</span></div>
-        <footer>{{ stats.total_opens.toLocaleString() }} opens across {{ stats.total_broadcasts }} broadcasts. Industry benchmark 38%.</footer>
+        <footer>
+          {{ stats.total_opens.toLocaleString() }} of {{ stats.total_delivered.toLocaleString() }} delivered ·
+          {{ stats.total_sent.toLocaleString() }} sent total
+        </footer>
       </article>
 
       <article class="stat">
@@ -113,7 +268,9 @@ function iconTone(c: Campaign): { bg: string; stroke: string } {
       <article class="stat">
         <header>
           <span class="stat__label">Click rate · 30d</span>
-          <span class="stat__trend stat__trend--up stat__trend--success">▲ +1.3 pp</span>
+          <span class="stat__trend" :class="`stat__trend--${stats.click_delta_sign}`">
+            {{ stats.click_delta_sign === 'up' ? '▲' : '▼' }} {{ stats.click_delta }}
+          </span>
         </header>
         <div class="stat__value stat__value--md">{{ stats.click_rate }}<span class="stat__unit">%</span></div>
         <footer>{{ stats.total_clicks }} clicks on links &amp; buttons</footer>
@@ -122,7 +279,9 @@ function iconTone(c: Campaign): { bg: string; stroke: string } {
       <article class="stat">
         <header>
           <span class="stat__label">Unsubscribes · 30d</span>
-          <span class="stat__trend">▼ -1</span>
+          <span class="stat__trend" :class="`stat__trend--${stats.unsub_delta_sign}`">
+            {{ stats.unsub_delta_sign === 'up' ? '▲' : '▼' }} {{ stats.unsub_delta }}
+          </span>
         </header>
         <div class="stat__value stat__value--md">{{ stats.total_unsubs }}</div>
         <footer>{{ stats.unsub_rate }}% unsubscribe rate</footer>
@@ -175,7 +334,7 @@ function iconTone(c: Campaign): { bg: string; stroke: string } {
       <ul class="list">
         <li
           v-for="c in filtered"
-          :key="c.id"
+          :key="c.campaign_id"
           class="row"
           :class="{ 'row--muted': c.status !== 'sent' }"
           @click="openCampaign(c)"
@@ -201,11 +360,11 @@ function iconTone(c: Campaign): { bg: string; stroke: string } {
                 <span v-else-if="c.status === 'draft'" class="pill pill--draft">Draft</span>
               </div>
               <div class="row__meta">
-                <span>{{ c.audience_label }}</span>
+                <span>{{ c.audience_label ?? '—' }}</span>
                 <span class="row__dot">·</span>
-                <span v-if="c.status === 'scheduled'">{{ c.sent_at_time }}</span>
-                <span v-else-if="c.status === 'draft'">{{ c.sent_at_relative }}</span>
-                <span v-else>by {{ c.author_name }}</span>
+                <span v-if="c.status === 'scheduled'">{{ fmtTime(c.scheduled_for) }}</span>
+                <span v-else-if="c.status === 'draft'">{{ fmtRelativeShort(c.created_at) }}</span>
+                <span v-else>by {{ c.author.name ?? '—' }}</span>
               </div>
             </div>
           </div>
@@ -214,28 +373,28 @@ function iconTone(c: Campaign): { bg: string; stroke: string } {
           <div class="list__r cell-date">
             <template v-if="c.status === 'draft'">—</template>
             <template v-else-if="c.status === 'scheduled'">
-              <div class="cell-date__primary cell-date__primary--scheduled">{{ c.sent_at_label }}</div>
-              <div class="cell-date__sub">{{ c.sent_at_relative }}</div>
+              <div class="cell-date__primary cell-date__primary--scheduled">{{ fmtDateLabel(c.scheduled_for) }}</div>
+              <div class="cell-date__sub">{{ fmtRelativeShort(c.scheduled_for) }}</div>
             </template>
             <template v-else>
-              <div class="cell-date__primary">{{ c.sent_at_label }}</div>
-              <div class="cell-date__sub">{{ c.sent_at_relative }}</div>
+              <div class="cell-date__primary">{{ fmtDateLabel(c.sent_at) }}</div>
+              <div class="cell-date__sub">{{ fmtRelativeShort(c.sent_at) }}</div>
             </template>
           </div>
           <div class="cell-rate">
-            <template v-if="c.status === 'sent' && c.open_rate != null">
+            <template v-if="c.status === 'sent' && openRatePct(c) != null">
               <div class="cell-rate__top">
-                <div class="cell-rate__value">{{ c.open_rate }}<span>%</span></div>
-                <div class="cell-rate__frac">{{ c.opens }}/{{ c.delivered }}</div>
+                <div class="cell-rate__value">{{ openRatePct(c) }}<span>%</span></div>
+                <div class="cell-rate__frac">{{ c.metrics?.opened ?? 0 }}/{{ c.metrics?.delivered ?? 0 }}</div>
               </div>
-              <div class="bar"><div class="bar__fill" :style="{ width: `${c.open_rate}%` }"></div></div>
+              <div class="bar"><div class="bar__fill" :style="{ width: `${openRatePct(c)}%` }"></div></div>
             </template>
             <template v-else>—</template>
           </div>
           <div class="list__r cell-clicks">
-            <template v-if="c.status === 'sent' && c.click_rate != null">
-              <div class="cell-clicks__value">{{ c.click_rate }}%</div>
-              <div class="cell-clicks__sub">{{ c.clicks }} clicks</div>
+            <template v-if="c.status === 'sent' && clickRatePct(c) != null">
+              <div class="cell-clicks__value">{{ clickRatePct(c) }}%</div>
+              <div class="cell-clicks__sub">{{ c.metrics?.clicked ?? 0 }} clicks</div>
             </template>
             <template v-else>—</template>
           </div>
@@ -244,9 +403,25 @@ function iconTone(c: Campaign): { bg: string; stroke: string } {
           </div>
         </li>
 
-        <li v-if="filtered.length === 0" class="empty">
-          <div class="empty__title">No campaigns match "{{ search }}"</div>
-          <div class="empty__sub">Try a different search or clear the filter.</div>
+        <li v-if="loadingList && filtered.length === 0" class="empty">
+          <div class="empty__title">Loading campaigns…</div>
+        </li>
+        <li v-else-if="listError" class="empty">
+          <div class="empty__title">Couldn't load campaigns</div>
+          <div class="empty__sub">{{ listError }}</div>
+        </li>
+        <li v-else-if="filtered.length === 0" class="empty">
+          <div class="empty__title">
+            <template v-if="search">No campaigns match "{{ search }}"</template>
+            <template v-else-if="activeTab === 'scheduled'">No scheduled sends yet</template>
+            <template v-else-if="activeTab === 'draft'">No drafts yet</template>
+            <template v-else>No campaigns yet</template>
+          </div>
+          <div class="empty__sub">
+            <template v-if="search">Try a different search or clear the filter.</template>
+            <template v-else-if="activeTab === 'all' || activeTab === 'sent'">Hit <strong>New campaign</strong> to compose the first one.</template>
+            <template v-else>Scheduling + drafts land in a follow-up — compose now sends immediately.</template>
+          </div>
         </li>
       </ul>
     </section>
@@ -258,8 +433,7 @@ function iconTone(c: Campaign): { bg: string; stroke: string } {
   display: flex;
   flex-direction: column;
   gap: 28px;
-  padding: 32px 32px 48px;
-  max-width: 1440px;
+  max-width: 1280px;
 }
 
 /* ── Header ────────────────────────────────────────────────────── */
@@ -396,7 +570,7 @@ function iconTone(c: Campaign): { bg: string; stroke: string } {
   gap: 20px;
 }
 .stat--hero .stat__label { color: rgba(255, 255, 255, 0.65); }
-.stat--hero .stat__value { font-size: 72px; }
+.stat--hero .stat__value { font-size: 72px; color: #fff; }
 .stat--hero .stat__unit { color: rgba(255, 255, 255, 0.65); font-size: 36px; }
 .stat--hero footer { color: rgba(255, 255, 255, 0.75); line-height: 1.5; }
 .stat--hero .stat__trend { color: var(--color-sky-1); }

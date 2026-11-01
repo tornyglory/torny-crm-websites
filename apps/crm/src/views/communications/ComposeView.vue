@@ -59,7 +59,6 @@ const PRESETS: AudiencePreset[] = [
 // ── State — page-level ────────────────────────────────────────────
 
 const composeOpen = ref(false)
-const recentSends = ref<Array<{ id: number; subject: string; matched: number; sent: number; failed: number; sent_at: string }>>([])
 
 // ── State — composer ──────────────────────────────────────────────
 
@@ -297,7 +296,9 @@ const previewRecipient = computed(() => {
 })
 function closeCompose() {
   if (composerSending.value) return
-  composeOpen.value = false
+  // Compose has no idle landing state — closing routes back to the
+  // campaigns index where admins came from.
+  router.push({ name: 'communications' })
 }
 
 // ── Token insertion ───────────────────────────────────────────────
@@ -357,16 +358,7 @@ async function confirmSend() {
     }
     const res = await bulkEmailApi.send(cid, input)
     lastResult.value = res
-    recentSends.value.unshift({
-      id: res.batch_id,
-      subject: input.subject,
-      matched: res.matched,
-      sent: res.sent_count,
-      failed: res.failed_count,
-      sent_at: new Date().toISOString(),
-    })
     confirmOpen.value = false
-    composeOpen.value = false
     resultOpen.value = true
   } catch (err) {
     const body = err instanceof ApiError ? ((err.body ?? {}) as { code?: string }) : {}
@@ -392,24 +384,16 @@ const previewShellStyle = computed(() => (
     : { maxWidth: '640px' }
 ))
 
-// ── Formatting ────────────────────────────────────────────────────
-
-function fmtTime(iso: string): string {
-  try {
-    const d = new Date(iso)
-    return d.toLocaleString('en-NZ', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-  } catch { return iso }
-}
-
 // ── Mount ─────────────────────────────────────────────────────────
 
 onMounted(() => {
   void loadTemplate()
-  // Dashboard's "Send bulk email" button navigates here with ?compose=1
-  // to drop straight into the composer. Consume the flag so a manual
-  // reload doesn't keep reopening it.
-  if (route.query.compose === '1') {
-    openCompose()
+  // /crm/communications/compose is the wizard — no idle landing state.
+  // Hitting the route opens step 1 immediately. The ?compose=1 flag
+  // callers used to set is now redundant; strip it on arrival for a
+  // clean URL.
+  openCompose()
+  if (route.query.compose) {
     void router.replace({ query: { ...route.query, compose: undefined } })
   }
 })
@@ -418,49 +402,8 @@ watch(() => clubStore.current?.id, loadTemplate)
 
 <template>
   <div class="cx">
-    <!-- LIST MODE ─────────────────────────────────────────────── -->
-    <template v-if="!composeOpen">
-      <header class="cx__header">
-        <div>
-          <div class="cx__eyebrow">Communications</div>
-          <h1 class="cx__heading">Email your members</h1>
-          <p class="cx__sub">Broadcasts wrapped in your saved header + footer. SMS and scheduling coming later.</p>
-        </div>
-        <button class="btn btn--primary" @click="openCompose">+ New campaign</button>
-      </header>
-
-      <div v-if="recentSends.length === 0" class="empty">
-        <div class="empty__eyebrow">Recent sends</div>
-        <p class="empty__body">Nothing sent yet in this session. Hit <b>New campaign</b> to compose the first one.</p>
-        <p class="empty__hint">Batch history from earlier sessions isn't wired yet — a delivery-log endpoint is on the roadmap.</p>
-      </div>
-
-      <section v-else class="sends">
-        <div class="sends__head">
-          <div class="sends__eyebrow">Sent this session</div>
-        </div>
-        <ul class="sends__list">
-          <li v-for="s in recentSends" :key="s.id" class="send">
-            <div class="send__left">
-              <h3 class="send__subject">{{ s.subject }}</h3>
-              <div class="send__meta">
-                <span class="send__pill send__pill--sent">{{ s.sent }} sent</span>
-                <span v-if="s.failed > 0" class="send__pill send__pill--fail">{{ s.failed }} failed</span>
-                <span class="send__dot">·</span>
-                <span class="send__matched">{{ s.matched }} matched</span>
-              </div>
-            </div>
-            <div class="send__right">
-              <div class="send__time">{{ fmtTime(s.sent_at) }}</div>
-              <div class="send__id">Batch #{{ s.id }}</div>
-            </div>
-          </li>
-        </ul>
-      </section>
-    </template>
-
     <!-- COMPOSE WIZARD ────────────────────────────────────────── -->
-    <template v-else>
+    <template v-if="composeOpen">
       <div class="wz">
         <!-- Topbar -->
         <header class="wz__topbar">
@@ -834,7 +777,11 @@ watch(() => clubStore.current?.id, loadTemplate)
         </div>
       </div>
       <template #footer>
-        <button type="button" class="modal-btn modal-btn--primary" @click="resultOpen = false">Done</button>
+        <button
+          type="button"
+          class="modal-btn modal-btn--primary"
+          @click="resultOpen = false; router.push({ name: 'communications' })"
+        >Done</button>
       </template>
     </CrmModal>
   </div>

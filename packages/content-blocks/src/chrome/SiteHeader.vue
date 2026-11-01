@@ -77,13 +77,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header class="site-header" :class="{ 'site-header--sticky': sticky }">
-    <a class="site-header__brand" :href="'/'">
+  <header class="site-header" :class="{ 'site-header--sticky': sticky, 'site-header--logo-only': logoOnly && club.logoUrl }">
+    <a class="site-header__brand" :href="'/'" :aria-label="club.name">
       <span v-if="club.logoUrl" class="site-header__logo-wrap">
         <img :src="club.logoUrl" :alt="`${club.name} logo`" class="site-header__logo" />
       </span>
       <span v-else class="site-header__chip">{{ initials }}</span>
-      <span class="site-header__brand-text">
+      <!-- Brand text is hidden when logoOnly is on + a logo is uploaded. The
+           club name moves to the brand link's aria-label above so screen
+           readers still announce it. -->
+      <span v-if="!(logoOnly && club.logoUrl)" class="site-header__brand-text">
         <span class="site-header__name">{{ club.name }}</span>
         <span v-if="club.strapline" class="site-header__strapline">{{ club.strapline }}</span>
       </span>
@@ -206,6 +209,13 @@ onBeforeUnmount(() => {
   font-weight: var(--weight-semibold);
   letter-spacing: 0.04em;
   flex-shrink: 0;
+}
+
+/* In logo-only mode the logo mark grows a touch so it carries the brand
+ * on its own without feeling undersized next to the nav links. */
+.site-header--logo-only .site-header__logo-wrap {
+  width: 44px;
+  height: 44px;
 }
 
 .site-header__logo-wrap {

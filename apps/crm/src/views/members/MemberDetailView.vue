@@ -139,12 +139,16 @@ const emailsFeed = computed(() =>
 const emailCounts = computed(() => {
   const list = emailsFeed.value
   const total = list.length
+  // Delivered counts anyone past the SES Delivery event — opened/clicked/
+  // unsubscribed all imply delivery landed at some point.
   const delivered = list.filter(
-    (c) => c.status === 'delivered' || c.status === 'opened',
+    (c) => c.status === 'delivered' || c.status === 'opened' || c.status === 'clicked' || c.status === 'unsubscribed',
   ).length
-  const opened = list.filter((c) => c.status === 'opened').length
+  const opened = list.filter((c) => c.status === 'opened' || c.status === 'clicked').length
+  const clicked = list.filter((c) => c.clicked_at != null).length
   const bounced = list.filter((c) => c.status === 'bounced').length
-  return { total, delivered, opened, bounced }
+  const unsubscribed = list.filter((c) => c.unsubscribed_at != null).length
+  return { total, delivered, opened, clicked, bounced, unsubscribed }
 })
 
 interface EmailTimelineChip {
@@ -205,6 +209,23 @@ function emailTimeline(c: MemberCommunication): EmailTimelineChip[] {
     })
   } else if (c.delivered_at) {
     chips.push({ key: 'notopen', label: 'Not opened yet', time: '', tone: 'pending' })
+  }
+  if (c.clicked_at) {
+    chips.push({
+      key: 'clicked',
+      label: 'Clicked',
+      time: commsTime(c.clicked_at),
+      tone: 'engaged',
+      suffix: c.click_count > 1 ? `${c.click_count}×` : undefined,
+    })
+  }
+  if (c.unsubscribed_at) {
+    chips.push({
+      key: 'unsubscribed',
+      label: 'Unsubscribed',
+      time: commsTime(c.unsubscribed_at),
+      tone: 'fail',
+    })
   }
   return chips
 }
@@ -274,8 +295,11 @@ const emailDetailFallback = ref<{
   delivered_at: string | null
   opened_at: string | null
   open_count: number | null
+  clicked_at: string | null
+  click_count: number | null
   bounced_at: string | null
   complained_at: string | null
+  unsubscribed_at: string | null
 } | null>(null)
 function openEmail(c: MemberCommunication) {
   if (c.channel !== 'email') return
@@ -289,8 +313,11 @@ function openEmail(c: MemberCommunication) {
     delivered_at: c.delivered_at,
     opened_at: c.opened_at,
     open_count: c.open_count,
+    clicked_at: c.clicked_at,
+    click_count: c.click_count,
     bounced_at: c.bounced_at,
     complained_at: c.complained_at,
+    unsubscribed_at: c.unsubscribed_at,
   }
   emailDetailOpen.value = true
 }
@@ -1515,7 +1542,9 @@ async function submitEdit() {
                     <span class="comms-counts__total">{{ emailCounts.total }} <span class="comms-counts__total-sub">sent</span></span>
                     <span class="comms-counts__pip comms-counts__pip--ok"><span class="comms-counts__dot"></span>{{ emailCounts.delivered }} delivered</span>
                     <span class="comms-counts__pip comms-counts__pip--engaged"><span class="comms-counts__dot"></span>{{ emailCounts.opened }} opened</span>
-                    <span class="comms-counts__pip comms-counts__pip--mute"><span class="comms-counts__dot"></span>{{ emailCounts.bounced }} bounced</span>
+                    <span v-if="emailCounts.clicked > 0" class="comms-counts__pip comms-counts__pip--engaged"><span class="comms-counts__dot"></span>{{ emailCounts.clicked }} clicked</span>
+                    <span v-if="emailCounts.bounced > 0" class="comms-counts__pip comms-counts__pip--mute"><span class="comms-counts__dot"></span>{{ emailCounts.bounced }} bounced</span>
+                    <span v-if="emailCounts.unsubscribed > 0" class="comms-counts__pip comms-counts__pip--mute"><span class="comms-counts__dot"></span>{{ emailCounts.unsubscribed }} unsubscribed</span>
                   </div>
                 </div>
                 <button

@@ -120,6 +120,10 @@ export interface ClubNavigation {
   footer: NavItem[]
   /** When true, the public site header stays pinned to the viewport on scroll. */
   headerSticky?: boolean
+  /** When true, the public site header shows the club logo image in place
+   *  of the club name text. Falls back to the name when no logo is on
+   *  file. Admin sets this per brief 62. */
+  logoInHeader?: boolean
 }
 
 /**

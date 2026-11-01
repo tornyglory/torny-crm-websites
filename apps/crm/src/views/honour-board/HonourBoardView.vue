@@ -23,6 +23,7 @@ import {
 } from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import Skeleton from '@/components/Skeleton.vue'
+import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import { useClubStore } from '@/stores/club'
 import { useHonourCategoriesStore } from '@/stores/honourCategories'
 import { useToast } from '@/composables/useToast'
@@ -809,11 +810,11 @@ watch(activeCategoryId, () => {
             <input v-model="entryForm.year" type="text" placeholder="2026" />
             <span class="field__hint">Leave blank for undated (e.g. Life Members).</span>
           </label>
-          <label class="field">
+          <div class="field">
             <span class="field__label">Awarded (optional)</span>
-            <input v-model="entryForm.awardedAt" type="date" />
+            <TornyDatePicker v-model="entryForm.awardedAt" placeholder="Date presented" />
             <span class="field__hint">When the trophy was presented — shows in the "Awarded" column.</span>
-          </label>
+          </div>
         </div>
         <div class="form__row">
           <label class="field">

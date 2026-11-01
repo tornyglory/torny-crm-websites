@@ -102,6 +102,17 @@ export interface ApproveInput {
   user_id?: number | null
   assigned_number?: number | null
   send_welcome_email?: boolean
+  /** Season this membership attaches to. Omit → server uses the club's
+   *  current season. Pass an explicit id to accept into a future season
+   *  (e.g. taking applications now for the summer season). */
+  season_id?: number | null
+  /** Optional per-approval welcome email overrides. Server merges onto the
+   *  `application_approved` flavour template body before send. Both fields
+   *  honour the same `{{tokens}}` the template whitelist accepts. */
+  welcome_email?: {
+    subject?: string | null
+    message?: string | null
+  } | null
 }
 
 export interface ApproveResult {
@@ -143,6 +154,9 @@ export type ApplicationErrorCode =
   | 'missing_body'
   | 'body_too_long'
   | 'not_found'
+  | 'unknown_season'
+  | 'welcome_subject_too_long'
+  | 'welcome_message_too_long'
 
 interface Envelope<T> {
   status: 'success'

@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import CrmEmptyState from '@/components/CrmEmptyState.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
+import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 import SendEmailModal, { type EmailRecipient } from '@/components/modals/SendEmailModal.vue'
 import TornySelect from '@/components/TornySelect.vue'
@@ -1512,10 +1513,10 @@ async function submit() {
             <span class="field__label">Amount ($)</span>
             <input v-model.number="paymentForm.amount" type="number" min="0" step="1" />
           </label>
-          <label class="field">
+          <div class="field">
             <span class="field__label">Payment date</span>
-            <input v-model="paymentForm.date" type="date" />
-          </label>
+            <TornyDatePicker v-model="paymentForm.date" placeholder="Payment date" />
+          </div>
         </div>
 
         <label class="field" v-if="!paymentForm.waived">

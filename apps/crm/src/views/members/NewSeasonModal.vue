@@ -13,6 +13,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { seasons as seasonsApi, ApiError, type Season } from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import { useToast } from '@/composables/useToast'
 
 const props = defineProps<{
@@ -134,16 +135,16 @@ async function submit() {
         <span v-if="fieldErrors.season_name" class="field__error">{{ fieldErrors.season_name }}</span>
       </label>
       <div class="form__row">
-        <label class="field">
+        <div class="field">
           <span class="field__label">Start date</span>
-          <input v-model="form.start_date" type="date" />
+          <TornyDatePicker v-model="form.start_date" placeholder="Start date" />
           <span v-if="fieldErrors.start_date" class="field__error">{{ fieldErrors.start_date }}</span>
-        </label>
-        <label class="field">
+        </div>
+        <div class="field">
           <span class="field__label">End date</span>
-          <input v-model="form.end_date" type="date" />
+          <TornyDatePicker v-model="form.end_date" placeholder="End date" />
           <span v-if="fieldErrors.end_date" class="field__error">{{ fieldErrors.end_date }}</span>
-        </label>
+        </div>
       </div>
       <label class="field">
         <span class="field__label">Default fee</span>

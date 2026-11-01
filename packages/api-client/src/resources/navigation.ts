@@ -11,6 +11,9 @@ export interface UpdateNavigationInput {
   header?: NavItem[] | null
   footer?: NavItem[] | null
   headerSticky?: boolean | null
+  /** Toggle rendering the uploaded logo image in place of the club name
+   *  text in the public site header. Brief 62. */
+  logoInHeader?: boolean | null
 }
 
 export interface UpdateNavigationResponse {
@@ -18,6 +21,7 @@ export interface UpdateNavigationResponse {
   header: NavItem[] | null
   footer: NavItem[] | null
   headerSticky: boolean
+  logoInHeader: boolean
 }
 
 interface Envelope<T> {

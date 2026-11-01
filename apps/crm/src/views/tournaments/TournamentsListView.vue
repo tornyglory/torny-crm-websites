@@ -19,6 +19,7 @@ import {
 } from '@torny/api-client'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
+import TornyDatePicker from '@/components/TornyDatePicker.vue'
 
 const toast = useToast()
 const clubStore = useClubStore()
@@ -227,9 +228,9 @@ const tabCounts = computed<Record<string, number>>(() => backendCounts.value)
       </label>
       <div class="date-range">
         <span class="date-range__label">From</span>
-        <input v-model="startsAfter" type="date" />
+        <div class="date-range__picker"><TornyDatePicker v-model="startsAfter" placeholder="Any date" /></div>
         <span class="date-range__sep">→</span>
-        <input v-model="startsBefore" type="date" />
+        <div class="date-range__picker"><TornyDatePicker v-model="startsBefore" placeholder="Any date" /></div>
       </div>
       <button v-if="hasActiveFilters" type="button" class="reset-btn" @click="clearFilters">Clear</button>
     </div>
@@ -345,10 +346,10 @@ const tabCounts = computed<Record<string, number>>(() => backendCounts.value)
 .filters { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .search { flex: 1; min-width: 240px; max-width: 360px; padding: 8px 14px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; display: flex; align-items: center; gap: 8px; color: var(--color-fog); }
 .search input { flex: 1; border: 0; outline: 0; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: transparent; }
-.date-range { display: flex; align-items: center; gap: 6px; padding: 4px 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; }
+.date-range { display: flex; align-items: center; gap: 8px; padding: 0; background: transparent; border: 0; border-radius: 0; }
 .date-range__label { font-family: var(--font-mono); font-size: 10px; color: var(--color-fog); letter-spacing: 0.12em; font-weight: 600; text-transform: uppercase; }
 .date-range__sep { color: var(--color-mute); }
-.date-range input { border: 0; outline: 0; font-family: var(--font-body); font-size: 12px; color: var(--color-ink); background: transparent; padding: 4px 0; }
+.date-range__picker { width: 160px; }
 .reset-btn { padding: 8px 14px; background: transparent; border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--color-fog); cursor: pointer; }
 .reset-btn:hover { color: var(--color-ink); border-color: var(--color-ink); }
 .tabs { display: flex; gap: 4px; margin-bottom: 20px; padding: 4px; background: var(--color-surface); border-radius: 999px; width: fit-content; }

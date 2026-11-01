@@ -28,6 +28,7 @@ import {
 } from '@torny/api-client'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
+import TornyDatePicker from '@/components/TornyDatePicker.vue'
 
 const GALLERY_MAX = 8
 
@@ -670,25 +671,13 @@ const descLen = computed(() => form.description.length)
         </div>
         <div class="field-row">
           <div class="field">
-            <label class="field__label" for="ct-start-date">Start date</label>
-            <input
-              id="ct-start-date"
-              v-model="form.starts_date"
-              type="date"
-              class="input"
-              :class="{ 'input--error': errors.starts_date }"
-            />
+            <span class="field__label">Start date</span>
+            <TornyDatePicker v-model="form.starts_date" placeholder="Start date" />
             <div v-if="errors.starts_date" class="field__error">{{ errors.starts_date }}</div>
           </div>
           <div class="field">
-            <label class="field__label" for="ct-end-date">End date</label>
-            <input
-              id="ct-end-date"
-              v-model="form.ends_date"
-              type="date"
-              class="input"
-              :class="{ 'input--error': errors.ends_date }"
-            />
+            <span class="field__label">End date</span>
+            <TornyDatePicker v-model="form.ends_date" placeholder="End date" />
             <div v-if="errors.ends_date" class="field__error">{{ errors.ends_date }}</div>
           </div>
           <div class="field">
@@ -699,29 +688,17 @@ const descLen = computed(() => form.description.length)
         <div class="divider"></div>
         <div class="field-row">
           <div class="field">
-            <label class="field__label" for="ct-open-date">Entries open</label>
+            <span class="field__label">Entries open</span>
             <div class="field-inner">
-              <input
-                id="ct-open-date"
-                v-model="form.entries_open_date"
-                type="date"
-                class="input"
-                :class="{ 'input--error': errors.entries_open_date }"
-              />
+              <div class="field-inner__date"><TornyDatePicker v-model="form.entries_open_date" placeholder="Date" /></div>
               <input v-model="form.entries_open_time" type="time" class="input input--time" />
             </div>
             <div v-if="errors.entries_open_date" class="field__error">{{ errors.entries_open_date }}</div>
           </div>
           <div class="field">
-            <label class="field__label" for="ct-close-date">Entries close</label>
+            <span class="field__label">Entries close</span>
             <div class="field-inner">
-              <input
-                id="ct-close-date"
-                v-model="form.entries_close_date"
-                type="date"
-                class="input"
-                :class="{ 'input--error': errors.entries_close_date }"
-              />
+              <div class="field-inner__date"><TornyDatePicker v-model="form.entries_close_date" placeholder="Date" /></div>
               <input v-model="form.entries_close_time" type="time" class="input input--time" />
             </div>
             <div v-if="errors.entries_close_date" class="field__error">{{ errors.entries_close_date }}</div>
@@ -1044,7 +1021,8 @@ const descLen = computed(() => form.description.length)
 .field-row { display: flex; gap: 12px; }
 .field-row .field { flex: 1; }
 .field--wide { flex: 1.6; }
-.field-inner { display: flex; gap: 8px; }
+.field-inner { display: flex; gap: 8px; align-items: center; }
+.field-inner__date { flex: 1; min-width: 0; }
 .field__label { font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-graphite); }
 .field__opt { color: var(--color-mute); font-weight: 400; }
 .field__error { font-family: var(--font-body); font-size: 11px; color: var(--color-danger); }

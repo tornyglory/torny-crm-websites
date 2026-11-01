@@ -867,6 +867,10 @@ export interface SiteHeaderProps {
   drawerOpen?: boolean
   /** When true, the header stays pinned to the top of the viewport on scroll. */
   sticky?: boolean
+  /** When true (and `club.logoUrl` is set), the header renders the logo
+   *  image in place of the club name text. Falls back to the standard
+   *  logo + name layout when no logo is on file. Brief 62. */
+  logoOnly?: boolean
 }
 
 export interface SocialLink {

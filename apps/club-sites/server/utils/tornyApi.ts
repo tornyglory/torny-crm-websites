@@ -77,6 +77,9 @@ export interface SiteNavigation {
   header: SiteNavItem[]
   footer: SiteNavItem[]
   headerSticky?: boolean
+  /** When true, the public site header renders the club logo image in
+   *  place of the club name text. Brief 62. */
+  logoInHeader?: boolean
 }
 
 export interface SiteClub {

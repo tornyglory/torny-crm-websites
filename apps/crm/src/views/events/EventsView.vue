@@ -23,6 +23,7 @@ import {
   ApiError,
 } from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import { useClubStore } from '@/stores/club'
 import { useToast } from '@/composables/useToast'
 import { sitePreviewUrl } from '@/composables/sitePreviewUrl'
@@ -808,10 +809,10 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="form__row form__row--three">
-          <label class="field">
+          <div class="field">
             <span class="field__label">Start date</span>
-            <input v-model="form.startDate" type="date" />
-          </label>
+            <TornyDatePicker v-model="form.startDate" placeholder="Start date" />
+          </div>
           <label class="field">
             <span class="field__label">Starts</span>
             <input v-model="form.startTime" type="time" />
@@ -822,11 +823,11 @@ onBeforeUnmount(() => {
           </label>
         </div>
 
-        <label class="field">
+        <div class="field">
           <span class="field__label">End date (optional)</span>
-          <input v-model="form.endDate" type="date" />
+          <TornyDatePicker v-model="form.endDate" placeholder="End date" />
           <span class="field__hint">Only needed if the event runs past midnight or spans multiple days.</span>
-        </label>
+        </div>
 
         <label class="field">
           <span class="field__label">Location (optional)</span>

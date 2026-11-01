@@ -83,6 +83,38 @@ const brand = ref({
   font: 'Inter',
 })
 
+// Toggle persists immediately via the shared navigation PATCH — simpler
+// than batching into the main Save Navigation flow, matches the
+// instant-save pattern of brandLogoUrl / brandFaviconUrl.
+async function toggleLogoInHeader() {
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') {
+    toast.error('No active club — refresh and try again.')
+    return
+  }
+  if (logoInHeaderSaving.value) return
+  const next = !logoInHeader.value
+  logoInHeader.value = next
+  logoInHeaderSaving.value = true
+  try {
+    const res = await navigationApi.updateForClub(clubId, { logoInHeader: next })
+    clubStore.setNavigation({
+      header: res.header ?? DEFAULT_HEADER,
+      footer: res.footer ?? DEFAULT_FOOTER,
+      headerSticky: res.headerSticky,
+      logoInHeader: res.logoInHeader,
+    })
+    toast.success(next ? 'Using logo in the header.' : 'Showing the club name in the header.')
+  } catch (err) {
+    // Revert optimistic flip on failure.
+    logoInHeader.value = !next
+    const msg = err instanceof ApiError ? err.message : 'Could not update header.'
+    toast.error(msg)
+  } finally {
+    logoInHeaderSaving.value = false
+  }
+}
+
 async function persistBrandAsset(field: 'logo_url' | 'favicon_url', value: string) {
   const clubId = clubStore.current?.id
   if (typeof clubId !== 'number') {
@@ -130,6 +162,11 @@ const DEFAULT_FOOTER: NavItem[] = [
 const navHeader = ref<NavItem[]>(cloneNav(clubStore.current?.navigation?.header ?? DEFAULT_HEADER))
 const navFooter = ref<NavItem[]>(cloneNav(clubStore.current?.navigation?.footer ?? DEFAULT_FOOTER))
 const headerSticky = ref<boolean>(Boolean(clubStore.current?.navigation?.headerSticky))
+/** Logo-in-header toggle — persists through the same navigation PATCH
+ *  as headerSticky (brief 62). Saved immediately on toggle, no "Save"
+ *  button required, so admins get instant feedback. */
+const logoInHeader = ref<boolean>(Boolean(clubStore.current?.navigation?.logoInHeader))
+const logoInHeaderSaving = ref(false)
 const navDirty = ref(false)
 const navSaving = ref(false)
 
@@ -149,6 +186,7 @@ watch(
     navHeader.value = cloneNav(nav?.header ?? DEFAULT_HEADER)
     navFooter.value = cloneNav(nav?.footer ?? DEFAULT_FOOTER)
     headerSticky.value = Boolean(nav?.headerSticky)
+    logoInHeader.value = Boolean(nav?.logoInHeader)
   },
   { deep: true },
 )
@@ -199,6 +237,7 @@ async function saveNavigation() {
     header: cloneNav(navHeader.value),
     footer: cloneNav(navFooter.value),
     headerSticky: headerSticky.value,
+    logoInHeader: logoInHeader.value,
   }
   try {
     const res = await navigationApi.updateForClub(clubId, payload)
@@ -206,6 +245,7 @@ async function saveNavigation() {
       header: res.header ?? DEFAULT_HEADER,
       footer: res.footer ?? DEFAULT_FOOTER,
       headerSticky: res.headerSticky,
+      logoInHeader: res.logoInHeader,
     })
     navDirty.value = false
     toast.success('Navigation saved.')
@@ -343,6 +383,26 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
               :max-size-mb="1"
             />
           </div>
+        </div>
+        <!-- Show-in-header toggle: when on, the public site header uses the
+             logo image in place of the club name text. Falls back to the
+             name when no logo is uploaded. -->
+        <div class="ws-brand-nav-toggle">
+          <div class="ws-brand-nav-toggle__copy">
+            <div class="ws-brand-nav-toggle__title">Use the logo in the header</div>
+            <div class="ws-brand-nav-toggle__hint">
+              {{ brandLogoUrl
+                ? 'Replaces the club name text with the uploaded logo in the public site nav. Mobile keeps the smaller logo mark.'
+                : 'Upload a logo above to use this.' }}
+            </div>
+          </div>
+          <button
+            type="button"
+            class="ws-switch"
+            :class="{ 'is-on': logoInHeader }"
+            :disabled="!brandLogoUrl"
+            @click="toggleLogoInHeader"
+          />
         </div>
       </div>
       <div class="ws-card">
@@ -672,6 +732,19 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 .ws-brand-assets { display: grid; grid-template-columns: 140px 96px; gap: 20px; align-items: start; }
 .ws-brand-asset { display: flex; flex-direction: column; }
 @media (max-width: 767px) { .ws-brand-assets { grid-template-columns: 140px 96px; } }
+
+.ws-brand-nav-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-hairline);
+}
+.ws-brand-nav-toggle__copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ws-brand-nav-toggle__title { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
+.ws-brand-nav-toggle__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); line-height: 1.4; }
 
 .ws-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .ws-field label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }

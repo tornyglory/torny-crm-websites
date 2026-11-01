@@ -34,6 +34,7 @@ const navLinks = computed<NavLink[]>(() => {
 })
 
 const headerSticky = computed<boolean>(() => Boolean(site.value?.club?.navigation?.headerSticky))
+const headerLogoOnly = computed<boolean>(() => Boolean(site.value?.club?.navigation?.logoInHeader))
 
 const chromeClub = computed<SiteChromeClub>(() => ({
   name: club.value?.name ?? 'Torny',
@@ -94,6 +95,7 @@ const legalLinks: NavLink[] = [
       :primary-cta="primaryCta"
       :drawer-open="drawerOpen"
       :sticky="headerSticky"
+      :logo-only="headerLogoOnly"
       @toggle-drawer="drawerOpen = !drawerOpen"
     />
 

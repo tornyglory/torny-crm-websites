@@ -11,10 +11,16 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import {
   bulkEmail as bulkEmailApi,
+  members as membersApi,
   ApiError,
+  type MemberRole,
+  type MemberStatus,
+  type MembershipTierListItem,
+  type PaymentStatus,
   type RosterMember,
 } from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import TornyMultiSelect from '@/components/TornyMultiSelect.vue'
 import { useClubStore } from '@/stores/club'
 import { useToast } from '@/composables/useToast'
 
@@ -84,6 +90,174 @@ const bodyEl = ref<HTMLTextAreaElement | null>(null)
  *  caller's selection. Cleared on open. */
 const removedIds = ref<Set<number>>(new Set())
 
+// ── Audience filters ──────────────────────────────────────────
+/** Each filter is an array of selected values; empty = "no filter on this
+ *  axis". Combined conjunctively — a member must satisfy every active axis
+ *  (OR within an axis). Resolved to a concrete recipient list by refetching
+ *  the roster when any axis changes. */
+type DuesStatus = 'paid' | 'due' | 'overdue' | 'waived' | 'none'
+const audienceFilters = reactive<{
+  statuses: MemberStatus[]
+  tierSlugs: string[]
+  roles: MemberRole[]
+  dues: DuesStatus[]
+}>({
+  statuses: [],
+  tierSlugs: [],
+  roles: [],
+  dues: [],
+})
+const hasAnyFilter = computed(() =>
+  audienceFilters.statuses.length > 0
+  || audienceFilters.tierSlugs.length > 0
+  || audienceFilters.roles.length > 0
+  || audienceFilters.dues.length > 0,
+)
+
+const STATUS_OPTIONS: Array<{ value: MemberStatus; label: string }> = [
+  { value: 'active',   label: 'Active members' },
+  { value: 'prospect', label: 'Prospects' },
+  { value: 'visitor',  label: 'Visitors' },
+  { value: 'pending',  label: 'Pending invites' },
+  { value: 'lapsed',   label: 'Lapsed' },
+]
+const ROLE_OPTIONS: Array<{ value: MemberRole; label: string }> = [
+  { value: 'owner',     label: 'Owner' },
+  { value: 'admin',     label: 'Admin' },
+  { value: 'committee', label: 'Committee' },
+  { value: 'player',    label: 'Player' },
+]
+const DUES_OPTIONS: Array<{ value: DuesStatus; label: string }> = [
+  { value: 'paid',    label: 'Paid up' },
+  { value: 'due',     label: 'Due soon' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'waived',  label: 'Waived' },
+  { value: 'none',    label: 'No membership on file' },
+]
+/** Loaded on first open to drive the Tier filter. Avoids a round-trip when
+ *  the admin opens the modal just to send to a specific picked member. */
+const tiers = ref<MembershipTierListItem[]>([])
+const tiersLoaded = ref(false)
+const tierOptions = computed<Array<{ value: string; label: string }>>(() => {
+  const list = tiers.value
+    .filter((t) => !!t.slug)
+    .map((t) => ({ value: t.slug as string, label: t.type_name }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+  list.push({ value: 'none', label: 'No tier assigned' })
+  return list
+})
+async function ensureTiersLoaded() {
+  if (tiersLoaded.value) return
+  const cid = props.clubId
+  if (cid == null) return
+  try {
+    const res = await membersApi.listTiers(cid)
+    tiers.value = res.tiers
+  } catch {
+    tiers.value = []
+  } finally {
+    tiersLoaded.value = true
+  }
+}
+
+/** Members matched by the current filter payload. The server honours
+ *  `status` + `role` + `membership_type_slug`; dues is a client-side pass
+ *  because `payment_status` is nested under `membership`. */
+const filterMatches = ref<EmailRecipient[]>([])
+const filterLoading = ref(false)
+let filterAbort: AbortController | null = null
+let filterDebounce: ReturnType<typeof setTimeout> | null = null
+
+function rosterRowDues(m: RosterMember): DuesStatus {
+  const ps: PaymentStatus | null = m.membership?.payment_status ?? null
+  if (ps === 'paid') return 'paid'
+  if (ps === 'unpaid' || ps === 'partial') return 'due'
+  if (ps === 'overdue') return 'overdue'
+  if (ps === 'waived') return 'waived'
+  return 'none'
+}
+
+async function refetchFilterMatches() {
+  const cid = props.clubId
+  if (cid == null || !hasAnyFilter.value) {
+    filterMatches.value = []
+    return
+  }
+  if (filterAbort) filterAbort.abort()
+  filterAbort = new AbortController()
+  filterLoading.value = true
+  try {
+    // Each axis is a union — the roster endpoint only accepts single
+    // values for `status` and `role`, so when the admin picks multiple
+    // values on either axis we union the responses here.
+    const statusList: Array<'all' | MemberStatus> = audienceFilters.statuses.length === 0
+      ? ['all']
+      : audienceFilters.statuses
+    const roleList: Array<MemberRole | undefined> = audienceFilters.roles.length === 0
+      ? [undefined]
+      : audienceFilters.roles
+    const tierParam = audienceFilters.tierSlugs.length > 0 ? audienceFilters.tierSlugs : undefined
+
+    const combos: Array<{ status: 'all' | MemberStatus; role?: MemberRole }> = []
+    for (const s of statusList) for (const r of roleList) combos.push({ status: s, role: r })
+
+    const seen = new Map<number, RosterMember>()
+    for (const combo of combos) {
+      const res = await membersApi.listRoster(
+        cid,
+        {
+          status: combo.status,
+          role: combo.role,
+          membership_type_slug: tierParam,
+          limit: 200,
+          include_invites: false,
+        },
+        { signal: filterAbort.signal },
+      )
+      for (const m of res.members) {
+        if (!seen.has(m.user_id)) seen.set(m.user_id, m)
+      }
+    }
+    let rows = Array.from(seen.values())
+    // Client-side dues pass (server doesn't accept this axis).
+    if (audienceFilters.dues.length > 0) {
+      const duesSet = new Set(audienceFilters.dues)
+      rows = rows.filter((m) => duesSet.has(rosterRowDues(m)))
+    }
+    filterMatches.value = rows.map<EmailRecipient>((m) => ({
+      user_id: m.user_id,
+      name: m.name,
+      email: m.email ?? null,
+    }))
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return
+    filterMatches.value = []
+  } finally {
+    filterLoading.value = false
+  }
+}
+
+watch(
+  () => [
+    audienceFilters.statuses.join(','),
+    audienceFilters.tierSlugs.join(','),
+    audienceFilters.roles.join(','),
+    audienceFilters.dues.join(','),
+  ],
+  () => {
+    if (filterDebounce) clearTimeout(filterDebounce)
+    filterDebounce = setTimeout(() => { void refetchFilterMatches() }, 200)
+  },
+)
+
+function clearAudienceFilters() {
+  audienceFilters.statuses = []
+  audienceFilters.tierSlugs = []
+  audienceFilters.roles = []
+  audienceFilters.dues = []
+  filterMatches.value = []
+}
+
 watch(
   () => props.open,
   (isOpen) => {
@@ -94,24 +268,42 @@ watch(
       insertOpen.value = false
       lastFocused.value = 'body'
       removedIds.value = new Set()
+      clearAudienceFilters()
+      void ensureTiersLoaded()
       void nextTick(() => bodyEl.value?.focus())
     }
   },
 )
 
-/** Normalised recipient list — `members` wins when both props are set,
- *  then we strip out anything the user removed in this compose session. */
+/** Explicit recipients passed in by the opener — the "pre-selected" set.
+ *  Dedup against this set when merging filter matches. */
+const explicitRecipients = computed<EmailRecipient[]>(() => {
+  if (props.members && props.members.length > 0) return props.members
+  if (props.member) {
+    return [{
+      user_id: 'user_id' in props.member ? props.member.user_id : undefined,
+      name: props.member.name,
+      email: props.member.email ?? null,
+    }]
+  }
+  return []
+})
+
+/** Final recipient list — explicit + filter-matched, de-duped by `user_id`
+ *  (and name+email as a fallback for enquiry prospects), then stripped of
+ *  anything the user removed in this compose session. */
 const recipients = computed<EmailRecipient[]>(() => {
-  const base: EmailRecipient[] = props.members && props.members.length > 0
-    ? props.members
-    : props.member
-      ? [{
-          user_id: 'user_id' in props.member ? props.member.user_id : undefined,
-          name: props.member.name,
-          email: props.member.email ?? null,
-        }]
-      : []
-  return base.filter((r) => r.user_id == null || !removedIds.value.has(r.user_id))
+  const seen = new Set<string>()
+  const out: EmailRecipient[] = []
+  const push = (r: EmailRecipient) => {
+    const key = r.user_id != null ? `u:${r.user_id}` : `k:${(r.email ?? '').toLowerCase()}:${r.name}`
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push(r)
+  }
+  for (const r of explicitRecipients.value) push(r)
+  for (const r of filterMatches.value) push(r)
+  return out.filter((r) => r.user_id == null || !removedIds.value.has(r.user_id))
 })
 
 /** Stable key for v-for over recipients — user_id when available, falls
@@ -261,7 +453,7 @@ function pickField(f: InsertField) {
   <CrmModal
     :open="open"
     eyebrow="Compose · from the club"
-    :title="isBulk ? `Send email to ${recipients.length} members` : 'Send email'"
+    :title="isBulk ? `Send email to ${recipients.length} people` : 'Send email'"
     width="lg"
     @close="emit('close')"
   >
@@ -314,6 +506,52 @@ function pickField(f: InsertField) {
           </template>
         </div>
       </div>
+      <div class="email__row email__row--audience">
+        <div class="email__row-label">Audience</div>
+        <div class="email__row-main email__audience">
+          <TornyMultiSelect
+            v-model="audienceFilters.statuses"
+            label="Status"
+            :options="STATUS_OPTIONS"
+          />
+          <TornyMultiSelect
+            v-model="audienceFilters.tierSlugs"
+            label="Tier"
+            :options="tierOptions"
+            :disabled="tierOptions.length <= 1 && !tiersLoaded"
+          />
+          <TornyMultiSelect
+            v-model="audienceFilters.roles"
+            label="Role"
+            :options="ROLE_OPTIONS"
+          />
+          <TornyMultiSelect
+            v-model="audienceFilters.dues"
+            label="Dues"
+            :options="DUES_OPTIONS"
+          />
+          <button
+            v-if="hasAnyFilter"
+            type="button"
+            class="email__audience-reset"
+            @click="clearAudienceFilters"
+          >
+            Clear filters
+          </button>
+        </div>
+      </div>
+      <div v-if="hasAnyFilter" class="email__audience-summary">
+        <template v-if="filterLoading">Finding matches…</template>
+        <template v-else-if="filterMatches.length === 0">
+          No members match these filters.
+        </template>
+        <template v-else>
+          <strong>{{ filterMatches.length }}</strong>
+          member{{ filterMatches.length === 1 ? '' : 's' }} match{{ filterMatches.length === 1 ? 'es' : '' }} —
+          merged into recipients above.
+        </template>
+      </div>
+
       <div v-if="skipped.length > 0" class="email__skip-row">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
           <circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.4" />
@@ -543,6 +781,38 @@ function pickField(f: InsertField) {
   color: var(--color-ink);
 }
 .email__chip-remove:disabled { opacity: 0.4; cursor: not-allowed; }
+.email__row--audience { align-items: flex-start; padding-top: 12px; }
+.email__row--audience .email__row-label { margin-top: 6px; }
+.email__audience {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.email__audience-reset {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-fog);
+  cursor: pointer;
+  margin-left: 2px;
+}
+.email__audience-reset:hover { color: var(--color-ink); text-decoration: underline; }
+.email__audience-summary {
+  margin: 6px 0 0 88px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--color-surface);
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--color-fog);
+  line-height: 1.4;
+}
+.email__audience-summary strong { color: var(--color-ink); font-weight: 700; }
+
 .email__skip-row {
   display: flex;
   align-items: flex-start;

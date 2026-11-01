@@ -689,7 +689,7 @@ const stepMeta: Record<WizardStep, { label: string }> = {
 </template>
 
 <style scoped>
-.import { max-width: 960px; display: flex; flex-direction: column; gap: 24px; }
+.import { display: flex; flex-direction: column; gap: 24px; }
 
 .import__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .import__eyebrow { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; color: var(--color-fog); text-transform: uppercase; }

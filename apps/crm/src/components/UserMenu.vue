@@ -25,6 +25,7 @@ const displayName = computed(() => {
   return `${auth.user.firstName ?? ''} ${auth.user.lastName ?? ''}`.trim() || 'You'
 })
 const displayEmail = computed(() => auth.user?.email ?? '')
+const avatarUrl = computed(() => auth.user?.avatarUrl ?? null)
 const roleLabel = computed(() => {
   const r = auth.user?.role
   if (!r) return null
@@ -89,7 +90,8 @@ onBeforeUnmount(() => {
     <div v-if="open" class="user-menu" role="menu" aria-label="Account">
       <header class="user-menu__head">
         <div class="user-menu__avatar" aria-hidden="true">
-          {{ displayName ? displayName.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase() : '?' }}
+          <img v-if="avatarUrl" :src="avatarUrl" :alt="displayName" />
+          <span v-else>{{ displayName ? displayName.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase() : '?' }}</span>
         </div>
         <div class="user-menu__id">
           <div class="user-menu__name">{{ displayName }}</div>
@@ -146,7 +148,7 @@ onBeforeUnmount(() => {
       </ul>
 
       <footer class="user-menu__foot">
-        <span class="user-menu__foot-brand">Torny CRM</span>
+        <span class="user-menu__foot-brand">Torny OS</span>
         <span class="user-menu__foot-sep">·</span>
         <span>v0.0.1</span>
       </footer>
@@ -189,7 +191,9 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 700;
   flex-shrink: 0;
+  overflow: hidden;
 }
+.user-menu__avatar img { width: 100%; height: 100%; object-fit: cover; }
 .user-menu__id { min-width: 0; }
 .user-menu__name {
   font-family: var(--font-body);

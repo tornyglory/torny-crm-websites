@@ -462,7 +462,7 @@ async function toggleArchive() {
           <ul class="thread__list">
             <li v-for="r in detail.replies" :key="r.id" class="thread__reply">
               <div class="thread__reply-head">
-                <span class="thread__author">{{ r.author_name ?? 'CRM' }}</span>
+                <span class="thread__author">{{ r.author_name ?? 'Torny' }}</span>
                 <span class="thread__time">{{ timeAgo(r.sent_at) }}</span>
                 <span
                   v-if="r.email_status === 'failed'"
@@ -545,7 +545,7 @@ async function toggleArchive() {
           <ul v-if="detail.notes.length" class="notes">
             <li v-for="n in detail.notes" :key="n.id" class="note">
               <div class="note__head">
-                <span class="note__author">{{ n.author_name ?? 'CRM' }}</span>
+                <span class="note__author">{{ n.author_name ?? 'Torny' }}</span>
                 <span class="note__time">{{ timeAgo(n.created_at) }}</span>
               </div>
               <div class="note__body">{{ n.body }}</div>

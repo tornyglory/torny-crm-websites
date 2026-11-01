@@ -460,7 +460,7 @@ async function submitReject() {
           <ul v-if="detail.notes.length" class="notes">
             <li v-for="n in detail.notes" :key="n.id" class="note">
               <div class="note__head">
-                <span class="note__author">{{ n.author_name ?? 'CRM' }}</span>
+                <span class="note__author">{{ n.author_name ?? 'Torny' }}</span>
                 <span class="note__time">{{ timeAgo(n.created_at) }}</span>
               </div>
               <div class="note__body">{{ n.body }}</div>

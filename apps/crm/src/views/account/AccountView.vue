@@ -9,7 +9,7 @@
  */
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { auth as authApi, ApiError } from '@torny/api-client'
+import { auth as authApi, media as mediaApi, ApiError } from '@torny/api-client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import CrmModal from '@/components/modals/CrmModal.vue'
@@ -181,6 +181,58 @@ async function changePasswordSubmit() {
 
 function back() { router.push({ name: 'dashboard' }) }
 
+// ── Avatar upload ─────────────────────────────────────────────────
+const avatarFileInput = ref<HTMLInputElement | null>(null)
+const avatarUploading = ref(false)
+
+function triggerAvatarPicker() {
+  avatarFileInput.value?.click()
+}
+
+async function onAvatarFileChosen(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''                        // reset so re-picking the same file still fires
+  if (!file) return
+  if (!/^image\//.test(file.type)) {
+    toast.error('Pick an image file.')
+    return
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    toast.error('Image must be under 5 MB.')
+    return
+  }
+  const uid = user.value?.id
+  if (uid == null) return
+  avatarUploading.value = true
+  try {
+    // Upload the file to Cloudflare via the existing /media/images/* dance.
+    const confirmed = await mediaApi.uploadMemberAvatar(uid, file)
+    const url = confirmed.avatar_url
+
+    // Persist via patchMe (brief 71). If the backend endpoint 404s, keep the
+    // optimistic update so the avatar lights up for the session; it'll reset
+    // on next /me refresh once brief 71 ships.
+    try {
+      await authApi.patchMe({ avatar_url: url })
+      await authStore.refresh()
+      toast.success('Profile picture updated.')
+    } catch (patchErr) {
+      if (patchErr instanceof ApiError && patchErr.status === 404) {
+        authStore.updateAvatarLocally(url)
+        toast.info('Uploaded. Backend persistence lands with brief 71 — survives this session.')
+      } else {
+        throw patchErr
+      }
+    }
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Could not upload profile picture.')
+  } finally {
+    avatarUploading.value = false
+  }
+}
+
+
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/)
   const a = parts[0]?.[0] ?? ''
@@ -211,9 +263,28 @@ function fmtExpires(iso: string | null): string {
 
     <!-- Hero -->
     <section class="acct__hero">
-      <div class="acct__avatar">
-        <img v-if="user.avatarUrl" :src="user.avatarUrl" :alt="fullName" />
-        <span v-else>{{ initials(fullName) }}</span>
+      <div class="acct__avatar-wrap">
+        <button type="button" class="acct__avatar" :disabled="avatarUploading" @click="triggerAvatarPicker" :aria-label="user.avatarUrl ? 'Change profile picture' : 'Add profile picture'">
+          <img v-if="user.avatarUrl" :src="user.avatarUrl" :alt="fullName" />
+          <span v-else>{{ initials(fullName) }}</span>
+          <span v-if="avatarUploading" class="acct__avatar-spin" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+              <circle cx="11" cy="11" r="8.5" stroke="rgba(255,255,255,0.25)" stroke-width="2.5"/>
+              <path d="M11 2.5a8.5 8.5 0 0 1 8.5 8.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span v-else class="acct__avatar-overlay">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11 2.5L13.5 5l-7.5 7.5-3 .5.5-3L11 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            <span class="acct__avatar-overlay-text">{{ user.avatarUrl ? 'Change' : 'Add' }}</span>
+          </span>
+        </button>
+        <input
+          ref="avatarFileInput"
+          type="file"
+          accept="image/*"
+          class="acct__avatar-file"
+          @change="onAvatarFileChosen"
+        />
       </div>
       <div class="acct__hero-text">
         <div class="acct__eyebrow">Your account</div>
@@ -373,7 +444,7 @@ function fmtExpires(iso: string | null): string {
 </template>
 
 <style scoped>
-.acct { display: flex; flex-direction: column; gap: 24px; max-width: 720px; }
+.acct { display: flex; flex-direction: column; gap: 24px; max-width: 1280px; }
 .mono { font-family: var(--font-mono); }
 
 .acct__topbar { display: flex; align-items: center; }
@@ -399,7 +470,15 @@ function fmtExpires(iso: string | null): string {
   align-items: center;
   gap: 20px;
 }
+.acct__avatar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
 .acct__avatar {
+  position: relative;
   width: 72px;
   height: 72px;
   border-radius: 999px;
@@ -413,8 +492,50 @@ function fmtExpires(iso: string | null): string {
   font-weight: 600;
   flex-shrink: 0;
   overflow: hidden;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
 }
+.acct__avatar:disabled { cursor: wait; }
 .acct__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.acct__avatar-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: rgba(10, 10, 11, 0.65);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  font-family: var(--font-body);
+}
+.acct__avatar:hover .acct__avatar-overlay,
+.acct__avatar:focus-visible .acct__avatar-overlay,
+.acct__avatar:disabled .acct__avatar-overlay { opacity: 1; }
+.acct__avatar-overlay-text {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.acct__avatar-file { display: none; }
+.acct__avatar-spin {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 11, 0.55);
+  border-radius: 999px;
+  animation: acct__avatar-spin 0.8s linear infinite;
+}
+@keyframes acct__avatar-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
 .acct__hero-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .acct__eyebrow {
   font-family: var(--font-body);

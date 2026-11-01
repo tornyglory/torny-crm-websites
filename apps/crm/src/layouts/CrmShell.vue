@@ -469,7 +469,7 @@ const bottomTabs = computed<TabItem[]>(() => [
         <span class="sidebar__brand-inner">
           <span class="sidebar__dot" />
           <span class="sidebar__wordmark">Torny</span>
-          <span class="sidebar__tag">CRM</span>
+          <span class="sidebar__tag">OS</span>
         </span>
         <button
           class="sidebar__close"
@@ -605,7 +605,10 @@ const bottomTabs = computed<TabItem[]>(() => [
       </nav>
 
       <div class="sidebar__user">
-        <div class="sidebar__user-avatar">{{ initials }}</div>
+        <div class="sidebar__user-avatar">
+          <img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" :alt="`${auth.user.firstName ?? ''} avatar`" />
+          <span v-else>{{ initials }}</span>
+        </div>
         <div class="sidebar__user-info">
           <div class="sidebar__user-name">{{ auth.user?.firstName }} {{ auth.user?.lastName }}</div>
           <div v-if="auth.user?.email" class="sidebar__user-email">{{ auth.user.email }}</div>
@@ -631,7 +634,7 @@ const bottomTabs = computed<TabItem[]>(() => [
         <div class="mobile-top__brand">
           <span class="mobile-top__dot" aria-hidden="true"></span>
           <span class="mobile-top__wordmark">Torny</span>
-          <span class="mobile-top__tag">CRM</span>
+          <span class="mobile-top__tag">OS</span>
         </div>
         <div class="mobile-top__actions">
           <button
@@ -666,7 +669,7 @@ const bottomTabs = computed<TabItem[]>(() => [
         <div class="topbar__brand">
           <span class="topbar__brand-dot" aria-hidden="true"></span>
           <span class="topbar__brand-wordmark">Torny</span>
-          <span class="topbar__brand-tag">CRM</span>
+          <span class="topbar__brand-tag">OS</span>
         </div>
         <div class="topbar__crumbs">
           <span class="topbar__crumb-muted">{{ club.current?.name ?? '' }}</span>
@@ -709,7 +712,8 @@ const bottomTabs = computed<TabItem[]>(() => [
             aria-label="Account menu"
             @click="toggleUserMenu"
           >
-            <span>{{ initials }}</span>
+            <img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" :alt="`${auth.user.firstName ?? ''} avatar`" />
+            <span v-else>{{ initials }}</span>
           </button>
           <button
             class="hamburger hamburger--topbar"
@@ -901,7 +905,8 @@ const bottomTabs = computed<TabItem[]>(() => [
 .sidebar__link.is-active .sidebar__link-count { color: rgba(255,255,255,0.7); }
 
 .sidebar__user { padding: 12px; border-top: 1px solid var(--color-hairline); display: flex; align-items: center; gap: 10px; }
-.sidebar__user-avatar { width: 32px; height: 32px; border-radius: 999px; background: var(--color-graphite); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 11px; font-weight: 700; }
+.sidebar__user-avatar { width: 32px; height: 32px; border-radius: 999px; background: var(--color-graphite); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 11px; font-weight: 700; overflow: hidden; flex-shrink: 0; }
+.sidebar__user-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .sidebar__user-info { flex: 1; min-width: 0; }
 .sidebar__user-name { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar__user-email { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
@@ -930,7 +935,8 @@ const bottomTabs = computed<TabItem[]>(() => [
 .topbar__new { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; background: var(--color-ink); color: #fff; border: none; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color 0.15s ease; }
 .topbar__new:hover { background: var(--color-graphite); }
 .topbar__new-kbd { font-family: var(--font-mono); font-size: 10px; padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.7); letter-spacing: 0.02em; }
-.topbar__avatar { width: 34px; height: 34px; border-radius: 999px; background: var(--color-ink); color: #fff; border: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-family: var(--font-body); font-size: 12px; font-weight: 700; transition: background-color 0.15s ease; }
+.topbar__avatar { width: 34px; height: 34px; border-radius: 999px; background: var(--color-ink); color: #fff; border: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-family: var(--font-body); font-size: 12px; font-weight: 700; transition: background-color 0.15s ease; overflow: hidden; }
+.topbar__avatar img { width: 100%; height: 100%; object-fit: cover; }
 .topbar__avatar:hover { background: var(--color-graphite); }
 .topbar__avatar:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 

@@ -61,7 +61,7 @@ function skipForNow() {
 
 <template>
   <section class="welcome">
-    <div class="welcome__eyebrow">Welcome to Torny CRM</div>
+    <div class="welcome__eyebrow">Welcome to Torny OS</div>
     <h1 class="welcome__title">Nice to meet you, {{ firstName }}.</h1>
     <p class="welcome__lede">
       Let's get <strong>{{ clubName }}</strong> set up so members can join, apply, and see what's on.

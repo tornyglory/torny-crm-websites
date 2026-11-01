@@ -100,6 +100,16 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /** Patch the stored user's avatar URL without round-tripping to the
+   *  server. Used by Account page uploads during the pre-brief-71 window
+   *  where PATCH /me 404s but we still want the uploaded image to light
+   *  up for the session. */
+  function updateAvatarLocally(nextAvatarUrl: string | null): void {
+    if (!user.value) return
+    user.value = { ...user.value, avatarUrl: nextAvatarUrl }
+    localStorage.setItem('torny.user', JSON.stringify(user.value))
+  }
+
   return {
     token,
     user,
@@ -111,5 +121,6 @@ export const useAuthStore = defineStore('auth', () => {
     setSession,
     clearSession,
     refresh,
+    updateAvatarLocally,
   }
 })

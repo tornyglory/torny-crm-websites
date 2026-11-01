@@ -20,7 +20,7 @@ function signOut() {
       <div class="auth-shell__brand">
         <span class="auth-shell__dot" />
         <span class="auth-shell__wordmark">Torny</span>
-        <span class="auth-shell__tag">CRM</span>
+        <span class="auth-shell__tag">OS</span>
         <span v-if="auth.user" class="auth-shell__signed-in">
           Signed in as <strong>{{ auth.user.email }}</strong>
         </span>

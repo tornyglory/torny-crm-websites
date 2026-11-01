@@ -156,7 +156,7 @@ async function submit(e: Event) {
         </label>
 
         <button type="submit" class="submit" :disabled="submitting">
-          <span>{{ submitting ? 'Signing in…' : 'Sign in to Torny CRM' }}</span>
+          <span>{{ submitting ? 'Signing in…' : 'Sign in to Torny OS' }}</span>
           <svg v-if="!submitting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
             <path d="M5 12h14" />
             <path d="m12 5 7 7-7 7" />

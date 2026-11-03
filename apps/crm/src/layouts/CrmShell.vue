@@ -150,6 +150,7 @@ const crumbTitle = computed(() => String(route.name ?? '').replace(/-/g, ' '))
 
 type NavIcon =
   | 'dashboard' | 'members' | 'applications' | 'enquiries' | 'venue-bookings'
+  | 'venue-packages'
   | 'website' | 'events' | 'teams' | 'honour' | 'tournaments'
   | 'communications' | 'site-settings' | 'settings'
 
@@ -408,6 +409,7 @@ const manageNav = computed<NavItem[]>(() => [
 ])
 const contentNav = computed<NavItem[]>(() => [
   { to: '/crm/website', label: 'Website', icon: 'website' },
+  { to: '/crm/venue-packages', label: 'Venue packages', icon: 'venue-packages' },
   {
     to: '/crm/events',
     label: 'Events',
@@ -558,6 +560,7 @@ const bottomTabs = computed<TabItem[]>(() => [
             <svg v-else-if="item.icon === 'applications'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 2H5a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 5 16h8a1.5 1.5 0 0 0 1.5-1.5V5.5L11 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M11 2v3.5h3.5M6.5 9.5h5M6.5 12h5M6.5 7h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
             <svg v-else-if="item.icon === 'enquiries'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2.5 4a1.5 1.5 0 0 1 1.5-1.5h10a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5H7l-3.5 3v-3H4A1.5 1.5 0 0 1 2.5 11V4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
             <svg v-else-if="item.icon === 'venue-bookings'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 4.5h12v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 7.5h12M6 2.5v3M12 2.5v3M6 10.5h3M6 12.5h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <svg v-else-if="item.icon === 'venue-packages'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2.5l6 3v7l-6 3-6-3v-7l6-3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 5.5l6 3 6-3M9 8.5v7" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
           </span>
           <span class="sidebar__link-label">{{ item.label }}</span>
           <span

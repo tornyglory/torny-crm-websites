@@ -15,6 +15,11 @@ const MEDIA_FALLBACK = 'https://s3vagc0pma.execute-api.ap-southeast-2.amazonaws.
 // stack — needs its own base until events, honour-board, and media uploads
 // move too.
 const BULK_EMAIL_FALLBACK = 'https://byi59x19m4.execute-api.ap-southeast-2.amazonaws.com/Prod'
+// Venue hire — fourth CDK stack. Scaffolded for brief 73 (packages +
+// settings) with brief 62 (bookings) and brief 72 (Stripe Connect) to
+// grow into the same stack. CRM + SAM were both at the CFN 500-resource
+// cap so a dedicated stack avoided the juggle.
+const VENUE_FALLBACK = 'https://tbqlfxlc0e.execute-api.ap-southeast-2.amazonaws.com/Prod'
 
 function readEnv(key: string): string | undefined {
   // Vite exposes env via import.meta.env; use a defensive lookup so this
@@ -27,3 +32,4 @@ export const SAM_BASE: string = readEnv('VITE_SAM_BASE_URL') ?? SAM_FALLBACK
 export const CRM_BASE: string = readEnv('VITE_CRM_BASE_URL') ?? CRM_FALLBACK
 export const MEDIA_BASE: string = readEnv('VITE_MEDIA_BASE_URL') ?? MEDIA_FALLBACK
 export const BULK_EMAIL_BASE: string = readEnv('VITE_BULK_EMAIL_BASE_URL') ?? BULK_EMAIL_FALLBACK
+export const VENUE_BASE: string = readEnv('VITE_VENUE_BASE_URL') ?? VENUE_FALLBACK

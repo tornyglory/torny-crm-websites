@@ -401,5 +401,25 @@ export type {
   SettingsPublishing,
   SettingsPage,
 } from './resources/clubSettings'
-export { SAM_BASE, CRM_BASE, MEDIA_BASE, BULK_EMAIL_BASE } from './config'
+export * as venuePackages from './resources/venuePackages'
+export type {
+  VenuePackage,
+  VenuePackageListItem,
+  VenueSlot,
+  VenueAddon,
+  VenueSettings,
+  CreateVenuePackageInput,
+  UpdateVenuePackageInput,
+  UpdateVenueSettingsInput,
+  VenuePackagesListResponse,
+  ListVenuePackagesParams,
+  VenuePackageErrorCode,
+  PublicVenuePackage,
+  PublicVenueSlot,
+  PublicVenueAddon,
+  PublicVenueSettings,
+  PublicVenuePackagesResponse,
+} from './resources/venuePackages'
+
+export { SAM_BASE, CRM_BASE, MEDIA_BASE, BULK_EMAIL_BASE, VENUE_BASE } from './config'
 export { ApiError, authedFetch, publicFetch, TOKEN_STORAGE_KEY } from './http'

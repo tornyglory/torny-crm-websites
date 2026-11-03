@@ -29,16 +29,9 @@ const fullName = computed(() => {
   return `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim()
 })
 
-// ── Pending email flag (brief 71 §6 extends AuthUser with
-//    pending_email + pending_email_expires_at). Until the backend ships,
-//    these fields won't be on the stored user — we treat `undefined` as
-//    "no pending change". The cast keeps TS happy. ──────────────────
-interface WithPending {
-  pending_email?: string | null
-  pending_email_expires_at?: string | null
-}
-const pendingEmail = computed(() => (user.value as (typeof user.value & WithPending) | null)?.pending_email ?? null)
-const pendingExpiresAt = computed(() => (user.value as (typeof user.value & WithPending) | null)?.pending_email_expires_at ?? null)
+// Brief 71 §6 — AuthUser now carries pendingEmail + pendingEmailExpiresAt.
+const pendingEmail = computed(() => user.value?.pendingEmail ?? null)
+const pendingExpiresAt = computed(() => user.value?.pendingEmailExpiresAt ?? null)
 
 // ── Modals ────────────────────────────────────────────────────────
 const nameModalOpen = ref(false)
@@ -70,17 +63,26 @@ function openPasswordModal() {
 // ── Actions ───────────────────────────────────────────────────────
 function friendlyError(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
-    if (err.status === 404) return 'Available soon — brief 71 lands with this endpoint.'
     switch (err.code) {
-      case 'invalid_name':             return 'Name must be between 1 and 120 characters.'
-      case 'invalid_avatar':           return "Avatar URL isn't on the Torny media allowlist."
-      case 'invalid_email':            return 'That doesn\'t look like a valid email.'
-      case 'same_as_current':          return "That's already your current email."
-      case 'email_in_use':             return 'Another account already uses that email.'
-      case 'rate_limited':             return 'Too many change requests — try again in an hour.'
-      case 'current_password_wrong':   return 'Current password is wrong.'
-      case 'weak_password':            return 'Password needs ≥10 chars with at least one letter and one number.'
-      default:                         return err.message || fallback
+      case 'invalid_name':               return 'Name must be between 1 and 120 characters.'
+      case 'invalid_avatar_url':         return 'Avatar URL must be https:// and under 2048 characters.'
+      case 'invalid_email':              return 'That doesn\'t look like a valid email.'
+      case 'same_as_current':            return "That's already your current email."
+      case 'email_in_use':               return 'Another account already uses that email.'
+      case 'rate_limited': {
+        const body = (err.body ?? {}) as { retry_after_seconds?: number }
+        const retryIn = body.retry_after_seconds
+        if (typeof retryIn === 'number') {
+          const mins = Math.max(1, Math.ceil(retryIn / 60))
+          return `Too many change requests — try again in ${mins} min${mins === 1 ? '' : 's'}.`
+        }
+        return 'Too many change requests — try again in a bit.'
+      }
+      case 'platform_change_forbidden':  return 'Platform admins can\'t change their email from here.'
+      case 'current_password_wrong':     return 'Current password is wrong.'
+      case 'weak_password':              return 'Password needs ≥10 chars with at least one letter and one number.'
+      case 'no_password':                return 'This account has no password set — use the forgot-password flow instead.'
+      default:                           return err.message || fallback
     }
   }
   return err instanceof Error ? err.message : fallback
@@ -94,8 +96,8 @@ async function saveName() {
   }
   saving.value = true
   try {
-    await authApi.patchMe({ name: trimmed })
-    await authStore.refresh()
+    const updated = await authApi.patchMe({ name: trimmed })
+    authStore.updateFromApi(updated)
     nameModalOpen.value = false
     toast.success('Name updated.')
   } catch (err) {
@@ -114,9 +116,14 @@ async function requestEmailChange() {
   saving.value = true
   try {
     const res = await authApi.requestEmailChange(email)
+    // Refresh picks up the new pending_email + expires_at from GET /me.
     await authStore.refresh()
     emailModalOpen.value = false
-    toast.success(`Check ${res.pending_email} for a confirmation link.`)
+    toast.success(
+      res.confirm_sent_to_new
+        ? `Check ${res.pending_email} for a confirmation link.`
+        : `Email change started for ${res.pending_email}.`,
+    )
   } catch (err) {
     toast.error(friendlyError(err, 'Could not start email change.'))
   } finally {
@@ -140,9 +147,9 @@ async function resendPendingEmail() {
 async function cancelPendingEmail() {
   saving.value = true
   try {
-    await authApi.cancelEmailChange()
+    const res = await authApi.cancelEmailChange()
     await authStore.refresh()
-    toast.success('Email change cancelled.')
+    toast.success(res.cancelled ? 'Email change cancelled.' : 'No pending change to cancel.')
   } catch (err) {
     toast.error(friendlyError(err, 'Could not cancel.'))
   } finally {
@@ -165,13 +172,12 @@ async function changePasswordSubmit() {
       current_password: currentPw.value,
       new_password: newPw.value,
     })
+    // Brief 71 §5 — swap the fresh JWT in place of the current one; the old
+    // token dies in the ~5 min authorizer cache window. Every other session
+    // for this user is also killed by the token_version bump.
+    authStore.rotateToken(res.token)
     passwordModalOpen.value = false
-    const revoked = res.other_sessions_revoked
-    toast.success(
-      revoked > 0
-        ? `Password changed · ${revoked} other session${revoked === 1 ? '' : 's'} signed out.`
-        : 'Password changed.',
-    )
+    toast.success('Password changed. Other devices signed out.')
   } catch (err) {
     toast.error(friendlyError(err, 'Could not change password.'))
   } finally {
@@ -206,27 +212,15 @@ async function onAvatarFileChosen(event: Event) {
   if (uid == null) return
   avatarUploading.value = true
   try {
-    // Upload the file to Cloudflare via the existing /media/images/* dance.
+    // Upload the file via the existing /media/images/* dance, then persist
+    // the resulting URL via PATCH /me. Server auto-cleans the prior
+    // imagedelivery.net image if there was one.
     const confirmed = await mediaApi.uploadMemberAvatar(uid, file)
-    const url = confirmed.avatar_url
-
-    // Persist via patchMe (brief 71). If the backend endpoint 404s, keep the
-    // optimistic update so the avatar lights up for the session; it'll reset
-    // on next /me refresh once brief 71 ships.
-    try {
-      await authApi.patchMe({ avatar_url: url })
-      await authStore.refresh()
-      toast.success('Profile picture updated.')
-    } catch (patchErr) {
-      if (patchErr instanceof ApiError && patchErr.status === 404) {
-        authStore.updateAvatarLocally(url)
-        toast.info('Uploaded. Backend persistence lands with brief 71 — survives this session.')
-      } else {
-        throw patchErr
-      }
-    }
+    const updated = await authApi.patchMe({ avatar_url: confirmed.avatar_url })
+    authStore.updateFromApi(updated)
+    toast.success('Profile picture updated.')
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : 'Could not upload profile picture.')
+    toast.error(friendlyError(err, 'Could not upload profile picture.'))
   } finally {
     avatarUploading.value = false
   }

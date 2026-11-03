@@ -28,6 +28,12 @@ export interface AuthUser {
   profile_completed: number | null
   created: string | null
   updated: string | null
+  /** Brief 71 §6 — set while a double-opt-in email change is in flight. */
+  pending_email?: string | null
+  /** RFC3339, 7 days from the request. Null when no change pending. */
+  pending_email_expires_at?: string | null
+  /** Stamped when the current email was confirmed. Null for legacy rows. */
+  email_verified_at?: string | null
 }
 
 export interface LoginResponse {
@@ -142,8 +148,8 @@ export async function resetPassword(
 
 // ── Account self-service — backend brief 71 ───────────────────────
 // Signed-in user editing their own account. All endpoints under /me on
-// SAM_BASE. Until brief 71 ships these will 404 — callers catch and
-// surface a "coming soon" message.
+// SAM_BASE. Response shape is flat under `data` (NOT nested under
+// `data.user`) — matches the existing GET /me contract.
 
 import { SAM_BASE } from '../config'
 import { authedFetch } from '../http'
@@ -156,26 +162,28 @@ interface SuccessEnvelope<T> {
 export interface UpdateMeInput {
   /** Full display name. Trimmed, 1–120 chars. */
   name?: string
-  /** Media host URL, or `null` to clear. */
+  /** Media host URL (https:// only, ≤ 2048 chars), or `null` to clear. */
   avatar_url?: string | null
 }
 
-/** PATCH /me — change name + avatar. */
+/** PATCH /me — change name + avatar. Returns the full updated AuthUser. */
 export async function patchMe(
   input: UpdateMeInput,
   opts: { signal?: AbortSignal } = {},
 ): Promise<AuthUser> {
-  const res = await authedFetch<SuccessEnvelope<{ user: AuthUser }>>(
+  const res = await authedFetch<SuccessEnvelope<AuthUser>>(
     `${SAM_BASE}/me`,
     { method: 'PATCH', body: JSON.stringify(input), signal: opts.signal },
   )
-  return res.data.user
+  return res.data
 }
 
 export interface EmailChangeRequestResult {
   pending_email: string
   expires_at: string
   notice_sent_to_old: boolean
+  /** Brief 71 §2 — whether the confirmation email reached the new address. */
+  confirm_sent_to_new: boolean
 }
 
 /** POST /me/email-change — kick off a double-opt-in email change. */
@@ -208,14 +216,15 @@ export async function confirmEmailChange(
   return body.data
 }
 
-/** POST /me/email-change/cancel — abort pending change. */
+/** POST /me/email-change/cancel — abort pending change. Idempotent. */
 export async function cancelEmailChange(
   opts: { signal?: AbortSignal } = {},
-): Promise<void> {
-  await authedFetch<SuccessEnvelope<{ cancelled: boolean }>>(
+): Promise<{ cancelled: boolean }> {
+  const res = await authedFetch<SuccessEnvelope<{ cancelled: boolean }>>(
     `${SAM_BASE}/me/email-change/cancel`,
     { method: 'POST', signal: opts.signal },
   )
+  return res.data
 }
 
 export interface PasswordChangeInput {
@@ -225,10 +234,16 @@ export interface PasswordChangeInput {
 
 export interface PasswordChangeResult {
   changed_at: string
-  other_sessions_revoked: number
+  /** Sentinel string ('bumped') — not a count. The caller's live JWT is
+   *  killed by the token_version bump; every other session dies too. */
+  other_sessions_revoked: 'bumped'
+  /** Fresh JWT — swap this in place of the current token immediately. */
+  token: string
 }
 
-/** POST /me/password-change — rotate password while signed in. */
+/** POST /me/password-change — rotate password while signed in. The response
+ *  includes a fresh JWT (`token`) that MUST replace the current one; the
+ *  caller's old token dies within the ~5 min API Gateway authorizer cache. */
 export async function changePassword(
   input: PasswordChangeInput,
   opts: { signal?: AbortSignal } = {},

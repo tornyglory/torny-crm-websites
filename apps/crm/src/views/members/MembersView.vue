@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch, watchEffect } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import CrmEmptyState from '@/components/CrmEmptyState.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
@@ -19,6 +19,7 @@ import { members as membersApi, seasons as seasonsApi, ApiError, type PaymentMet
 const toast = useToast()
 const clubStore = useClubStore()
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
 type MemberStatus = 'Active' | 'Prospect' | 'Visitor' | 'Pending' | 'Lapsed'
@@ -665,6 +666,22 @@ function onSeasonChange() {
   void loadSummary()
 }
 
+/** Shaped for `<TornySelect>`. Null is not a valid value — the picker is
+ *  only rendered once seasons load, and we keep the first one highlighted. */
+const seasonSelectOptions = computed<Array<{ value: number; label: string }>>(() =>
+  seasonsList.value.map((s) => ({
+    value: s.season_id,
+    label: `${s.season_name}${s.is_current_season ? ' · current' : ''}`,
+  })),
+)
+/** Guard: `selectedSeasonId` is a `number | null` ref but TornySelect's
+ *  generic can't accept null, so we coerce through a getter/setter. */
+const seasonPickerValue = computed<number>({
+  get: () => selectedSeasonId.value ?? seasonsList.value[0]?.season_id ?? 0,
+  set: (v) => { selectedSeasonId.value = v },
+})
+watch(selectedSeasonId, () => { onSeasonChange() })
+
 async function loadTiers() {
   const cid = clubStore.current?.id
   if (cid == null) { availableTiers.value = []; return }
@@ -743,6 +760,52 @@ const POSITION_GROUPS: Array<{ value: PositionGroup; label: string; hint: string
   { value: 'committee', label: 'Committee', hint: 'Voting members of a sub-committee.' },
   { value: 'member', label: 'Member', hint: 'Regular playing member — the default.' },
 ]
+const POSITION_GROUP_OPTIONS = POSITION_GROUPS.map((g) => ({ value: g.value, label: g.label }))
+
+const PAYMENT_METHOD_OPTIONS: Array<{ value: PaymentMethod; label: string }> = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'card', label: 'Card' },
+  { value: 'bank_transfer', label: 'Bank transfer' },
+  { value: 'cheque', label: 'Cheque' },
+  { value: 'other', label: 'Other' },
+]
+const ADD_ROLE_OPTIONS: Array<{ value: MemberRole; label: string }> = [
+  { value: 'Player', label: 'Player' },
+  { value: 'Committee', label: 'Committee' },
+  { value: 'Coach', label: 'Coach' },
+  { value: 'Junior', label: 'Junior' },
+  { value: 'Volunteer', label: 'Volunteer' },
+]
+/** Add-member tier picker — labelled with fee + cadence for faster scan. */
+const addTierOptions = computed<Array<{ value: string; label: string }>>(() =>
+  availableTiers.value.map((t) => {
+    const suffix = t.fee != null
+      ? ` · $${t.fee}${t.cadence === 'annual' ? '/yr' : t.cadence === 'monthly' ? '/mo' : t.cadence === 'season' ? '/season' : ''}`
+      : ''
+    return { value: t.type_name, label: `${t.type_name}${suffix}` }
+  }),
+)
+
+/** Role options for the Edit modal. Admin is owner-only — the computed
+ *  reactively hides it from committee members. */
+const editRoleOptions = computed<Array<{ value: 'player' | 'committee' | 'admin'; label: string }>>(() => {
+  const opts: Array<{ value: 'player' | 'committee' | 'admin'; label: string }> = [
+    { value: 'player', label: 'Player' },
+    { value: 'committee', label: 'Committee' },
+  ]
+  if (callerIsOwner.value) opts.push({ value: 'admin', label: 'Admin' })
+  return opts
+})
+/** Membership tier options, with a sentinel for "no tier". */
+const editTierOptions = computed<Array<{ value: number; label: string }>>(() => {
+  const opts: Array<{ value: number; label: string }> = [{ value: 0, label: '— No tier —' }]
+  for (const t of availableTiers.value) opts.push({ value: t.id, label: t.type_name })
+  return opts
+})
+const editTierSelectValue = computed<number>({
+  get: () => editForm.typeId ?? 0,
+  set: (v) => { editForm.typeId = v === 0 ? null : v },
+})
 
 
 function _openEditMember() {
@@ -976,6 +1039,20 @@ function closeAdd() {
   addOpen.value = false
 }
 
+/** Auto-open the Add member modal when the shell's +New menu routes here
+ *  with `?new=1`. Clears the query after so a reload doesn't re-open. */
+watch(
+  () => route.query.new,
+  (v) => {
+    if (v === '1' && !addOpen.value) {
+      openAdd()
+      const { new: _drop, ...rest } = route.query
+      router.replace({ query: rest })
+    }
+  },
+  { immediate: true },
+)
+
 const canSubmit = computed(
   () => form.firstName.trim().length > 0 && form.lastName.trim().length > 0 && /.+@.+\..+/.test(form.email.trim()),
 )
@@ -1057,25 +1134,12 @@ async function submit() {
         <p class="members__sub">{{ heroCounts.total }} total · {{ heroCounts.active }} active</p>
       </div>
       <div class="members__actions">
-        <label v-if="seasonsList.length > 0" class="season-picker">
-          <span class="season-picker__label">Season</span>
-          <select
-            v-model="selectedSeasonId"
-            class="season-picker__select"
-            @change="onSeasonChange"
-          >
-            <option
-              v-for="s in seasonsList"
-              :key="s.season_id"
-              :value="s.season_id"
-            >
-              {{ s.season_name }}{{ s.is_current_season ? ' · current' : '' }}
-            </option>
-          </select>
-          <svg class="season-picker__chev" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </label>
+        <TornySelect
+          v-if="seasonsList.length > 0"
+          v-model="seasonPickerValue"
+          label="Season"
+          :options="seasonSelectOptions"
+        />
         <button
           v-if="callerCanManageSeasons"
           type="button"
@@ -1416,39 +1480,30 @@ async function submit() {
       @close="closeEdit"
     >
       <form class="form" @submit.prevent="submitEdit">
-        <label class="field">
+        <div class="field">
           <span class="field__label">Role</span>
-          <select v-model="editForm.role">
-            <option value="player">Player</option>
-            <option value="committee">Committee</option>
-            <option v-if="callerIsOwner" value="admin">Admin</option>
-          </select>
+          <TornySelect v-model="editForm.role" :options="editRoleOptions" />
           <span v-if="!callerIsOwner" class="field__hint">Only the club owner can promote to Admin.</span>
-        </label>
+        </div>
 
         <label class="field">
           <span class="field__label">Title (optional)</span>
           <input v-model="editForm.title" type="text" maxlength="80" placeholder="e.g. Secretary, Head Coach, Life Member" />
         </label>
 
-        <label class="field">
+        <div class="field">
           <span class="field__label">Membership tier</span>
-          <select v-model.number="editForm.typeId">
-            <option :value="null">— No tier —</option>
-            <option v-for="t in availableTiers" :key="t.id" :value="t.id">{{ t.type_name }}</option>
-          </select>
+          <TornySelect v-model="editTierSelectValue" :options="editTierOptions" />
           <span v-if="availableTiers.length === 0" class="field__hint">Finish onboarding (Step 4) to define membership tiers.</span>
-        </label>
+        </div>
 
-        <label class="field">
+        <div class="field">
           <span class="field__label">Position group</span>
-          <select v-model="editForm.positionGroup">
-            <option v-for="g in POSITION_GROUPS" :key="g.value" :value="g.value">{{ g.label }}</option>
-          </select>
+          <TornySelect v-model="editForm.positionGroup" :options="POSITION_GROUP_OPTIONS" />
           <span class="field__hint">
             {{ POSITION_GROUPS.find((g) => g.value === editForm.positionGroup)?.hint }}
           </span>
-        </label>
+        </div>
 
         <label class="field field--switch">
           <span class="field__switch-copy">
@@ -1519,30 +1574,16 @@ async function submit() {
           </div>
         </div>
 
-        <label class="field" v-if="!paymentForm.waived">
+        <div class="field" v-if="!paymentForm.waived">
           <span class="field__label">Method</span>
-          <select v-model="paymentForm.method">
-            <option value="cash">Cash</option>
-            <option value="card">Card</option>
-            <option value="bank_transfer">Bank transfer</option>
-            <option value="cheque">Cheque</option>
-            <option value="other">Other</option>
-          </select>
-        </label>
+          <TornySelect v-model="paymentForm.method" :options="PAYMENT_METHOD_OPTIONS" />
+        </div>
 
-        <label class="field" v-if="seasonsList.length > 0">
+        <div class="field" v-if="seasonsList.length > 0 && paymentForm.seasonId != null">
           <span class="field__label">Season</span>
-          <select v-model.number="paymentForm.seasonId">
-            <option
-              v-for="s in seasonsList"
-              :key="s.season_id"
-              :value="s.season_id"
-            >
-              {{ s.season_name }}{{ s.is_current_season ? ' · current' : '' }}
-            </option>
-          </select>
+          <TornySelect v-model="paymentForm.seasonId" :options="seasonSelectOptions" />
           <span class="field__hint">Payment attaches to this season's totals. Defaults to what's showing above.</span>
-        </label>
+        </div>
 
         <label class="field">
           <span class="field__label">Reference (optional)</span>
@@ -1622,35 +1663,29 @@ async function submit() {
             <span class="field__label">Phone</span>
             <input v-model="form.phone" type="tel" placeholder="021 555 0000" />
           </label>
-          <label class="field">
+          <div class="field">
             <span class="field__label">Role</span>
-            <select v-model="form.role">
-              <option>Player</option>
-              <option>Committee</option>
-              <option>Coach</option>
-              <option>Junior</option>
-              <option>Volunteer</option>
-            </select>
-          </label>
+            <TornySelect v-model="form.role" :options="ADD_ROLE_OPTIONS" />
+          </div>
         </div>
         <label v-else class="field">
           <span class="field__label">Phone</span>
           <input v-model="form.phone" type="tel" placeholder="021 555 0000" />
         </label>
-        <label v-if="form.type === 'member'" class="field">
+        <div v-if="form.type === 'member'" class="field">
           <span class="field__label">Membership tier</span>
-          <select v-if="availableTiers.length > 0" v-model="form.membership">
-            <option v-for="t in availableTiers" :key="t.id" :value="t.type_name">
-              {{ t.type_name }}<template v-if="t.fee != null"> · ${{ t.fee }}{{ t.cadence === 'annual' ? '/yr' : t.cadence === 'monthly' ? '/mo' : t.cadence === 'season' ? '/season' : '' }}</template>
-            </option>
-          </select>
-          <select v-else disabled>
-            <option>{{ tiersLoading ? 'Loading tiers…' : 'No tiers defined yet' }}</option>
-          </select>
+          <TornySelect
+            v-if="availableTiers.length > 0"
+            v-model="form.membership"
+            :options="addTierOptions"
+          />
+          <div v-else class="field__disabled-stub">
+            {{ tiersLoading ? 'Loading tiers…' : 'No tiers defined yet' }}
+          </div>
           <span v-if="!tiersLoading && availableTiers.length === 0" class="field__hint">
             Open Settings → Membership types to add the club's tiers first.
           </span>
-        </label>
+        </div>
 
         <template v-if="form.type === 'member'">
           <div class="switch-row">
@@ -1955,6 +1990,7 @@ async function submit() {
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
 .field__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; }
+.field__disabled-stub { padding: 7px 12px; border: 1px dashed var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 12px; color: var(--color-fog); background: var(--color-surface); }
 .field input, .field select, .field textarea { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; resize: vertical; }
 .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--color-ink); }
 
@@ -1999,12 +2035,6 @@ async function submit() {
 .type-picker__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); line-height: 1.4; }
 .form__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); line-height: 1.5; margin: 0; padding: 10px 12px; background: var(--color-surface); border-radius: 8px; }
 
-.season-picker { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 32px 0 14px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; cursor: pointer; }
-.season-picker:hover { border-color: var(--color-mute); }
-.season-picker:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
-.season-picker__label { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
-.season-picker__select { appearance: none; -webkit-appearance: none; border: 0; outline: 0; background: transparent; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-ink); padding: 0; cursor: pointer; }
-.season-picker__chev { position: absolute; right: 12px; color: var(--color-fog); pointer-events: none; }
 .stat-panel__label-season { font-family: var(--font-body); font-size: 10px; font-weight: 500; color: var(--color-fog); letter-spacing: 0.04em; text-transform: none; margin-left: 2px; }
 
 .field__error { font-family: var(--font-body); font-size: 12px; color: var(--color-danger); margin-top: 4px; }

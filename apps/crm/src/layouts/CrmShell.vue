@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RouterView, RouterLink, useRoute } from 'vue-router'
+import { RouterView, RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
 import { useClickOutside } from '@/composables/useClickOutside'
@@ -23,6 +23,7 @@ const auth = useAuthStore()
 const club = useClubStore()
 const settingsStore = useClubSettingsStore()
 const route = useRoute()
+const router = useRouter()
 
 /** Fetch the club settings payload once on mount + when the active club
  *  changes. This is how the shell surfaces the persisted logo without
@@ -438,9 +439,11 @@ const accountNav: NavItem[] = [
   { to: '/crm/settings', label: 'Settings', icon: 'settings' },
 ]
 
-function signOut() {
-  auth.clearSession()
+async function signOut() {
   closeDrawer()
+  auth.clearSession()
+  club.clear()
+  await router.push({ name: 'sign-in' })
 }
 
 interface TabItem { to: string; label: string; count?: number; icon: 'home' | 'members' | 'apps' | 'enquiries' | 'more' }

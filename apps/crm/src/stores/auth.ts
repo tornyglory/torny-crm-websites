@@ -16,6 +16,10 @@ export interface AuthUser {
   clubs: UserClub[]
   isPlatformAdmin: boolean
   avatarUrl: string | null
+  /** Brief 71 §6 — set while a double-opt-in email change is in flight. */
+  pendingEmail: string | null
+  /** RFC3339, 7 days from the request. Null when no change pending. */
+  pendingEmailExpiresAt: string | null
 }
 
 // The API returns a single `name`. The rest of the CRM keys off firstName /
@@ -38,6 +42,8 @@ export function fromApiUser(u: ApiUser): AuthUser {
     clubs: u.clubs ?? [],
     isPlatformAdmin: u.is_platform_admin === true,
     avatarUrl: u.avatar_url,
+    pendingEmail: u.pending_email ?? null,
+    pendingEmailExpiresAt: u.pending_email_expires_at ?? null,
   }
 }
 
@@ -100,14 +106,20 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  /** Patch the stored user's avatar URL without round-tripping to the
-   *  server. Used by Account page uploads during the pre-brief-71 window
-   *  where PATCH /me 404s but we still want the uploaded image to light
-   *  up for the session. */
-  function updateAvatarLocally(nextAvatarUrl: string | null): void {
-    if (!user.value) return
-    user.value = { ...user.value, avatarUrl: nextAvatarUrl }
+  /** Replace the stored user with a fresh server shape. Used by PATCH /me
+   *  callers (name, avatar, email) so the whole app reactively picks up
+   *  the new values without a round-trip to GET /me. */
+  function updateFromApi(apiUser: ApiUser): void {
+    user.value = fromApiUser(apiUser)
     localStorage.setItem('torny.user', JSON.stringify(user.value))
+  }
+
+  /** Swap the current JWT for a fresh one. Required after
+   *  POST /me/password-change (brief 71 §5) — the old token dies within
+   *  the ~5 min authorizer cache window. */
+  function rotateToken(nextToken: string): void {
+    token.value = nextToken
+    localStorage.setItem('torny.token', nextToken)
   }
 
   return {
@@ -121,6 +133,7 @@ export const useAuthStore = defineStore('auth', () => {
     setSession,
     clearSession,
     refresh,
-    updateAvatarLocally,
+    updateFromApi,
+    rotateToken,
   }
 })

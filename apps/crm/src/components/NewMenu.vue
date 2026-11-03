@@ -32,13 +32,12 @@ interface Item {
   shortcut?: string
 }
 const ITEMS: Item[] = [
-  { key: 'member', label: 'New member', hint: 'Add manually — skips the applications flow', route: '/crm/members', icon: 'user', shortcut: 'M' },
+  { key: 'member', label: 'New member', hint: 'Add manually — skips the applications flow', route: '/crm/members?new=1', icon: 'user', shortcut: 'M' },
   { key: 'tournament', label: 'New tournament', hint: 'Take entries, run brackets, collect fees', route: '/crm/tournaments/new', icon: 'trophy', shortcut: 'O' },
-  { key: 'event', label: 'New event', hint: 'Roll-up, social, or club fixture', route: '/crm/events', icon: 'calendar', shortcut: 'E' },
+  { key: 'event', label: 'New event', hint: 'Roll-up, social, or club fixture', route: '/crm/events?new=1', icon: 'calendar', shortcut: 'E' },
   { key: 'team', label: 'New team selection', hint: 'Rink assignments for a fixture', route: '/crm/teams/new', icon: 'people', shortcut: 'T' },
   { key: 'campaign', label: 'New campaign', hint: 'Email or SMS to members', route: '/crm/communications?compose=1', icon: 'send', shortcut: 'C' },
-  { key: 'page', label: 'New page', hint: 'A public site page from blocks', route: '/crm/website', icon: 'page', shortcut: 'P' },
-  { key: 'note', label: 'New enquiry note', hint: 'Log a phone-call enquiry', route: '/crm/enquiries', icon: 'inbox', shortcut: 'N' },
+  { key: 'page', label: 'New page', hint: 'A public site page from blocks', route: '/crm/website?new=1', icon: 'page', shortcut: 'P' },
 ]
 
 const activeIndex = ref(0)

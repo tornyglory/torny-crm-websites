@@ -5,6 +5,7 @@ import { auth as authApi, AuthError } from '@torny/api-client'
 
 const email = ref('')
 const submitting = ref(false)
+const resending = ref(false)
 const sent = ref(false)
 const error = ref<string | null>(null)
 
@@ -20,8 +21,8 @@ async function submit(e: Event) {
     await authApi.requestPasswordReset(email.value.trim(), { baseURL: API_BASE })
     sent.value = true
   } catch (err) {
-    // Backend does not leak whether an email exists — we show the same success
-    // state on error unless it's a client-side / network failure.
+    // Backend doesn't leak whether the email exists — show the sent state
+    // unless we hit a server-side problem.
     if (err instanceof AuthError && err.status >= 500) {
       error.value = 'Something went wrong. Please try again.'
     } else {
@@ -31,77 +32,118 @@ async function submit(e: Event) {
     submitting.value = false
   }
 }
+
+async function resend() {
+  resending.value = true
+  error.value = null
+  try {
+    await authApi.requestPasswordReset(email.value.trim(), { baseURL: API_BASE })
+  } catch (err) {
+    if (err instanceof AuthError && err.status >= 500) {
+      error.value = 'Something went wrong. Please try again.'
+    }
+  } finally {
+    resending.value = false
+  }
+}
+
+function tryAnother() {
+  sent.value = false
+  error.value = null
+}
 </script>
 
 <template>
-  <div class="fp">
-    <div class="fp__card">
-      <div class="fp__eyebrow">Recover access</div>
-      <h1 class="fp__heading">Reset your password</h1>
+  <div class="auth-page">
+    <!-- Request state -->
+    <template v-if="!sent">
+      <header class="auth-page__header">
+        <h1 class="auth-page__title">Reset your password</h1>
+        <p class="auth-page__sub">Enter the email you signed up with and we'll ping a reset link.</p>
+      </header>
 
-      <template v-if="!sent">
-        <p class="fp__sub">Enter the email you use with Torny — we'll send you a link to set a new password.</p>
-        <form class="form" @submit="submit">
-          <label class="field">
-            <span class="field__label">Email</span>
-            <input v-model="email" type="email" required autocomplete="email" autofocus placeholder="you@club.co.nz" class="field__input" />
-          </label>
-          <button type="submit" class="submit" :disabled="submitting || !canSubmit">
-            {{ submitting ? 'Sending…' : 'Send reset link' }}
-          </button>
-          <p v-if="error" class="alert">{{ error }}</p>
-        </form>
-      </template>
-
-      <template v-else>
-        <div class="sent">
-          <div class="sent__badge">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
-              <path d="M20 6 9 17l-5-5" />
-            </svg>
+      <form class="auth-page__card" @submit="submit" novalidate>
+        <div class="auth-field">
+          <label for="forgot-email" class="auth-field__label">Email</label>
+          <div class="auth-field__wrap">
+            <input
+              id="forgot-email"
+              v-model="email"
+              class="auth-field__input"
+              type="email"
+              required
+              autocomplete="email"
+              autofocus
+              placeholder="you@yourclub.co.nz"
+            />
           </div>
-          <h2 class="sent__title">Check your inbox</h2>
-          <p class="sent__body">
-            If <strong>{{ email }}</strong> is registered with Torny, we've sent a reset link.
-            It's good for 24 hours.
-          </p>
-          <p class="sent__hint">Nothing yet? Check spam, or wait a minute and try again.</p>
         </div>
-      </template>
 
-      <div class="fp__foot">
-        <RouterLink to="/" class="fp__link">← Back to sign in</RouterLink>
+        <div v-if="error" class="auth-alert">{{ error }}</div>
+
+        <button type="submit" class="auth-btn" :disabled="submitting || !canSubmit">
+          <span>{{ submitting ? 'Sending…' : 'Send reset link' }}</span>
+          <svg v-if="!submitting" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h14" />
+            <path d="m12 5 7 7-7 7" />
+          </svg>
+        </button>
+
+        <div class="auth-switch">
+          Remembered it? <RouterLink to="/">Sign in →</RouterLink>
+        </div>
+      </form>
+    </template>
+
+    <!-- Sent state -->
+    <template v-else>
+      <header class="auth-page__header">
+        <h1 class="auth-page__title">Check your inbox</h1>
+        <p class="auth-page__sub">
+          We just sent a reset link to <strong class="fp__email">{{ email }}</strong>. It expires in 30 minutes.
+        </p>
+      </header>
+
+      <div class="auth-page__card">
+        <div class="auth-check">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        </div>
+
+        <div v-if="error" class="auth-alert">{{ error }}</div>
+
+        <button type="button" class="auth-btn auth-btn--ghost" :disabled="resending" @click="resend">
+          <span>{{ resending ? 'Resending…' : 'Resend link' }}</span>
+          <svg v-if="!resending" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h14" />
+            <path d="m12 5 7 7-7 7" />
+          </svg>
+        </button>
+
+        <div class="auth-switch">
+          Wrong email? <button type="button" class="fp__linklike" @click="tryAnother">Try another →</button>
+        </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
-.fp { flex: 1; background: var(--color-surface); padding: 60px 24px; display: flex; justify-content: center; }
-.fp__card { width: 100%; max-width: 460px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 20px; box-shadow: var(--shadow-md); padding: 36px; display: flex; flex-direction: column; gap: 14px; height: fit-content; }
-.fp__eyebrow { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; color: var(--color-fog); text-transform: uppercase; }
-.fp__heading { font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); margin: -4px 0 0; }
-.fp__sub { font-family: var(--font-body); font-size: 13px; line-height: 1.55; color: var(--color-graphite); margin: 0; }
-
-.form { display: flex; flex-direction: column; gap: 14px; margin-top: 6px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field__label { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.12em; color: var(--color-fog); text-transform: uppercase; }
-.field__input { padding: 11px 14px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 14px; color: var(--color-ink); background: #fff; }
-.field__input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
-
-.submit { padding: 13px 18px; background: var(--color-ink); color: #fff; border: none; border-radius: 12px; font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; }
-.submit:disabled { opacity: 0.5; cursor: default; }
-
-.alert { padding: 10px 12px; background: #FEE2E2; color: #991B1B; border-radius: 10px; font-family: var(--font-body); font-size: 13px; margin: 0; }
-
-.sent { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 8px 0 0; }
-.sent__badge { width: 44px; height: 44px; border-radius: 999px; background: var(--color-feature-mint); color: #fff; display: flex; align-items: center; justify-content: center; }
-.sent__title { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--color-ink); margin: 4px 0 0; }
-.sent__body { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); margin: 0; line-height: 1.55; }
-.sent__body strong { color: var(--color-ink); font-weight: 600; }
-.sent__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin: 0; }
-
-.fp__foot { padding-top: 12px; border-top: 1px solid var(--color-hairline); margin-top: 4px; }
-.fp__link { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); font-weight: 500; text-decoration: none; }
-.fp__link:hover { text-decoration: underline; }
+.fp__email {
+  font-family: var(--font-body);
+  color: #fff;
+  font-weight: 600;
+}
+.fp__linklike {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: #0A0A0B;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fp__linklike:hover { text-decoration: underline; }
 </style>

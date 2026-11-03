@@ -11,7 +11,7 @@
  * from the API paints the field red inline.
  */
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
   events as eventsApi,
   members as membersApi,
@@ -33,6 +33,7 @@ import { sitePreviewUrl } from '@/composables/sitePreviewUrl'
 const clubStore = useClubStore()
 const toast = useToast()
 const router = useRouter()
+const route = useRoute()
 const clubId = computed(() => clubStore.current?.id ?? null)
 
 type Tab = 'upcoming' | 'past'
@@ -346,6 +347,20 @@ function openCreate() {
   resetForm(emptyForm())
   editorOpen.value = true
 }
+
+/** Auto-open the editor when the shell's +New menu routes here with
+ *  `?new=1`. Strips the query so a reload doesn't re-open. */
+watch(
+  () => route.query.new,
+  (v) => {
+    if (v === '1' && !editorOpen.value) {
+      openCreate()
+      const { new: _drop, ...rest } = route.query
+      router.replace({ query: rest })
+    }
+  },
+  { immediate: true },
+)
 
 function openEdit(e: Event) {
   // Tournaments are authored through the dedicated tournaments feature —

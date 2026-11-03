@@ -1038,6 +1038,20 @@ function openNewPage(): void {
   newPageOpen.value = true
   closeMenu()
 }
+
+/** Auto-open the "New page" modal when the shell's +New menu routes here
+ *  with `?new=1`. Strips the query after so a reload doesn't re-open. */
+watch(
+  () => route.query.new,
+  (v) => {
+    if (v === '1' && !newPageOpen.value) {
+      openNewPage()
+      const { new: _drop, ...rest } = route.query
+      router.replace({ query: rest })
+    }
+  },
+  { immediate: true },
+)
 function onNewPageTitleInput(e: Event): void {
   const v = (e.target as HTMLInputElement).value
   newPageForm.title = v

@@ -151,6 +151,22 @@ const stats = computed(() => {
   }
 })
 
+/** Deliverability chip — surfaces when the sent/delivered gap is wide
+ *  enough to distort the open-rate story. Threshold: >10% of sent emails
+ *  never fired a Delivery event. Common culprit is SES sandbox-mode
+ *  silently refusing unverified recipients; could also be bounces /
+ *  suppression. Either way the admin should see it before trusting the
+ *  headline rate. */
+const deliveryWarning = computed<{ delivered: number; sent: number } | null>(() => {
+  const cur = metricsData.value?.current
+  if (!cur) return null
+  const sent = cur.sent ?? 0
+  const delivered = cur.delivered ?? 0
+  if (sent < 5) return null                   // noise at tiny volumes
+  if (delivered >= sent * 0.9) return null    // healthy
+  return { delivered, sent }
+})
+
 // ── Row display helpers ──────────────────────────────────────────
 const SHORT_DATE = new Intl.DateTimeFormat('en-NZ', { day: '2-digit', month: 'short' })
 const TIME_FMT = new Intl.DateTimeFormat('en-NZ', { hour: 'numeric', minute: '2-digit' })
@@ -252,6 +268,16 @@ function iconTone(c: CampaignRow): { bg: string; stroke: string } {
           {{ stats.total_opens.toLocaleString() }} of {{ stats.total_delivered.toLocaleString() }} delivered ·
           {{ stats.total_sent.toLocaleString() }} sent total
         </footer>
+        <div v-if="deliveryWarning" class="stat__warn" role="status">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M6 1.5L11 10.5H1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+            <path d="M6 5v2.5M6 9v0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+          </svg>
+          <span>
+            Low delivery — {{ deliveryWarning.delivered }} of {{ deliveryWarning.sent }} landed.
+            Check SES account status or the suppression list.
+          </span>
+        </div>
       </article>
 
       <article class="stat">
@@ -573,6 +599,21 @@ function iconTone(c: CampaignRow): { bg: string; stroke: string } {
 .stat--hero .stat__value { font-size: 72px; color: #fff; }
 .stat--hero .stat__unit { color: rgba(255, 255, 255, 0.65); font-size: 36px; }
 .stat--hero footer { color: rgba(255, 255, 255, 0.75); line-height: 1.5; }
+.stat--hero .stat__warn {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.14);
+  color: #FDE68A;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  line-height: 1.4;
+  max-width: 100%;
+}
+.stat--hero .stat__warn svg { flex-shrink: 0; margin-top: 2px; color: #FBBF24; }
 .stat--hero .stat__trend { color: var(--color-sky-1); }
 
 /* ── Card + toolbar ────────────────────────────────────────────── */

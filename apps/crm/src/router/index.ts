@@ -15,6 +15,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'register', name: 'register', component: () => import('@/views/auth/RegisterView.vue') },
       { path: 'forgot-password', name: 'forgot-password', component: () => import('@/views/auth/ForgotPasswordView.vue') },
       { path: 'reset-password', name: 'reset-password', component: () => import('@/views/auth/ResetPasswordView.vue') },
+      { path: 'confirm-email/:token', name: 'confirm-email', component: () => import('@/views/account/ConfirmEmailView.vue') },
       { path: 'claim', name: 'claim-club', component: () => import('@/views/auth/ClaimClubView.vue'), beforeEnter: requireAuthOrRegister },
       { path: 'forbidden', name: 'forbidden', component: () => import('@/views/auth/ForbiddenView.vue') },
     ],

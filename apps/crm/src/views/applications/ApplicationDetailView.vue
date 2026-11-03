@@ -8,6 +8,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import TornySelect from '@/components/TornySelect.vue'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
 import {
@@ -166,6 +167,25 @@ const selectedSeason = computed<Season | null>(() =>
   seasonsList.value.find((s) => s.season_id === approveForm.value.season_id)
     ?? currentSeason.value,
 )
+
+/** Shaped for `<TornySelect>`. "Current — {name}" sentinel maps to the
+ *  server-default (null → current season); explicit ids follow. */
+const seasonOptions = computed<Array<{ value: number | 'current'; label: string }>>(() => {
+  const opts: Array<{ value: number | 'current'; label: string }> = [{
+    value: 'current',
+    label: currentSeason.value
+      ? `Current — ${currentSeason.value.season_name}`
+      : 'Current season',
+  }]
+  for (const s of seasonsList.value) {
+    opts.push({ value: s.season_id, label: `${s.season_name}${s.is_current_season ? ' · current' : ''}` })
+  }
+  return opts
+})
+const seasonSelectValue = computed<number | 'current'>({
+  get: () => approveForm.value.season_id ?? 'current',
+  set: (v) => { approveForm.value.season_id = v === 'current' ? null : v },
+})
 
 function openApprove() {
   approveForm.value = {
@@ -482,27 +502,20 @@ async function submitReject() {
       <div v-if="detail" class="modal-form">
         <p class="modal-hint">Creates a member record + membership row (if the applicant chose a tier). Same resolution path as the roster's add-member.</p>
 
-        <label class="field">
+        <div class="field">
           <span class="field__label">Season</span>
-          <select v-model="approveForm.season_id" :disabled="seasonsLoading || seasonsList.length === 0">
-            <option :value="null">
-              {{ currentSeason ? `Current — ${currentSeason.season_name}` : 'Current season' }}
-            </option>
-            <option
-              v-for="s in seasonsList"
-              :key="s.season_id"
-              :value="s.season_id"
-            >
-              {{ s.season_name }}{{ s.is_current_season ? ' · current' : '' }}
-            </option>
-          </select>
+          <TornySelect
+            v-model="seasonSelectValue"
+            :options="seasonOptions"
+            :disabled="seasonsLoading || seasonsList.length === 0"
+          />
           <p v-if="seasonsList.length === 0 && !seasonsLoading" class="field__hint">
             No seasons set up yet — the server will attach to the club's current season.
           </p>
           <p v-else-if="selectedSeason && !selectedSeason.is_current_season" class="field__hint">
             Accepting into a future season — the membership activates when that season starts.
           </p>
-        </label>
+        </div>
 
         <label class="switch-row">
           <div>
@@ -590,12 +603,13 @@ async function submitReject() {
     >
       <div class="modal-form">
         <p class="modal-hint">The reason is stored for audit. Only the message (if you write one) is emailed to the applicant.</p>
-        <label class="field">
+        <div class="field">
           <span class="field__label">Reason</span>
-          <select v-model="rejectForm.reason">
-            <option v-for="r in REJECT_REASONS" :key="r.value" :value="r.value">{{ r.label }}</option>
-          </select>
-        </label>
+          <TornySelect
+            v-model="rejectForm.reason"
+            :options="REJECT_REASONS.map(r => ({ value: r.value, label: r.label }))"
+          />
+        </div>
         <label class="field">
           <span class="field__label">Message to applicant (optional)</span>
           <textarea v-model="rejectForm.message" rows="4" placeholder="Leave empty to reject silently. Otherwise this is emailed as-is." />

@@ -386,6 +386,9 @@ export interface VenuePackagesProps {
 // once deposit payments are needed).
 
 export interface VenueBookingSlot {
+  /** Server-assigned id — populated in fetch mode (brief 73). Required
+   *  on the submit payload (brief 62 §1). Null in props-mode fallback. */
+  id?: number
   /** Short label — "Afternoon · 2pm – 6pm". */
   label: string
   /** Mono eyebrow under the label — e.g. "4 hours · $720 · Most booked". */
@@ -399,6 +402,9 @@ export interface VenueBookingSlot {
 }
 
 export interface VenueBookingAddon {
+  /** Server-assigned id — populated in fetch mode. Required on the
+   *  submit payload. */
+  id?: number
   /** "Grazing platters". */
   name: string
   /** One-line description under the name. */
@@ -416,6 +422,9 @@ export interface VenueBookingAddon {
 }
 
 export interface VenueBookingPackage {
+  /** Server-assigned id — populated in fetch mode. Required on the
+   *  submit payload. Null in props-mode fallback (demo data only). */
+  id?: number
   /** Matches `?package=` on the URL. Admins mirror the slug used in the
    *  VenuePackages block's `ctaHref`. */
   slug: string

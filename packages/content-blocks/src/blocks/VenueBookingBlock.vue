@@ -16,7 +16,7 @@
  * resource with deposit payments.
  */
 import { computed, inject, isRef, onMounted, reactive, ref, type Ref } from 'vue'
-import { enquiries, venuePackages, ApiError } from '@torny/api-client'
+import { enquiries, venuePackages, venueBookings, ApiError } from '@torny/api-client'
 import type {
   PublicVenuePackage,
   PublicVenuePackagesResponse,
@@ -84,15 +84,18 @@ onMounted(() => {
  *  the existing addons/slot maths (which assumes dollars) keeps working. */
 function mapFetchedPackage(p: PublicVenuePackage): VenueBookingPackage {
   return {
+    id: p.id,
     slug: p.slug,
     name: p.name,
     sub: p.sub ?? undefined,
     slots: p.slots.map((s) => ({
+      id: s.id,
       label: s.label,
       sub: s.sub ?? undefined,
       price: Math.round(s.price_cents / 100),
     })),
     addons: p.addons.map((a) => ({
+      id: a.id,
       name: a.name,
       description: a.description ?? undefined,
       price: Math.round(a.price_cents / 100),
@@ -377,6 +380,42 @@ function buildMessage(): string {
   return `${summary}${addonBlock}${notes}${booking}${totals}`
 }
 
+/** Build the structured venue_bookings payload. Only usable when the
+ *  selected package + slot have server ids (fetch mode). */
+function buildVenueBookingsPayload() {
+  const slug = clubSlug.value!
+  const pkg = selectedPackage.value!
+  const slot = selectedSlot.value!
+  const date = selectedDate.value!
+  const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  const checkedAddons = (pkg.addons ?? [])
+    .map((addon, i) => ({ addon, state: addonFor(i) }))
+    .filter((x) => x.state.checked && x.addon.id != null)
+    .map(({ addon, state }) => ({
+      addon_id: addon.id as number,
+      quantity: addon.countable ? state.quantity : 1,
+    }))
+  const messageParts: string[] = []
+  if (form.occasion) messageParts.push(`Occasion: ${form.occasion}`)
+  if (form.setupStyle) messageParts.push(`Setup: ${form.setupStyle}`)
+  if (form.notes.trim()) messageParts.push(form.notes.trim())
+  if (form.bookingFor.trim()) messageParts.push(`Booking on behalf of: ${form.bookingFor.trim()}`)
+  return {
+    slug,
+    input: {
+      full_name: form.fullName.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim() || undefined,
+      attendee_count: form.guests > 0 ? form.guests : undefined,
+      message: messageParts.length > 0 ? messageParts.join('\n\n') : undefined,
+      booking_date: iso,
+      package_id: pkg.id as number,
+      slot_id: slot.id as number,
+      addons: checkedAddons,
+    },
+  }
+}
+
 async function submit() {
   if (!canSubmit.value || submitting.value) return
   submitError.value = null
@@ -386,15 +425,27 @@ async function submit() {
   }
   submitting.value = true
   try {
-    await enquiries.create(clubSlug.value, {
-      full_name: form.fullName.trim(),
-      email: form.email.trim(),
-      phone: form.phone.trim() || null,
-      topic: 'facilities',
-      message: buildMessage(),
-      consent_reply: true,
-    })
-    bookingRef.value = makeBookingRef()
+    const pkg = selectedPackage.value
+    const slot = selectedSlot.value
+    // Prefer the structured `venue_bookings` submit when we have server
+    // ids (fetch mode). Fall back to the legacy `enquiries` submit for
+    // props-mode packages that don't carry ids (e.g. seeded demo data
+    // before brief 73 ships for a given club).
+    if (pkg?.id != null && slot?.id != null) {
+      const { slug, input } = buildVenueBookingsPayload()
+      const created = await venueBookings.submit(slug, input)
+      bookingRef.value = created.booking_ref
+    } else {
+      await enquiries.create(clubSlug.value, {
+        full_name: form.fullName.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim() || null,
+        topic: 'facilities',
+        message: buildMessage(),
+        consent_reply: true,
+      })
+      bookingRef.value = makeBookingRef()
+    }
     currentStep.value = 3
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (err) {

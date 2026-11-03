@@ -11,6 +11,7 @@ import {
   enquiries as enquiriesApi,
   events as eventsApi,
   tournaments as tournamentsApi,
+  venueBookings as venueBookingsApi,
 } from '@torny/api-client'
 import { useHonourCategoriesStore } from '@/stores/honourCategories'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -277,16 +278,16 @@ if (typeof window !== 'undefined') {
   onBeforeUnmount(() => window.removeEventListener('torny:enquiries-count', onEnquiriesCountUpdate))
 }
 
-// ── Venue bookings new count ──────────────────────────────────
-// Topic-scoped read of the enquiries list. The server doesn't offer a
-// `counts_topic` filter yet (see brief draft) so we count rows ourselves
-// from a cheap `limit=50&topic=facilities&status=new` fetch. VenueBookingsView
-// broadcasts `torny:venue-bookings-count` after mutations.
+// ── Venue bookings pending count ──────────────────────────────
+// Server returns authoritative counts in the list envelope. We only
+// need the pending bucket; limit=1 keeps the payload tiny.
+// VenueBookingsView broadcasts `torny:venue-bookings-count` after
+// mutations so the sidebar badge stays in sync without a second fetch.
 const venueBookingsNewCount = ref<number | null>(null)
 async function loadVenueBookingsCount(clubId: number) {
   try {
-    const res = await enquiriesApi.list(clubId, { topic: 'facilities', status: 'new', limit: 50 })
-    venueBookingsNewCount.value = res.enquiries.length
+    const res = await venueBookingsApi.list(clubId, { status: ['pending'], limit: 1 })
+    venueBookingsNewCount.value = res.counts.pending
   } catch {
     venueBookingsNewCount.value = null
   }

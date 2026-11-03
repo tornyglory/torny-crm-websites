@@ -16,7 +16,11 @@
  * resource with deposit payments.
  */
 import { computed, inject, isRef, onMounted, reactive, ref, type Ref } from 'vue'
-import { enquiries, ApiError } from '@torny/api-client'
+import { enquiries, venuePackages, ApiError } from '@torny/api-client'
+import type {
+  PublicVenuePackage,
+  PublicVenuePackagesResponse,
+} from '@torny/api-client'
 import {
   BLOCK_CONTEXT_KEY,
   type BlockContext,
@@ -74,15 +78,91 @@ onMounted(() => {
   urlPackageSlug.value = params.get('package')
 })
 
+// ── Fetched packages (brief 73 opt-in via `fetchPackages: true`) ──
+/** Map the public venue-packages resource shape to the block's internal
+ *  VenueBookingPackage shape. Prices + bond go from cents to dollars so
+ *  the existing addons/slot maths (which assumes dollars) keeps working. */
+function mapFetchedPackage(p: PublicVenuePackage): VenueBookingPackage {
+  return {
+    slug: p.slug,
+    name: p.name,
+    sub: p.sub ?? undefined,
+    slots: p.slots.map((s) => ({
+      label: s.label,
+      sub: s.sub ?? undefined,
+      price: Math.round(s.price_cents / 100),
+    })),
+    addons: p.addons.map((a) => ({
+      name: a.name,
+      description: a.description ?? undefined,
+      price: Math.round(a.price_cents / 100),
+      priceSuffix: a.price_suffix ?? undefined,
+      countable: a.countable,
+      defaultQuantity: a.default_quantity ?? undefined,
+      defaultSelected: a.default_selected,
+    })),
+    bondAmount: p.bond_cents > 0 ? Math.round(p.bond_cents / 100) : undefined,
+    bondLabel: p.bond_label ?? undefined,
+  }
+}
+
+const fetched = ref<{
+  packages: VenueBookingPackage[]
+  depositPercent: number
+  isActive: boolean
+} | null>(null)
+const fetchError = ref<string | null>(null)
+const fetchPending = ref(false)
+
+async function loadFetchedPackages(): Promise<void> {
+  if (!props.fetchPackages) return
+  const slug = clubSlug.value
+  if (!slug) return
+  fetchPending.value = true
+  try {
+    const res: PublicVenuePackagesResponse = await venuePackages.listPublic(slug)
+    fetched.value = {
+      packages: res.packages.map(mapFetchedPackage),
+      depositPercent: res.settings.deposit_percent,
+      isActive: res.settings.is_active,
+    }
+  } catch (err) {
+    fetchError.value = err instanceof ApiError ? err.message : 'Could not load packages.'
+  } finally {
+    fetchPending.value = false
+  }
+}
+
+onMounted(() => { void loadFetchedPackages() })
+
+/** The effective package list — fetched wins when present and non-empty,
+ *  otherwise the prop list (which the fallback book.vue hard-codes). */
+const effectivePackages = computed<VenueBookingPackage[]>(() =>
+  fetched.value && fetched.value.packages.length > 0
+    ? fetched.value.packages
+    : props.packages,
+)
+
+/** Deposit % — fetched wins so changing it in CRM Settings propagates
+ *  without re-publishing the block. */
+const effectiveDepositPercent = computed<number>(() =>
+  fetched.value?.depositPercent ?? props.depositPercent ?? 25,
+)
+
+/** When fetch succeeded and venue hire is disabled at the club level,
+ *  render a "temporarily unavailable" state instead of the wizard. */
+const venueDisabled = computed<boolean>(() => fetched.value?.isActive === false)
+
 // ── Package / step state ──────────────────────────────────────
 const currentStep = ref<1 | 2 | 3>(1)
 const selectedPackage = computed<VenueBookingPackage | null>(() => {
-  if (props.packages.length === 0) return null
+  const list = effectivePackages.value
+  if (list.length === 0) return null
   if (urlPackageSlug.value) {
-    const hit = props.packages.find((p) => p.slug === urlPackageSlug.value)
+    const hit = list.find((p) => p.slug === urlPackageSlug.value)
     if (hit) return hit
   }
-  return props.packages[0] ?? null
+  return list[0] ?? null
 })
 
 // ── Calendar ──────────────────────────────────────────────────
@@ -241,7 +321,7 @@ const lineItems = computed<LineItem[]>(() => {
   return items
 })
 const total = computed(() => lineItems.value.reduce((n, l) => n + l.amount, 0))
-const deposit = computed(() => Math.round((total.value * (props.depositPercent ?? 25)) / 100))
+const deposit = computed(() => Math.round((total.value * effectiveDepositPercent.value) / 100))
 const balance = computed(() => total.value - deposit.value)
 
 const balanceDueDate = computed(() => {
@@ -351,6 +431,21 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
 <template>
   <section class="vb" :style="{ '--brand': brand } as any">
+    <!-- Venue hire paused — fetched settings say `is_active = false`.
+         Shown instead of the wizard. -->
+    <div v-if="venueDisabled" class="vb__disabled">
+      <div class="vb__disabled-eyebrow">Venue hire</div>
+      <h1 class="vb__disabled-title">Temporarily unavailable</h1>
+      <p class="vb__disabled-sub">
+        We've paused new venue bookings for now.
+        <template v-if="props.hostPhone">
+          Call {{ props.hostPhone }} to enquire about dates.
+        </template>
+        <template v-else>Check back soon.</template>
+      </p>
+    </div>
+
+    <template v-else>
     <!-- Step rail -->
     <div class="vb__rail">
       <ol class="vb__steps">
@@ -696,6 +791,7 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
         </aside>
       </div>
     </template>
+    </template>
   </section>
 </template>
 
@@ -715,6 +811,12 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
 /* Step rail */
 .vb__rail { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+
+/* Disabled state — fetched settings indicate `is_active = false`. */
+.vb__disabled { padding: 72px 40px; text-align: center; background: var(--color-surface, #F5F5F2); border-radius: 20px; border: 1px dashed rgba(0,0,0,0.1); }
+.vb__disabled-eyebrow { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(0,0,0,0.5); margin-bottom: 10px; }
+.vb__disabled-title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 10px; color: #1C1C19; }
+.vb__disabled-sub { font-family: var(--font-body); font-size: 15px; color: rgba(0,0,0,0.6); margin: 0; max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.5; }
 .vb__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: row; align-items: center; gap: 12px; }
 .vb__step { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-body); font-size: 14px; color: var(--color-mute); }
 .vb__step--active { color: var(--color-ink); font-weight: 600; }

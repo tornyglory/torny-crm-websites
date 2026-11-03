@@ -34,6 +34,7 @@ usePageMeta('venue-hire/book')
       heading="Book the venue"
       :deposit-percent="25"
       :lead-time-days="14"
+      :fetch-packages="true"
       host-name="Grace Whittaker"
       host-role="YOUR HOST · CLUB PRESIDENT"
       host-initials="GW"

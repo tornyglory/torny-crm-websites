@@ -444,8 +444,17 @@ export interface VenueBookingProps {
   heading?: string
   description?: string
   /** The packages this wizard can book. The URL `?package=slug` picks one;
-   *  without a match it falls back to the first package. */
+   *  without a match it falls back to the first package. When
+   *  `fetchPackages` is true, these act as a fallback — fetched packages
+   *  take precedence. */
   packages: VenueBookingPackage[]
+  /** Opt into brief 73's package resource. When true, the block calls
+   *  `publicVenuePackages.list(clubSlug)` on mount and uses the fetched
+   *  packages (+ fetched deposit %) instead of the `packages` prop. The
+   *  prop is kept as a graceful fallback if the fetch fails or returns
+   *  empty. Default false so existing published blocks don't change
+   *  behaviour until an admin flips the toggle. */
+  fetchPackages?: boolean
   /** Occasion chips on Step 2 (Birthday / Wedding / Corporate day / …). */
   occasions?: VenueBookingOccasion[]
   /** Dropdown options for the "setup style" field. */

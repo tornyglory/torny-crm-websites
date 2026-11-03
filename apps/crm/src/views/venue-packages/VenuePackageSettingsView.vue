@@ -166,7 +166,7 @@ async function save(): Promise<void> {
 </template>
 
 <style scoped>
-.vs { max-width: 720px; display: flex; flex-direction: column; gap: 24px; }
+.vs { max-width: 1280px; display: flex; flex-direction: column; gap: 24px; }
 
 .vs__head { display: flex; flex-direction: column; gap: 0; }
 .back { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-fog); text-decoration: none; width: fit-content; }

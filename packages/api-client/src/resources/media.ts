@@ -14,7 +14,7 @@ import { authedFetch } from '../http'
 
 // ── Types ─────────────────────────────────────────────────────────
 
-export type MediaEntityType = 'club' | 'user' | 'moment' | 'event'
+export type MediaEntityType = 'club' | 'user' | 'moment' | 'event' | 'venue_package_hero'
 /**
  * Backend-accepted `content_type` slugs for the `/media/images/*` endpoints.
  * Matches the server-side whitelist — passing anything else returns a 400.
@@ -170,6 +170,39 @@ export async function uploadMemberAvatar(
 
   return confirmUpload(
     { imageId, entity_type: 'user', entity_id: userId, content_type: 'avatar', content_id: userId },
+    { signal: opts.signal },
+  )
+}
+
+/**
+ * Venue package hero upload — three-step dance (brief 73 §9).
+ *
+ * Request upload URL → POST file to Cloudflare → confirm. Returns the
+ * confirmed image envelope; the caller then PATCHes the venue-package
+ * row with `hero_image_url: confirmed.public_url`.
+ *
+ * `packageId` lives in both `entity_id` and `content_id` — the backend
+ * uses them to key the row in the images table + validate ownership.
+ */
+export async function uploadVenuePackageHero(
+  packageId: number,
+  file: File,
+  opts: { signal?: AbortSignal } = {},
+): Promise<ConfirmedImage> {
+  const { uploadUrl, imageId } = await requestUploadUrl(
+    { entity_type: 'venue_package_hero', entity_id: packageId, content_type: 'hero', content_id: packageId },
+    { signal: opts.signal },
+  )
+
+  const form = new FormData()
+  form.append('file', file)
+  const cf = await fetch(uploadUrl, { method: 'POST', body: form, signal: opts.signal })
+  if (!cf.ok) {
+    throw new Error(`Cloudflare upload failed (${cf.status} ${cf.statusText})`)
+  }
+
+  return confirmUpload(
+    { imageId, entity_type: 'venue_package_hero', entity_id: packageId, content_type: 'hero', content_id: packageId },
     { signal: opts.signal },
   )
 }

@@ -85,6 +85,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'communications/templates/:slug', name: 'template-edit', component: () => import('@/views/communications/TemplateEditView.vue') },
       { path: 'communications/:id', name: 'campaign-detail', component: () => import('@/views/communications/CampaignDetailView.vue') },
       { path: 'settings', name: 'settings', component: () => import('@/views/settings/SettingsView.vue') },
+      { path: 'settings/stripe/callback', name: 'stripe-callback', component: () => import('@/views/settings/StripeCallbackView.vue') },
       { path: 'account', name: 'account', component: () => import('@/views/account/AccountView.vue') },
       { path: 'site-settings', redirect: { name: 'website', params: { pageSlug: 'domain' } } },
     ],

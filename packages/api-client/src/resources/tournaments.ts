@@ -59,10 +59,15 @@ export interface EntryCaptain {
 }
 
 export interface TournamentRosterMember {
-  position: string
+  /** Position is assigned when the admin builds the draw. Public submits
+   *  land roster rows without it. */
+  position?: string | null
   user_id: number | null
   name: string | null
-  bcnz_number: string | null
+  /** Captured on public submits. Optional on admin-edited rosters. */
+  email?: string | null
+  phone?: string | null
+  bcnz_number?: string | null
 }
 
 export interface TournamentEntry {

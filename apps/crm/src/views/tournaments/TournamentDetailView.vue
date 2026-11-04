@@ -92,6 +92,25 @@ const refundSubmitting = ref(false)
 function openRefund(entry: TournamentEntry): void { refundingEntry.value = entry }
 function closeRefund(): void { refundingEntry.value = null }
 
+const inspectingEntry = ref<TournamentEntry | null>(null)
+function openInspect(entry: TournamentEntry): void { inspectingEntry.value = entry }
+function closeInspect(): void { inspectingEntry.value = null }
+function openRefundFromInspect(entry: TournamentEntry): void {
+  inspectingEntry.value = null
+  refundingEntry.value = entry
+}
+function markPaidFromInspect(entry: TournamentEntry): void {
+  inspectingEntry.value = null
+  void markPaid(entry)
+}
+
+const DATETIME_FMT = new Intl.DateTimeFormat('en-NZ', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+function formatDateTime(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : DATETIME_FMT.format(d)
+}
+
 async function submitRefund(): Promise<void> {
   const cid = clubStore.current?.id
   const entry = refundingEntry.value
@@ -327,7 +346,7 @@ function goBack() {
             <div class="col-sel"></div>
             <div class="col-num">#</div>
             <div class="col-team">TEAM / CAPTAIN</div>
-            <div class="col-roster">ROSTER</div>
+            <div class="col-roster">TEAM</div>
             <div class="col-paid">PAID</div>
             <div class="col-when">REGISTERED</div>
             <div class="col-status">STATUS</div>
@@ -341,19 +360,22 @@ function goBack() {
             <div
               v-for="entry in confirmedEntries"
               :key="entry.id"
-              class="row"
+              class="row row--clickable"
               :class="{
                 'row--tinted-accent': selectedIds.has(entry.id),
                 'row--tinted-warn': entry.status === 'pending',
               }"
+              tabindex="0"
+              @click="openInspect(entry)"
+              @keydown.enter="openInspect(entry)"
             >
-              <div class="col-sel">
+              <div class="col-sel" @click.stop>
                 <button
                   type="button"
                   class="check"
                   :class="{ 'is-on': selectedIds.has(entry.id) }"
                   :aria-pressed="selectedIds.has(entry.id)"
-                  @click="toggleSelect(entry.id)"
+                  @click.stop="toggleSelect(entry.id)"
                 >
                   <svg v-if="selectedIds.has(entry.id)" width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" stroke-width="1.75" stroke-linecap="round"/></svg>
                 </button>
@@ -415,22 +437,22 @@ function goBack() {
                   {{ entry.status === 'pending' ? 'Awaiting pay' : entry.status }}
                 </span>
               </div>
-              <div class="col-actions">
+              <div class="col-actions" @click.stop>
                 <button
                   v-if="entry.status === 'pending'"
                   type="button"
                   class="row-btn row-btn--primary"
                   :disabled="savingEntry.has(entry.id)"
-                  @click="markPaid(entry)"
+                  @click.stop="markPaid(entry)"
                 >Mark paid</button>
                 <button
                   v-else-if="entry.status === 'confirmed' && entry.payment_reference"
                   type="button"
                   class="row-btn row-btn--danger"
                   :disabled="savingEntry.has(entry.id)"
-                  @click="openRefund(entry)"
+                  @click.stop="openRefund(entry)"
                 >Refund</button>
-                <button v-else type="button" class="row-btn">View</button>
+                <button v-else type="button" class="row-btn" @click.stop="openInspect(entry)">View</button>
               </div>
             </div>
 
@@ -576,6 +598,144 @@ function goBack() {
   </div>
 
   <CrmModal
+    :open="inspectingEntry != null"
+    eyebrow="Entry detail"
+    :title="inspectingEntry ? (inspectingEntry.team_name ?? inspectingEntry.captain.name ?? 'Entry') : 'Entry'"
+    width="md"
+    @close="closeInspect"
+  >
+    <template v-if="inspectingEntry">
+      <!-- Top strip: status + registered + entry number -->
+      <div class="inspect__strip">
+        <div class="inspect__strip-item">
+          <div class="inspect__label">Entry #</div>
+          <div class="inspect__value">{{ inspectingEntry.entry_number }}</div>
+        </div>
+        <div class="inspect__strip-item">
+          <div class="inspect__label">Status</div>
+          <div class="inspect__value inspect__value--pill">
+            <span class="status-pill" :class="{
+              'status-pill--mint': inspectingEntry.status === 'confirmed',
+              'status-pill--tangerine': inspectingEntry.status === 'pending',
+              'status-pill--fog': inspectingEntry.status === 'withdrawn' || inspectingEntry.status === 'refunded',
+            }">{{ inspectingEntry.status }}</span>
+          </div>
+        </div>
+        <div class="inspect__strip-item">
+          <div class="inspect__label">Registered</div>
+          <div class="inspect__value">{{ formatDateTime(inspectingEntry.created_at) }}</div>
+        </div>
+      </div>
+
+      <!-- Captain -->
+      <section class="inspect__section">
+        <h3 class="inspect__section-title">Captain</h3>
+        <dl class="inspect__dl">
+          <div class="inspect__dl-row">
+            <dt>Name</dt>
+            <dd>{{ inspectingEntry.captain.name ?? '—' }}</dd>
+          </div>
+          <div class="inspect__dl-row">
+            <dt>Email</dt>
+            <dd>
+              <a v-if="inspectingEntry.captain.email" class="link" :href="`mailto:${inspectingEntry.captain.email}`">{{ inspectingEntry.captain.email }}</a>
+              <span v-else>—</span>
+            </dd>
+          </div>
+          <div class="inspect__dl-row">
+            <dt>Phone</dt>
+            <dd>
+              <a v-if="inspectingEntry.captain.phone" class="link" :href="`tel:${inspectingEntry.captain.phone.replace(/\s+/g, '')}`">{{ inspectingEntry.captain.phone }}</a>
+              <span v-else>—</span>
+            </dd>
+          </div>
+          <div class="inspect__dl-row">
+            <dt>Home club</dt>
+            <dd>
+              {{ inspectingEntry.captain.club_name ?? '—' }}
+              <span v-if="isVisitor(inspectingEntry)" class="visitor-chip">VISITOR</span>
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- Team roster -->
+      <section v-if="inspectingEntry.roster && inspectingEntry.roster.length > 0" class="inspect__section">
+        <h3 class="inspect__section-title">Team</h3>
+        <ol class="inspect__roster">
+          <li v-for="(member, mi) in inspectingEntry.roster" :key="mi" class="inspect__roster-row">
+            <span class="inspect__roster-num">{{ mi + 1 }}</span>
+            <div class="inspect__roster-body">
+              <div class="inspect__roster-name">{{ member.name ?? '—' }}</div>
+              <div v-if="member.position || member.email || member.phone" class="inspect__roster-meta">
+                <template v-if="member.position">{{ member.position }}</template>
+                <template v-if="member.position && (member.email || member.phone)"> · </template>
+                <template v-if="member.email">{{ member.email }}</template>
+                <template v-if="member.email && member.phone"> · </template>
+                <template v-if="member.phone">{{ member.phone }}</template>
+              </div>
+              <div v-else class="inspect__roster-meta inspect__roster-meta--muted">No position assigned yet</div>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <!-- Payment -->
+      <section class="inspect__section">
+        <h3 class="inspect__section-title">Payment</h3>
+        <dl class="inspect__dl">
+          <div class="inspect__dl-row">
+            <dt>Entry fee</dt>
+            <dd>{{ formatMoney(tournament?.entry_fee_cents ?? 0) }}</dd>
+          </div>
+          <div class="inspect__dl-row">
+            <dt>Paid</dt>
+            <dd>{{ inspectingEntry.paid_cents > 0 ? formatMoney(inspectingEntry.paid_cents) + ' ✓' : 'Not paid' }}</dd>
+          </div>
+          <div v-if="inspectingEntry.paid_at" class="inspect__dl-row">
+            <dt>Paid at</dt>
+            <dd>{{ formatDateTime(inspectingEntry.paid_at) }}</dd>
+          </div>
+          <div v-if="inspectingEntry.payment_reference" class="inspect__dl-row">
+            <dt>Stripe PI</dt>
+            <dd><code class="inspect__mono">{{ inspectingEntry.payment_reference }}</code></dd>
+          </div>
+          <div v-if="inspectingEntry.stripe_checkout_session_id" class="inspect__dl-row">
+            <dt>Checkout session</dt>
+            <dd><code class="inspect__mono">{{ inspectingEntry.stripe_checkout_session_id }}</code></dd>
+          </div>
+          <div v-if="inspectingEntry.refunded_cents > 0" class="inspect__dl-row">
+            <dt>Refunded</dt>
+            <dd>{{ formatMoney(inspectingEntry.refunded_cents) }}<span v-if="inspectingEntry.refunded_at"> · {{ formatDateTime(inspectingEntry.refunded_at) }}</span></dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- Admin notes -->
+      <section v-if="inspectingEntry.admin_notes" class="inspect__section">
+        <h3 class="inspect__section-title">Admin notes</h3>
+        <p class="inspect__notes">{{ inspectingEntry.admin_notes }}</p>
+      </section>
+    </template>
+
+    <template #footer>
+      <button type="button" class="row-btn" @click="closeInspect">Close</button>
+      <button
+        v-if="inspectingEntry?.status === 'pending'"
+        type="button"
+        class="row-btn row-btn--primary"
+        @click="markPaidFromInspect(inspectingEntry)"
+      >Mark paid</button>
+      <button
+        v-if="inspectingEntry?.status === 'confirmed' && inspectingEntry?.payment_reference"
+        type="button"
+        class="row-btn row-btn--danger"
+        @click="openRefundFromInspect(inspectingEntry)"
+      >Refund</button>
+    </template>
+  </CrmModal>
+
+  <CrmModal
     :open="refundingEntry != null"
     eyebrow="Refund entry"
     :title="refundingEntry ? `Refund ${refundingEntry.team_name ?? refundingEntry.captain.name}'s entry?` : 'Refund entry'"
@@ -686,6 +846,41 @@ function goBack() {
 .row-btn--danger:hover:not(:disabled) { border-color: var(--color-danger); background: color-mix(in oklab, var(--color-danger) 6%, #fff); }
 .refund-hint { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); line-height: 1.55; margin: 0 0 12px; }
 .refund-hint:last-child { margin-bottom: 0; }
+
+/* Entry inspect modal — click-a-row-to-see-everything shell */
+.row--clickable { cursor: pointer; transition: background 0.12s ease; }
+.row--clickable:hover { background: var(--color-surface); }
+.row--clickable:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+.inspect__strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 16px; background: var(--color-surface); border-radius: 10px; margin-bottom: 20px; }
+.inspect__strip-item { display: flex; flex-direction: column; gap: 4px; }
+.inspect__label { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: var(--color-fog); text-transform: uppercase; }
+.inspect__value { font-family: var(--font-body); font-size: 14px; font-weight: 500; color: var(--color-ink); }
+.inspect__value--pill { line-height: 1; }
+
+.inspect__section { margin-bottom: 20px; }
+.inspect__section:last-child { margin-bottom: 0; }
+.inspect__section-title { font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--color-ink); margin: 0 0 10px; letter-spacing: -0.005em; }
+
+.inspect__dl { display: flex; flex-direction: column; margin: 0; }
+.inspect__dl-row { display: grid; grid-template-columns: 130px 1fr; gap: 14px; padding: 8px 0; border-top: 1px solid var(--color-hairline); align-items: baseline; }
+.inspect__dl-row:first-child { border-top: 0; padding-top: 2px; }
+.inspect__dl-row:last-child { padding-bottom: 2px; }
+.inspect__dl dt { font-family: var(--font-body); font-size: 11px; font-weight: 600; color: var(--color-fog); margin: 0; letter-spacing: 0.04em; }
+.inspect__dl dd { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); margin: 0; word-break: break-word; }
+.inspect__mono { font-family: var(--font-mono); font-size: 11px; color: var(--color-graphite); background: var(--color-surface); padding: 2px 6px; border-radius: 4px; }
+
+.inspect__roster { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.inspect__roster-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--color-surface); border-radius: 8px; }
+.inspect__roster-num { width: 24px; height: 24px; border-radius: 999px; background: #fff; border: 1px solid var(--color-hairline); font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--color-fog); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.inspect__roster-body { flex: 1; min-width: 0; }
+.inspect__roster-name { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
+.inspect__roster-meta { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 2px; }
+.inspect__roster-meta--muted { font-style: italic; }
+
+.link { color: var(--color-accent); text-decoration: none; }
+.link:hover { text-decoration: underline; }
+.inspect__notes { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); line-height: 1.55; margin: 0; padding: 12px 14px; background: var(--color-surface); border-radius: 8px; border-left: 3px solid var(--color-accent); }
 .row-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .check { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--color-mute); background: #fff; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }

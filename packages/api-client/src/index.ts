@@ -436,5 +436,21 @@ export type {
   VenueBookingErrorCode,
 } from './resources/venueBookings'
 
+export * as stripeConnect from './resources/stripeConnect'
+export type {
+  StripeAccountStatus,
+  StripeConnectStartResponse,
+  StripeStatus,
+  StripeDisconnectResponse,
+  StripeConnectErrorCode,
+} from './resources/stripeConnect'
+
+export * as tournamentSettings from './resources/tournamentSettings'
+export type {
+  TournamentSettings,
+  UpdateTournamentSettingsInput,
+  TournamentSettingsErrorCode,
+} from './resources/tournamentSettings'
+
 export { SAM_BASE, CRM_BASE, MEDIA_BASE, BULK_EMAIL_BASE, VENUE_BASE } from './config'
 export { ApiError, authedFetch, publicFetch, TOKEN_STORAGE_KEY } from './http'

@@ -127,10 +127,11 @@ async function save(): Promise<void> {
       <section class="card card--callout">
         <div class="callout__head">
           <div class="callout__eyebrow">Platform fee</div>
-          <div class="callout__value">5%</div>
+          <div class="callout__value">{{ settings?.platform_fee_percent ?? 5 }}%</div>
         </div>
         <p class="callout__body">
-          Torny collects 5% of every booking total. This fee covers hosting, payment processing, and ongoing development.
+          Torny collects {{ settings?.platform_fee_percent ?? 5 }}% of every deposit as `application_fee_amount` when
+          a customer pays through Stripe. Covers hosting, payment processing, and ongoing development.
           Not editable from here — contact support if you need to discuss it.
         </p>
       </section>

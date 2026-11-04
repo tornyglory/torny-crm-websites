@@ -55,9 +55,9 @@ test.describe('Stripe Connect callback', () => {
 
   test('success + ready renders connected state', async ({ page }) => {
     await page.goto('/crm/settings/stripe/callback?result=success&club_id=1&status=ready')
-    await expect(page.getByRole('heading', { name: /stripe connected|all set/i })).toBeVisible()
-    await expect(page.getByText(/ready to accept payments/i)).toBeVisible()
-    await expect(page.getByRole('link', { name: /back to settings|open settings/i })).toBeVisible()
+    // Assert fast — the view auto-redirects to /crm/settings after 2s.
+    await expect(page.getByRole('heading', { name: /stripe connected/i })).toBeVisible({ timeout: 1_500 })
+    await expect(page.getByText(/accept deposits/i)).toBeVisible()
   })
 
   test('success + onboarding renders "finish setup" state', async ({ page }) => {
@@ -66,9 +66,27 @@ test.describe('Stripe Connect callback', () => {
     await expect(page.getByText(/finish setting up|stripe dashboard/i)).toBeVisible()
   })
 
-  test('error renders with the Stripe error code', async ({ page }) => {
+  test('error access_denied renders cancellation copy', async ({ page }) => {
     await page.goto('/crm/settings/stripe/callback?result=error&code=access_denied')
-    await expect(page.getByRole('heading', { name: /could not connect|something went wrong/i })).toBeVisible()
-    await expect(page.getByText(/access_denied/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: /connection cancelled/i })).toBeVisible()
+    await expect(page.getByText(/cancelled the connection/i)).toBeVisible()
+    await expect(page.getByText('access_denied')).toBeVisible()
+  })
+
+  test('error bad_state renders expired-link copy', async ({ page }) => {
+    await page.goto('/crm/settings/stripe/callback?result=error&code=bad_state')
+    await expect(page.getByRole('heading', { name: /link expired/i })).toBeVisible()
+    await expect(page.getByText(/15 minutes/i)).toBeVisible()
+  })
+
+  test('error stripe_exchange_failed shows description when present', async ({ page }) => {
+    await page.goto('/crm/settings/stripe/callback?result=error&code=stripe_exchange_failed&description=Account+not+verified')
+    await expect(page.getByText(/Account not verified/)).toBeVisible()
+    await expect(page.getByText('stripe_exchange_failed')).toBeVisible()
+  })
+
+  test('restricted status renders attention copy', async ({ page }) => {
+    await page.goto('/crm/settings/stripe/callback?result=success&club_id=1&status=restricted')
+    await expect(page.getByRole('heading', { name: /restricted your account/i })).toBeVisible()
   })
 })

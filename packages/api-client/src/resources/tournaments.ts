@@ -5,7 +5,7 @@
 // payments manually. Draws + results are brief 48 (draws-and-results, still
 // on the roadmap — not implemented here).
 
-import { CRM_BASE } from '../config'
+import { CRM_BASE, VENUE_BASE } from '../config'
 import { authedFetch, publicFetch } from '../http'
 
 // ── Domain types ─────────────────────────────────────────────────
@@ -72,6 +72,8 @@ export interface TournamentEntry {
   captain: EntryCaptain
   paid_cents: number
   paid_at: string | null
+  /** Stripe PaymentIntent id. Populated by the `payment_intent.succeeded`
+   *  webhook once the customer pays through Checkout. */
   payment_reference: string | null
   refunded_cents: number
   refunded_at: string | null
@@ -84,6 +86,17 @@ export interface TournamentEntry {
   admin_notes: string | null
   created_at: string
   updated_at: string
+
+  // Stripe plumbing (destination-charge flow — Torny = merchant of
+  // record, see brief "tournament entry payments" §5). All null for
+  // offline / free / unconnected-club entries.
+  stripe_checkout_session_id?: string | null
+  /** Snapshot of Torny's flat fee in cents, frozen at submit. */
+  platform_fee_cents_snapshot?: number | null
+  /** Transient — populated ONLY on the public `POST /entry` response
+   *  when Stripe is triggered. Redirect the customer here to pay.
+   *  Falsy on every admin-side GET. */
+  checkout_url?: string | null
 }
 
 export interface Tournament {
@@ -606,6 +619,27 @@ export async function publicGet(
   const res = await publicFetch<Envelope<PublicTournamentDetail>>(
     `${CRM_BASE}/public/tournaments/${encodeURIComponent(clubSlug)}/${encodeURIComponent(tournamentSlug)}`,
     { method: 'GET', signal: opts.signal },
+  )
+  return res.data
+}
+
+/** `POST /clubs/:cid/tournament-entries/:entryId/refund` on
+ *  `VENUE_BASE` (NOT `CRM_BASE`) — admin+.
+ *
+ *  Destination-charge refund: Stripe refunds the full PI on Torny's
+ *  platform and pulls back the club's share via
+ *  `reverse_transfer: true`. Both Torny's $1 flat fee + the club's
+ *  balance are returned proportionally. `status` flips to `refunded`
+ *  and `refunded_cents` populates when the `charge.refunded` webhook
+ *  fires (~2s); FE should re-fetch after a short delay. */
+export async function refundEntry(
+  clubId: number,
+  entryId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<TournamentEntry> {
+  const res = await authedFetch<Envelope<TournamentEntry>>(
+    `${VENUE_BASE}/clubs/${clubId}/tournament-entries/${entryId}/refund`,
+    { method: 'POST', body: '{}', signal: opts.signal },
   )
   return res.data
 }

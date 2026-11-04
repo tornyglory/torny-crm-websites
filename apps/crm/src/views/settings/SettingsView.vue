@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
+import StripeConnectCard from '@/views/settings/StripeConnectCard.vue'
 import { useToast } from '@/composables/useToast'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useClubStore } from '@/stores/club'
@@ -1241,9 +1242,10 @@ function sendInvite() {
 
         <!-- Integrations -->
         <template v-else-if="active === 'integrations'">
+          <StripeConnectCard />
           <div class="grid grid--intg">
             <article
-              v-for="i in integrations"
+              v-for="i in integrations.filter((x) => x.id !== 'stripe')"
               :key="i.id"
               class="card card--intg"
             >

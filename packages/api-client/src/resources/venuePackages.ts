@@ -113,6 +113,11 @@ export type UpdateVenuePackageInput = Partial<Omit<CreateVenuePackageInput, 'slo
 export interface VenueSettings {
   deposit_percent: number
   balance_due_days_before: number
+  /** Torny's cut, as a whole percent. Platform-controlled — admins can
+   *  read it (surface on Settings → Payments) but can't PATCH it. The
+   *  server returns 400 `platform_fee_readonly` if included in the
+   *  update payload. Added in brief 72 PR #2. */
+  platform_fee_percent: number
   is_active: boolean
   updated_at: string
 }

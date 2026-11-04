@@ -71,10 +71,26 @@ export interface VenueBooking {
   balance_cents: number
   balance_due_date: string | null  // booking_date − club.balance_due_days_before
 
-  /** Null in v1 — brief 72 populates. */
+  /** Populated when the club was Stripe-connected at submit time
+   *  (brief 72 PR #2). Null for offline-pay flows. */
   platform_fee_percent_snapshot: number | null
-  /** Null in v1 — brief 72 populates. */
+  /** Snapshot in cents. Null for offline-pay flows. */
   platform_fee_cents: number | null
+
+  // Stripe plumbing — brief 72 PR #2. All null when the club is on the
+  // offline-pay flow. Populated by confirm (checkout_session_id),
+  // webhook (payment_intent_id), or admin refund (refund_id).
+  stripe_payment_intent_id: string | null
+  stripe_checkout_session_id: string | null
+  stripe_refund_id: string | null
+  /** ISO 8601 — set by the `checkout.session.completed` webhook. */
+  deposit_paid_at: string | null
+  /** ISO 8601 — set by the `charge.refunded` webhook. */
+  refunded_at: string | null
+  /** Transient — present ONLY on the confirm response when Stripe is
+   *  triggered. Not persisted on the row (Stripe re-mints on fetch).
+   *  Falsy on GET detail responses. */
+  checkout_url?: string | null
 
   // Workflow state
   status: BookingStatus
@@ -251,6 +267,25 @@ export async function cancel(
 ): Promise<VenueBooking> {
   const res = await authedFetch<Envelope<VenueBooking>>(
     `${VENUE_BASE}/clubs/${clubId}/venue-bookings/${bookingId}/cancel`,
+    { method: 'POST', body: '{}', signal: opts.signal },
+  )
+  return res.data
+}
+
+/** `POST /clubs/:cid/venue-bookings/:bookingId/refund` — admin+ (brief
+ *  72 PR #2). Triggers a Stripe refund on the connected account with
+ *  `refund_application_fee: true` so Torny proportionally returns its
+ *  cut. The response carries `stripe_refund_id` immediately, but
+ *  `payment_status` + `refunded_at` populate when the
+ *  `charge.refunded` webhook fires (~2s). FE should re-fetch after a
+ *  short delay or on the next admin visit. */
+export async function refund(
+  clubId: number,
+  bookingId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<VenueBooking> {
+  const res = await authedFetch<Envelope<VenueBooking>>(
+    `${VENUE_BASE}/clubs/${clubId}/venue-bookings/${bookingId}/refund`,
     { method: 'POST', body: '{}', signal: opts.signal },
   )
   return res.data

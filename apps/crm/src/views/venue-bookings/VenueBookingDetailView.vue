@@ -160,6 +160,37 @@ async function submitCancel(): Promise<void> {
   }
 }
 
+const refundOpen = ref(false)
+const refundSubmitting = ref(false)
+function openRefund(): void { refundOpen.value = true }
+async function submitRefund(): Promise<void> {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number' || !detail.value) return
+  refundSubmitting.value = true
+  try {
+    const updated = await venueBookingsApi.refund(cid, detail.value.id)
+    detail.value = updated
+    // Webhook flips payment_status + refunded_at within ~2s; tell the
+    // admin the refund is in flight rather than complete.
+    toast.success('Refund submitted. Payment status updates within a few seconds.')
+    refundOpen.value = false
+  } catch (err) {
+    const body = err instanceof ApiError ? (err.body as { code?: string } | undefined) : undefined
+    const msg = (() => {
+      switch (body?.code) {
+        case 'no_payment_intent': return 'This booking has no Stripe payment to refund (customer never paid online).'
+        case 'not_connected': return "Club isn't connected to Stripe — refund manually and update records."
+        case 'bad_payment_status': return 'Booking is not in a refundable state (already refunded or never paid).'
+        case 'stripe_refund_failed': return err instanceof ApiError ? err.message : 'Stripe rejected the refund.'
+        default: return err instanceof ApiError ? err.message : 'Could not refund.'
+      }
+    })()
+    toast.error(msg)
+  } finally {
+    refundSubmitting.value = false
+  }
+}
+
 const deleteOpen = ref(false)
 const deleteSubmitting = ref(false)
 function openDelete(): void { overflowOpen.value = false; deleteOpen.value = true }
@@ -318,6 +349,14 @@ useClickOutside(overflowRef, () => { overflowOpen.value = false })
           <button type="button" class="rail-btn rail-btn--danger" @click="openDecline">Decline</button>
         </div>
         <div v-else-if="detail.status === 'confirmed'" class="rail__actions">
+          <button
+            v-if="detail.payment_status === 'deposit_paid'"
+            type="button"
+            class="rail-btn rail-btn--danger"
+            @click="openRefund"
+          >
+            Refund deposit
+          </button>
           <button type="button" class="rail-btn rail-btn--danger" @click="openCancel">Cancel booking</button>
         </div>
       </aside>
@@ -361,6 +400,29 @@ useClickOutside(overflowRef, () => { overflowOpen.value = false })
         <button type="button" class="rail-btn rail-btn--ghost" :disabled="cancelSubmitting" @click="cancelOpen = false">Back</button>
         <button type="button" class="rail-btn rail-btn--danger" :disabled="cancelSubmitting" @click="submitCancel">
           {{ cancelSubmitting ? 'Cancelling…' : 'Confirm cancellation' }}
+        </button>
+      </template>
+    </CrmModal>
+
+    <!-- Refund modal -->
+    <CrmModal
+      :open="refundOpen"
+      eyebrow="Refund deposit"
+      :title="detail ? `Refund ${detail.full_name}'s deposit?` : 'Refund deposit'"
+      width="sm"
+      @close="refundOpen = false"
+    >
+      <p class="modal-hint">
+        Triggers a full Stripe refund of the deposit. Torny proportionally returns its platform fee.
+        Payment status flips to <code>refunded</code> within seconds.
+      </p>
+      <p v-if="detail" class="modal-hint">
+        Amount: <strong>${{ (detail.deposit_cents / 100).toFixed(2) }}</strong>. The booking status stays <strong>confirmed</strong> — cancel the booking separately if the event isn't going ahead.
+      </p>
+      <template #footer>
+        <button type="button" class="rail-btn rail-btn--ghost" :disabled="refundSubmitting" @click="refundOpen = false">Back</button>
+        <button type="button" class="rail-btn rail-btn--danger" :disabled="refundSubmitting" @click="submitRefund">
+          {{ refundSubmitting ? 'Submitting…' : 'Confirm refund' }}
         </button>
       </template>
     </CrmModal>

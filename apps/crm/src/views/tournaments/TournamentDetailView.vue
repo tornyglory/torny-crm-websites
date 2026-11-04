@@ -206,14 +206,19 @@ const POSITION_TONE: Record<string, 'accent' | 'tangerine' | 'mint' | 'violet'> 
   skip: 'mint',
   player: 'accent',
 }
-function positionLabel(position: string): string {
+function positionLabel(position: string | null | undefined): string {
   if (position === 'lead') return 'L'
   if (position === 'second') return '2'
   if (position === 'third') return '3'
   if (position === 'skip') return 'S'
+  // Public submit (temporaryTeam.players) lands roster rows without a
+  // position assigned — admin fills them later when the draw builds.
+  // Fall back to a neutral marker so the row still renders.
+  if (!position) return '·'
   return position.slice(0, 1).toUpperCase()
 }
-function tone(position: string): string {
+function tone(position: string | null | undefined): string {
+  if (!position) return 'fog'
   return POSITION_TONE[position] ?? 'fog'
 }
 function isVisitor(entry: TournamentEntry): boolean {
@@ -370,8 +375,8 @@ function goBack() {
               </div>
               <div class="col-roster">
                 <span
-                  v-for="member in entry.roster"
-                  :key="`${entry.id}-${member.position}`"
+                  v-for="(member, mi) in entry.roster"
+                  :key="`${entry.id}-${member.position ?? mi}`"
                   class="roster-pill"
                   :class="`roster-pill--${tone(member.position)}`"
                 >

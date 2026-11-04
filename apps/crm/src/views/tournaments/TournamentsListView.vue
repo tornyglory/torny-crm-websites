@@ -184,7 +184,10 @@ const tabCounts = computed<Record<string, number>>(() => backendCounts.value)
         <h1 class="tx__title">Run the comp.</h1>
         <p class="tx__sub">Create, publish and take entries — one place.</p>
       </div>
-      <RouterLink :to="{ name: 'tournament-new' }" class="primary-btn">+ New tournament</RouterLink>
+      <div class="tx__head-actions">
+        <RouterLink :to="{ name: 'tournament-settings' }" class="ghost-btn">Settings</RouterLink>
+        <RouterLink :to="{ name: 'tournament-new' }" class="primary-btn">+ New tournament</RouterLink>
+      </div>
     </header>
 
     <section class="metrics">
@@ -333,7 +336,10 @@ const tabCounts = computed<Record<string, number>>(() => backendCounts.value)
 .tx__title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin: 4px 0 6px; color: var(--color-ink); }
 .tx__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); margin: 0; }
 
-.primary-btn { padding: 10px 18px; border-radius: 999px; background: var(--color-ink); color: #fff; font-family: var(--font-body); font-weight: 600; font-size: 13px; border: 0; cursor: pointer; }
+.tx__head-actions { display: flex; gap: 10px; align-items: center; }
+.primary-btn { padding: 10px 18px; border-radius: 999px; background: var(--color-ink); color: #fff; font-family: var(--font-body); font-weight: 600; font-size: 13px; border: 0; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+.ghost-btn { padding: 10px 18px; border-radius: 999px; background: #fff; color: var(--color-ink); font-family: var(--font-body); font-weight: 600; font-size: 13px; border: 1px solid var(--color-hairline); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+.ghost-btn:hover { background: var(--color-surface); }
 
 .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
 .metric { padding: 16px 20px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 12px; }

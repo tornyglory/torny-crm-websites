@@ -73,6 +73,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'teams/:id', name: 'team-editor', component: () => import('@/views/teams/TeamEditorView.vue') },
       { path: 'honour-board', name: 'honour-board', component: () => import('@/views/honour-board/HonourBoardView.vue') },
       { path: 'tournaments', name: 'tournaments', component: () => import('@/views/tournaments/TournamentsListView.vue') },
+      { path: 'tournaments/settings', name: 'tournament-settings', component: () => import('@/views/tournaments/TournamentSettingsView.vue') },
       { path: 'tournaments/new', name: 'tournament-new', component: () => import('@/views/tournaments/TournamentFormView.vue') },
       { path: 'tournaments/:id', name: 'tournament-detail', component: () => import('@/views/tournaments/TournamentDetailView.vue') },
       { path: 'tournaments/:id/edit', name: 'tournament-edit', component: () => import('@/views/tournaments/TournamentFormView.vue') },

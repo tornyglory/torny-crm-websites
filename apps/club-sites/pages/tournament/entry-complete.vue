@@ -12,8 +12,12 @@
 const route = useRoute()
 const club = useClub()
 
-const result = computed<'success' | 'cancelled' | 'unknown'>(() => {
+const result = computed<'success' | 'cancelled' | 'offline' | 'unknown'>(() => {
   const r = String(route.query.result ?? '')
+  // `?offline=1` is passed by the enter page when the club isn't on
+  // Stripe or the tournament is free — the entry is already recorded,
+  // payment happens via the club directly.
+  if (r === 'success' && route.query.offline === '1') return 'offline'
   if (r === 'success') return 'success'
   if (r === 'cancelled') return 'cancelled'
   return 'unknown'
@@ -37,6 +41,25 @@ const accent = computed(() => club.value?.brand_primary ?? '#2563EB')
         <h1 class="ec__title">You're in</h1>
         <p class="ec__sub">
           Your entry is confirmed. {{ clubName }} will send draws, start times, and anything else you need ahead of the day. Confirmation email on its way.
+        </p>
+        <div v-if="entryId" class="ec__ref">
+          <span class="ec__ref-label">Entry ID</span>
+          <code>{{ entryId }}</code>
+        </div>
+      </template>
+
+      <template v-else-if="result === 'offline'">
+        <div class="ec__badge ec__badge--ok" aria-hidden="true">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <circle cx="16" cy="16" r="14" fill="currentColor" opacity="0.1" />
+            <path d="M10 16.5l4 4 8-9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+        <div class="ec__eyebrow">Entry received</div>
+        <h1 class="ec__title">You're on the list</h1>
+        <p class="ec__sub">
+          {{ clubName }} will contact you about paying the entry fee — usually on the day, by cash or bank transfer.
+          Check your email for confirmation details.
         </p>
         <div v-if="entryId" class="ec__ref">
           <span class="ec__ref-label">Entry ID</span>

@@ -180,8 +180,18 @@ async function submit() {
       : undefined,
   }
   try {
-    await tournaments.enter(tournament.value.id, input)
-    await navigateTo(`/tournaments/${tournamentSlug.value}?entered=1`)
+    const result = await tournaments.enter(tournament.value.id, input)
+    // When Stripe triggers (club connected + payment_method=online + fee>0)
+    // the entry response carries a Checkout URL. Redirect the player to
+    // Stripe to pay; the webhook flips `status: confirmed` within ~2s of
+    // payment. Fall back to the offline path (free / unconnected club)
+    // when the URL is absent.
+    const checkoutUrl = result.entry?.checkout_url
+    if (checkoutUrl) {
+      window.location.href = checkoutUrl
+      return
+    }
+    await navigateTo(`/tournament/entry-complete?entry_id=${result.entry.id}&result=success&offline=1`)
   } catch (err) {
     submitError.value = err instanceof Error ? err.message : 'Something went wrong. Try again.'
     submitting.value = false

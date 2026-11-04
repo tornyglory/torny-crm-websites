@@ -19,6 +19,7 @@ import {
 } from '@torny/api-client'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
+import CrmModal from '@/components/modals/CrmModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -83,6 +84,39 @@ async function markPaid(entry: TournamentEntry) {
     toast.error(err instanceof ApiError ? err.message : 'Could not mark paid.')
   } finally {
     savingEntry.value.delete(entry.id)
+  }
+}
+
+const refundingEntry = ref<TournamentEntry | null>(null)
+const refundSubmitting = ref(false)
+function openRefund(entry: TournamentEntry): void { refundingEntry.value = entry }
+function closeRefund(): void { refundingEntry.value = null }
+
+async function submitRefund(): Promise<void> {
+  const cid = clubStore.current?.id
+  const entry = refundingEntry.value
+  if (typeof cid !== 'number' || !entry || refundSubmitting.value) return
+  refundSubmitting.value = true
+  try {
+    const updated = await tournamentsApi.refundEntry(cid, entry.id)
+    const idx = entries.value.findIndex(e => e.id === entry.id)
+    if (idx >= 0) entries.value[idx] = updated
+    toast.success('Refund submitted. Status updates within a few seconds.')
+    refundingEntry.value = null
+  } catch (err) {
+    const body = err instanceof ApiError ? (err.body as { code?: string } | undefined) : undefined
+    const msg = (() => {
+      switch (body?.code) {
+        case 'no_payment_intent': return 'This entry has no Stripe payment to refund.'
+        case 'already_refunded': return 'This entry has already been refunded.'
+        case 'bad_entry_status': return 'This entry is not in a refundable state.'
+        case 'stripe_refund_failed': return err instanceof ApiError ? err.message : 'Stripe rejected the refund.'
+        default: return err instanceof ApiError ? err.message : 'Could not refund.'
+      }
+    })()
+    toast.error(msg)
+  } finally {
+    refundSubmitting.value = false
   }
 }
 
@@ -384,6 +418,13 @@ function goBack() {
                   :disabled="savingEntry.has(entry.id)"
                   @click="markPaid(entry)"
                 >Mark paid</button>
+                <button
+                  v-else-if="entry.status === 'confirmed' && entry.payment_reference"
+                  type="button"
+                  class="row-btn row-btn--danger"
+                  :disabled="savingEntry.has(entry.id)"
+                  @click="openRefund(entry)"
+                >Refund</button>
                 <button v-else type="button" class="row-btn">View</button>
               </div>
             </div>
@@ -528,6 +569,30 @@ function goBack() {
   <div v-else class="td">
     <div class="empty empty--full">Loading tournament…</div>
   </div>
+
+  <CrmModal
+    :open="refundingEntry != null"
+    eyebrow="Refund entry"
+    :title="refundingEntry ? `Refund ${refundingEntry.team_name ?? refundingEntry.captain.name}'s entry?` : 'Refund entry'"
+    width="sm"
+    @close="closeRefund"
+  >
+    <p class="refund-hint">
+      Triggers a full Stripe refund. Torny's $1 fee is returned proportionally
+      and the club's share is pulled back from your connected account via
+      <code>reverse_transfer</code>. Status flips to <strong>refunded</strong>
+      within seconds.
+    </p>
+    <p v-if="refundingEntry" class="refund-hint">
+      Refund amount: <strong>{{ formatMoney(refundingEntry.paid_cents) }}</strong>.
+    </p>
+    <template #footer>
+      <button type="button" class="row-btn" :disabled="refundSubmitting" @click="closeRefund">Back</button>
+      <button type="button" class="row-btn row-btn--danger" :disabled="refundSubmitting" @click="submitRefund">
+        {{ refundSubmitting ? 'Submitting…' : 'Confirm refund' }}
+      </button>
+    </template>
+  </CrmModal>
 </template>
 
 <style scoped>
@@ -612,6 +677,10 @@ function goBack() {
 .col-actions { width: 100px; flex-shrink: 0; }
 .row-btn { padding: 6px 12px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 11px; font-weight: 600; color: var(--color-ink); cursor: pointer; }
 .row-btn--primary { background: var(--color-ink); color: #fff; border-color: var(--color-ink); }
+.row-btn--danger { background: transparent; color: var(--color-danger); border-color: var(--color-hairline); }
+.row-btn--danger:hover:not(:disabled) { border-color: var(--color-danger); background: color-mix(in oklab, var(--color-danger) 6%, #fff); }
+.refund-hint { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); line-height: 1.55; margin: 0 0 12px; }
+.refund-hint:last-child { margin-bottom: 0; }
 .row-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .check { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--color-mute); background: #fff; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }

@@ -28,7 +28,12 @@ import { authedFetch, publicFetch } from '../http'
 
 export type TeamSelectionStatus = 'draft' | 'confirmed' | 'sent' | 'played' | 'cancelled'
 export type TeamSelectionVenue = 'home' | 'away'
-export type TeamSelectionPosition = 'Lead' | 'Second' | 'Third' | 'Skip' | 'Singles'
+/** Free-text position label — any sport, any role. Known bowls values
+ *  (Lead/Second/Third/Skip/Singles) are documented for autocomplete /
+ *  default-seeding but any string ≤ 40 chars is valid once brief 75
+ *  (free-text positions) ships. */
+export type TeamSelectionPosition = string
+export const BOWLS_POSITIONS = ['Lead', 'Second', 'Third', 'Skip', 'Singles'] as const
 
 /** Per-slot member snapshot. Backend joins the roster here so the
  *  editor never has to re-fetch members to render a selection. */

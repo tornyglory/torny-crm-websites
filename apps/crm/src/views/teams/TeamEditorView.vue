@@ -210,18 +210,13 @@ function clearSlot(rinkIdx: number, slotIdx: number) {
 function addRink() {
   if (readOnly.value || !selection.value) return
   const nextPosition = rinks.value.length
-  // Mirror the slot shape of the last rink — keeps positions consistent
-  // within a selection. Use a temporary negative id so the server knows
-  // to INSERT; it'll be replaced with the real id after save.
+  // Mirror the slot shape of the last team so positions stay consistent
+  // within a selection. If there's no template yet, seed a single blank
+  // slot — the admin can rename it + add more as the sport dictates.
   const template = rinks.value[rinks.value.length - 1]
   const slotShape: Array<{ position: TeamSelectionPosition; slot_order: number }> = template
     ? template.slots.map((s) => ({ position: s.position, slot_order: s.slot_order }))
-    : [
-        { position: 'Lead', slot_order: 0 },
-        { position: 'Second', slot_order: 1 },
-        { position: 'Third', slot_order: 2 },
-        { position: 'Skip', slot_order: 3 },
-      ]
+    : [{ position: '', slot_order: 0 }]
   rinks.value.push({
     id: nextTempId(),
     position: nextPosition,
@@ -241,6 +236,35 @@ function addRink() {
 function removeRink(idx: number) {
   if (readOnly.value) return
   rinks.value.splice(idx, 1)
+  scheduleSave()
+}
+
+/** Append a blank slot to a team. Sport-agnostic — admin names the
+ *  position inline. */
+function addSlot(rinkIdx: number) {
+  if (readOnly.value) return
+  const rink = rinks.value[rinkIdx]
+  if (!rink) return
+  rink.slots.push({
+    id: nextTempId(),
+    position: '',
+    slot_order: rink.slots.length,
+    member: null,
+    notified_member_id: null,
+    notified_at: null,
+  })
+  scheduleSave()
+}
+
+/** Remove a slot from a team. Re-indexes slot_order so the server-side
+ *  diff doesn't see gaps. If the slot had a member they drop back into
+ *  the available pool automatically (pool is derived from occupancy). */
+function removeSlot(rinkIdx: number, slotIdx: number) {
+  if (readOnly.value) return
+  const rink = rinks.value[rinkIdx]
+  if (!rink || rink.slots.length <= 1) return
+  rink.slots.splice(slotIdx, 1)
+  rink.slots.forEach((s, i) => { s.slot_order = i })
   scheduleSave()
 }
 
@@ -281,6 +305,40 @@ function onTeamNameBlur(idx: number) {
   const next = (rink.label ?? '').replace(/\s+/g, ' ').trim()
   if (next !== rink.label) {
     rink.label = next
+    scheduleSave()
+  }
+}
+
+/** Display fallback for a slot position in read-only mode — empty →
+ *  `Player N`. Keeps the output sport-agnostic. */
+function slotDisplayName(position: string | null | undefined, idx: number): string {
+  const trimmed = (position ?? '').trim()
+  return trimmed || `Player ${idx + 1}`
+}
+
+/** Raw value shown inside the editable slot-position input. Returns
+ *  the stored string verbatim — legacy bowls values (Lead / Second /
+ *  Third / Skip / Singles) show up as-is so the admin can either
+ *  keep them or edit; empty strings stay empty so deleting mid-edit
+ *  doesn't snap back to the placeholder. */
+function slotPositionValue(position: string | null | undefined): string {
+  return position ?? ''
+}
+
+function onSlotPositionInput(rinkIdx: number, slotIdx: number, event: Event) {
+  const rink = rinks.value[rinkIdx]
+  const slot = rink?.slots[slotIdx]
+  if (!slot) return
+  slot.position = (event.target as HTMLInputElement).value
+  scheduleSave()
+}
+
+function onSlotPositionBlur(rinkIdx: number, slotIdx: number) {
+  const slot = rinks.value[rinkIdx]?.slots[slotIdx]
+  if (!slot) return
+  const next = (slot.position ?? '').replace(/\s+/g, ' ').trim()
+  if (next !== slot.position) {
+    slot.position = next
     scheduleSave()
   }
 }
@@ -429,11 +487,15 @@ async function confirmCancel() {
 // ── Create form ──────────────────────────────────────────────
 
 type FormatPreset = 'fours' | 'triples' | 'pairs' | 'singles'
+// Positions are left empty so the editor's `Player N` placeholder takes
+// over — admins name each slot inline per the sport they're running. The
+// preset only controls how many slots per team get seeded. See brief 75
+// for the backend side.
 const createPresets: Record<FormatPreset, { label: string; shape: FormatShape }> = {
-  fours:   { label: 'Fours',   shape: { positions: ['Lead', 'Second', 'Third', 'Skip'], rink_count: 2 } },
-  triples: { label: 'Triples', shape: { positions: ['Lead', 'Second', 'Skip'], rink_count: 2 } },
-  pairs:   { label: 'Pairs',   shape: { positions: ['Skip', 'Lead'], rink_count: 2 } },
-  singles: { label: 'Singles', shape: { positions: ['Singles'], rink_count: 1 } },
+  fours:   { label: 'Fours',   shape: { positions: ['', '', '', ''], rink_count: 2 } },
+  triples: { label: 'Triples', shape: { positions: ['', '', ''], rink_count: 2 } },
+  pairs:   { label: 'Pairs',   shape: { positions: ['', ''], rink_count: 2 } },
+  singles: { label: 'Singles', shape: { positions: [''], rink_count: 1 } },
 }
 
 const createForm = reactive({
@@ -786,7 +848,18 @@ function goBack() {
                 @dragover.prevent
                 @drop="onDrop(i, si)"
               >
-                <div class="slot__position">{{ s.position }}</div>
+                <input
+                  v-if="!readOnly"
+                  class="slot__position-input"
+                  type="text"
+                  maxlength="40"
+                  :value="slotPositionValue(s.position)"
+                  :placeholder="`Player ${si + 1}`"
+                  :aria-label="`Team ${i + 1} player ${si + 1} role`"
+                  @input="onSlotPositionInput(i, si, $event)"
+                  @blur="onSlotPositionBlur(i, si)"
+                />
+                <div v-else class="slot__position">{{ slotDisplayName(s.position, si) }}</div>
                 <template v-if="s.member">
                   <div class="slot__member">
                     <div class="slot__name">{{ s.member.name }}</div>
@@ -799,6 +872,7 @@ function goBack() {
                     v-if="!readOnly"
                     type="button"
                     class="slot__clear"
+                    :aria-label="`Clear ${slotDisplayName(s.position, si)}`"
                     @click="clearSlot(i, si)"
                   >×</button>
                 </template>
@@ -806,7 +880,23 @@ function goBack() {
                   <template v-if="readOnly">Unfilled</template>
                   <template v-else>Drop a member here</template>
                 </div>
+                <button
+                  v-if="!readOnly && r.slots.length > 1"
+                  type="button"
+                  class="slot__remove"
+                  :aria-label="`Remove player ${si + 1} from team ${i + 1}`"
+                  @click="removeSlot(i, si)"
+                ><svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 4l4 4M8 4l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
               </div>
+              <button
+                v-if="!readOnly"
+                type="button"
+                class="slot slot--add"
+                @click="addSlot(i)"
+              >
+                <span class="slot__add-icon" aria-hidden="true">+</span>
+                <span class="slot__add-label">Add player</span>
+              </button>
             </div>
           </article>
         </section>
@@ -989,10 +1079,74 @@ function goBack() {
 .rink__remove { background: transparent; border: 0; font-family: var(--font-body); font-size: 12px; color: var(--color-danger); cursor: pointer; }
 
 .rink__slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.slot { display: grid; grid-template-columns: 60px 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px dashed var(--color-hairline); border-radius: 10px; background: var(--color-surface); min-height: 60px; }
+.slot { display: grid; grid-template-columns: 100px 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px dashed var(--color-hairline); border-radius: 10px; background: var(--color-surface); min-height: 60px; }
 .slot--filled { background: #fff; border-style: solid; }
 .slot--locked { opacity: 0.85; }
 .slot__position { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
+.slot__position-input {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-fog);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed transparent;
+  padding: 2px 4px;
+  margin: 0;
+  outline: none;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  border-radius: 4px;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.slot__position-input::placeholder { color: var(--color-mute); }
+.slot__position-input:hover { background: var(--color-sand); border-bottom-color: var(--color-hairline); color: var(--color-ink); }
+.slot__position-input:focus { background: #fff; border-bottom-color: var(--color-ink); color: var(--color-ink); }
+.slot__remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: transparent;
+  border: 0;
+  color: var(--color-mute);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.slot { position: relative; }
+.slot:hover .slot__remove,
+.slot:focus-within .slot__remove { opacity: 1; }
+.slot__remove:hover { background: var(--color-danger-soft); color: var(--color-danger); }
+.slot--add {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: transparent;
+  border: 1px dashed var(--color-hairline);
+  border-radius: 10px;
+  color: var(--color-fog);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+  width: fit-content;
+  margin-top: 4px;
+}
+.slot--add:hover { border-color: var(--color-ink); color: var(--color-ink); background: var(--color-sand); }
+.slot__add-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 999px; background: var(--color-sand); font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: var(--color-ink); }
+.slot--add:hover .slot__add-icon { background: var(--color-ink); color: #fff; }
+.slot__add-label { font-family: var(--font-body); }
 .slot__member { min-width: 0; }
 .slot__name { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slot__meta { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 2px; }

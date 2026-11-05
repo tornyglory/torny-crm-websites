@@ -380,67 +380,109 @@ if (typeof window !== 'undefined') {
   onBeforeUnmount(() => window.removeEventListener('torny:tournaments-count', onTournamentsCountUpdate))
 }
 
-const manageNav = computed<NavItem[]>(() => [
-  { to: '/crm/dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? '—', countTone: 'neutral' },
+interface NavGroup {
+  label: string
+  items: NavItem[]
+  /** Hidden from the mobile "More" sheet because the group is already
+   *  represented by the bottom tabbar (Home + Members + Apps + Enquiries). */
+  skipMobileMore?: boolean
+}
+
+const sidebarGroups = computed<NavGroup[]>(() => [
   {
-    to: '/crm/applications',
-    label: 'Applications',
-    icon: 'applications',
-    ...(applicationsPendingCount.value != null
-      ? { count: applicationsPendingCount.value, countTone: applicationsPendingCount.value > 0 ? 'accent' as const : 'neutral' as const }
-      : {}),
+    label: 'Overview',
+    skipMobileMore: true,
+    items: [
+      { to: '/crm/dashboard', label: 'Dashboard', icon: 'dashboard' },
+    ],
   },
   {
-    to: '/crm/enquiries',
-    label: 'Enquiries',
-    icon: 'enquiries',
-    ...(enquiriesNewCount.value != null
-      ? { count: enquiriesNewCount.value, countTone: enquiriesNewCount.value > 0 ? 'accent' as const : 'neutral' as const }
-      : {}),
+    label: 'People',
+    skipMobileMore: true,
+    items: [
+      { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? '—', countTone: 'neutral' },
+      {
+        to: '/crm/applications',
+        label: 'Applications',
+        icon: 'applications',
+        ...(applicationsPendingCount.value != null
+          ? { count: applicationsPendingCount.value, countTone: applicationsPendingCount.value > 0 ? 'accent' as const : 'neutral' as const }
+          : {}),
+      },
+      {
+        to: '/crm/enquiries',
+        label: 'Enquiries',
+        icon: 'enquiries',
+        ...(enquiriesNewCount.value != null
+          ? { count: enquiriesNewCount.value, countTone: enquiriesNewCount.value > 0 ? 'accent' as const : 'neutral' as const }
+          : {}),
+      },
+    ],
   },
   {
-    to: '/crm/venue-bookings',
-    label: 'Venue bookings',
-    icon: 'venue-bookings',
-    ...(venueBookingsNewCount.value != null
-      ? { count: venueBookingsNewCount.value, countTone: venueBookingsNewCount.value > 0 ? 'accent' as const : 'neutral' as const }
-      : {}),
+    label: 'Play',
+    items: [
+      {
+        to: '/crm/events',
+        label: 'Events',
+        icon: 'events',
+        ...(eventsUpcomingCount.value != null
+          ? { count: eventsUpcomingCount.value, countTone: 'neutral' as const }
+          : {}),
+      },
+      { to: '/crm/teams', label: 'Team selections', icon: 'teams', count: 4, countTone: 'neutral' },
+      {
+        to: '/crm/tournaments',
+        label: 'Tournaments',
+        icon: 'tournaments',
+        ...(tournamentsActiveCount.value != null
+          ? { count: tournamentsActiveCount.value, countTone: tournamentsActiveCount.value > 0 ? 'accent' as const : 'neutral' as const }
+          : {}),
+      },
+      {
+        to: '/crm/honour-board',
+        label: 'Honour board',
+        icon: 'honour',
+        ...(honourCategoriesStore.loadedClubId != null
+          ? { count: honourCategoriesStore.count, countTone: 'neutral' as const }
+          : {}),
+      },
+    ],
+  },
+  {
+    label: 'Venue',
+    items: [
+      {
+        to: '/crm/venue-bookings',
+        label: 'Venue bookings',
+        icon: 'venue-bookings',
+        ...(venueBookingsNewCount.value != null
+          ? { count: venueBookingsNewCount.value, countTone: venueBookingsNewCount.value > 0 ? 'accent' as const : 'neutral' as const }
+          : {}),
+      },
+      { to: '/crm/venue-packages', label: 'Venue packages', icon: 'venue-packages' },
+    ],
+  },
+  {
+    label: 'Reach',
+    items: [
+      { to: '/crm/website', label: 'Website', icon: 'website' },
+      { to: '/crm/communications', label: 'Communications', icon: 'communications' },
+    ],
+  },
+  {
+    label: 'Settings',
+    items: [
+      { to: '/crm/settings', label: 'Settings', icon: 'settings' },
+    ],
   },
 ])
-const contentNav = computed<NavItem[]>(() => [
-  { to: '/crm/website', label: 'Website', icon: 'website' },
-  { to: '/crm/venue-packages', label: 'Venue packages', icon: 'venue-packages' },
-  {
-    to: '/crm/events',
-    label: 'Events',
-    icon: 'events',
-    ...(eventsUpcomingCount.value != null
-      ? { count: eventsUpcomingCount.value, countTone: 'neutral' as const }
-      : {}),
-  },
-  { to: '/crm/teams', label: 'Team selections', icon: 'teams', count: 4, countTone: 'neutral' },
-  {
-    to: '/crm/tournaments',
-    label: 'Tournaments',
-    icon: 'tournaments',
-    ...(tournamentsActiveCount.value != null
-      ? { count: tournamentsActiveCount.value, countTone: tournamentsActiveCount.value > 0 ? 'accent' as const : 'neutral' as const }
-      : {}),
-  },
-  {
-    to: '/crm/honour-board',
-    label: 'Honour board',
-    icon: 'honour',
-    ...(honourCategoriesStore.loadedClubId != null
-      ? { count: honourCategoriesStore.count, countTone: 'neutral' as const }
-      : {}),
-  },
-])
-const accountNav: NavItem[] = [
-  { to: '/crm/communications', label: 'Communications', icon: 'communications' },
-  { to: '/crm/settings', label: 'Settings', icon: 'settings' },
-]
+
+/** Mobile "More" sheet excludes groups already reachable from the
+ *  bottom tabbar (Overview, People). */
+const mobileMoreGroups = computed<NavGroup[]>(() =>
+  sidebarGroups.value.filter((g) => !g.skipMobileMore),
+)
 
 async function signOut() {
   closeDrawer()
@@ -546,69 +588,39 @@ const bottomTabs = computed<TabItem[]>(() => [
       </div>
 
       <nav class="sidebar__nav">
-        <div class="sidebar__section-label">Manage</div>
-        <RouterLink
-          v-for="item in manageNav"
-          :key="item.to"
-          :to="item.to"
-          class="sidebar__link"
-          active-class="is-active"
-        >
-          <span class="sidebar__link-icon" aria-hidden="true">
-            <component :is="'nav-icon-slot'" />
-            <svg v-if="item.icon === 'dashboard'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3h5v5H3zM10 3h5v5h-5zM3 10h5v5H3zM10 10h5v5h-5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <svg v-else-if="item.icon === 'members'" width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M13 5a2.5 2.5 0 1 1 0 5M2 15v-1a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4v1M14 10a3 3 0 0 1 3 3v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            <svg v-else-if="item.icon === 'applications'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 2H5a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 5 16h8a1.5 1.5 0 0 0 1.5-1.5V5.5L11 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M11 2v3.5h3.5M6.5 9.5h5M6.5 12h5M6.5 7h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            <svg v-else-if="item.icon === 'enquiries'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2.5 4a1.5 1.5 0 0 1 1.5-1.5h10a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5H7l-3.5 3v-3H4A1.5 1.5 0 0 1 2.5 11V4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-            <svg v-else-if="item.icon === 'venue-bookings'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 4.5h12v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 7.5h12M6 2.5v3M12 2.5v3M6 10.5h3M6 12.5h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            <svg v-else-if="item.icon === 'venue-packages'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2.5l6 3v7l-6 3-6-3v-7l6-3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 5.5l6 3 6-3M9 8.5v7" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-          </span>
-          <span class="sidebar__link-label">{{ item.label }}</span>
-          <span
-            v-if="item.count !== undefined"
-            class="sidebar__link-count"
-            :class="`sidebar__link-count--${item.countTone ?? 'neutral'}`"
-          >{{ item.count }}</span>
-        </RouterLink>
-
-        <div class="sidebar__section-label">Content</div>
-        <RouterLink
-          v-for="item in contentNav"
-          :key="item.to"
-          :to="item.to"
-          class="sidebar__link"
-          active-class="is-active"
-        >
-          <span class="sidebar__link-icon" aria-hidden="true">
-            <svg v-if="item.icon === 'website'" width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 9h13M9 2.5c1.8 2.2 2.7 4.3 2.7 6.5s-.9 4.3-2.7 6.5C7.2 13.3 6.3 11.2 6.3 9S7.2 4.7 9 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <svg v-else-if="item.icon === 'events'" width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="4" width="13" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 7.5h13M6 2.5v3M12 2.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            <svg v-else-if="item.icon === 'teams'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M6 3.5h6a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5z" stroke="currentColor" stroke-width="1.5"/><path d="M7 2.5h4v2H7zM7 8h4M7 11h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            <svg v-else-if="item.icon === 'honour'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1.5L11.16 6.15L16.2 6.9L12.6 10.5L13.44 15.6L9 13.2L4.56 15.6L5.4 10.5L1.8 6.9L6.84 6.15L9 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-            <svg v-else-if="item.icon === 'tournaments'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M5.5 3v1.5C5.5 6.5 7 8 9 8s3.5-1.5 3.5-3.5V3h-7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5.5 3H3v2c0 1 .5 2 2.5 2M12.5 3H15v2c0 1-.5 2-2.5 2M7 11h4l.5 3.5h-5L7 11zM9 8v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </span>
-          <span class="sidebar__link-label">{{ item.label }}</span>
-          <span
-            v-if="item.count !== undefined"
-            class="sidebar__link-count"
-            :class="`sidebar__link-count--${item.countTone ?? 'neutral'}`"
-          >{{ item.count }}</span>
-        </RouterLink>
-
-        <div class="sidebar__section-label">Account</div>
-        <RouterLink
-          v-for="item in accountNav"
-          :key="item.to"
-          :to="item.to"
-          class="sidebar__link"
-          active-class="is-active"
-        >
-          <span class="sidebar__link-icon" aria-hidden="true">
-            <svg v-if="item.icon === 'communications'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M15.5 3.5 8 11M15.5 3.5l-4.5 12L8 11 3.5 8l12-4.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <svg v-else-if="item.icon === 'site-settings'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="5" r="1.5" fill="var(--color-ground)" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="9" r="1.5" fill="var(--color-ground)" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="13" r="1.5" fill="var(--color-ground)" stroke="currentColor" stroke-width="1.5"/></svg>
-            <svg v-else-if="item.icon === 'settings'" width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M9 1.5v2M9 14.5v2M14.3 3.7l-1.4 1.4M5.1 12.9l-1.4 1.4M16.5 9h-2M3.5 9h-2M14.3 14.3l-1.4-1.4M5.1 5.1 3.7 3.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          </span>
-          <span class="sidebar__link-label">{{ item.label }}</span>
-        </RouterLink>
+        <template v-for="group in sidebarGroups" :key="group.label">
+          <div class="sidebar__section-label">{{ group.label }}</div>
+          <RouterLink
+            v-for="item in group.items"
+            :key="item.to"
+            :to="item.to"
+            class="sidebar__link"
+            active-class="is-active"
+          >
+            <span class="sidebar__link-icon" aria-hidden="true">
+              <svg v-if="item.icon === 'dashboard'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 3h5v5H3zM10 3h5v5h-5zM3 10h5v5H3zM10 10h5v5h-5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg v-else-if="item.icon === 'members'" width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M13 5a2.5 2.5 0 1 1 0 5M2 15v-1a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4v1M14 10a3 3 0 0 1 3 3v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <svg v-else-if="item.icon === 'applications'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 2H5a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 5 16h8a1.5 1.5 0 0 0 1.5-1.5V5.5L11 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M11 2v3.5h3.5M6.5 9.5h5M6.5 12h5M6.5 7h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <svg v-else-if="item.icon === 'enquiries'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2.5 4a1.5 1.5 0 0 1 1.5-1.5h10a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5H7l-3.5 3v-3H4A1.5 1.5 0 0 1 2.5 11V4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+              <svg v-else-if="item.icon === 'events'" width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="4" width="13" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 7.5h13M6 2.5v3M12 2.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <svg v-else-if="item.icon === 'teams'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M6 3.5h6a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5z" stroke="currentColor" stroke-width="1.5"/><path d="M7 2.5h4v2H7zM7 8h4M7 11h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <svg v-else-if="item.icon === 'tournaments'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M5.5 3v1.5C5.5 6.5 7 8 9 8s3.5-1.5 3.5-3.5V3h-7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5.5 3H3v2c0 1 .5 2 2.5 2M12.5 3H15v2c0 1-.5 2-2.5 2M7 11h4l.5 3.5h-5L7 11zM9 8v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg v-else-if="item.icon === 'honour'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1.5L11.16 6.15L16.2 6.9L12.6 10.5L13.44 15.6L9 13.2L4.56 15.6L5.4 10.5L1.8 6.9L6.84 6.15L9 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+              <svg v-else-if="item.icon === 'venue-bookings'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 4.5h12v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 7.5h12M6 2.5v3M12 2.5v3M6 10.5h3M6 12.5h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <svg v-else-if="item.icon === 'venue-packages'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2.5l6 3v7l-6 3-6-3v-7l6-3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 5.5l6 3 6-3M9 8.5v7" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+              <svg v-else-if="item.icon === 'website'" width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 9h13M9 2.5c1.8 2.2 2.7 4.3 2.7 6.5s-.9 4.3-2.7 6.5C7.2 13.3 6.3 11.2 6.3 9S7.2 4.7 9 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg v-else-if="item.icon === 'communications'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M15.5 3.5 8 11M15.5 3.5l-4.5 12L8 11 3.5 8l12-4.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg v-else-if="item.icon === 'site-settings'" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="5" r="1.5" fill="var(--color-ground)" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="9" r="1.5" fill="var(--color-ground)" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="13" r="1.5" fill="var(--color-ground)" stroke="currentColor" stroke-width="1.5"/></svg>
+              <svg v-else-if="item.icon === 'settings'" width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M9 1.5v2M9 14.5v2M14.3 3.7l-1.4 1.4M5.1 12.9l-1.4 1.4M16.5 9h-2M3.5 9h-2M14.3 14.3l-1.4-1.4M5.1 5.1 3.7 3.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </span>
+            <span class="sidebar__link-label">{{ item.label }}</span>
+            <span
+              v-if="item.count !== undefined"
+              class="sidebar__link-count"
+              :class="`sidebar__link-count--${item.countTone ?? 'neutral'}`"
+            >{{ item.count }}</span>
+          </RouterLink>
+        </template>
       </nav>
 
       <div class="sidebar__user">
@@ -774,15 +786,13 @@ const bottomTabs = computed<TabItem[]>(() => [
       <div v-if="moreOpen" class="sheet" @click.self="moreOpen = false">
         <div class="sheet__inner">
           <div class="sheet__grabber" />
-          <div class="sheet__section-label">Content</div>
-          <RouterLink v-for="item in contentNav" :key="item.to" :to="item.to" class="sheet__link" @click="moreOpen = false">
-            <span>{{ item.label }}</span>
-            <span v-if="item.count !== undefined" class="sheet__link-count">{{ item.count }}</span>
-          </RouterLink>
-          <div class="sheet__section-label">Account</div>
-          <RouterLink v-for="item in accountNav" :key="item.to" :to="item.to" class="sheet__link" @click="moreOpen = false">
-            <span>{{ item.label }}</span>
-          </RouterLink>
+          <template v-for="group in mobileMoreGroups" :key="group.label">
+            <div class="sheet__section-label">{{ group.label }}</div>
+            <RouterLink v-for="item in group.items" :key="item.to" :to="item.to" class="sheet__link" @click="moreOpen = false">
+              <span>{{ item.label }}</span>
+              <span v-if="item.count !== undefined" class="sheet__link-count">{{ item.count }}</span>
+            </RouterLink>
+          </template>
         </div>
       </div>
     </div>

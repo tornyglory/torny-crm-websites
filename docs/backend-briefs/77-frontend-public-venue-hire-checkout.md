@@ -183,20 +183,20 @@ After `window.location.href = data.checkout_url`:
 1. Stripe renders its hosted Checkout page (styled with the club's Stripe brand settings — not our brand, that's a Stripe product limitation).
 2. Renter enters card (or taps Apple Pay / Google Pay — Stripe auto-enables based on their device).
 3. Stripe handles 3DS challenges inline.
-4. On successful payment, Stripe redirects to:
+4. On successful payment, Stripe redirects to the **club's own site**:
    ```
-   https://torny.co/book/complete?booking_ref=BK-2026-A3F9C2&result=success
+   https://nae-nae-bowling-club.torny.co/book/complete?booking_ref=BK-2026-A3F9C2&result=success
    ```
-5. On cancel (renter clicks the back-arrow or closes the tab), Stripe redirects to:
+5. On cancel (renter clicks the back-arrow or closes the tab), Stripe redirects to the same domain:
    ```
-   https://torny.co/book/complete?booking_ref=BK-2026-A3F9C2&result=cancelled
+   https://nae-nae-bowling-club.torny.co/book/complete?booking_ref=BK-2026-A3F9C2&result=cancelled
    ```
 
-The `FRONTEND_URL` base is `https://torny.co` — if the renter is on a club-custom domain, consider whether to rewrite the success URL to land back on the club's own site. For v1, torny.co is fine (the landing page can read the `booking_ref`, fetch the booking's `payment_status`, and show the club name from the booking row).
+Base URL is computed as `https://{club.subdomain}.torny.co` — matches the convention already used for club emails, calendar links, and team-selection URLs (see `utils/send-club-email.js:78`). Renter lands back where they started instead of being punted to the central torny.co site. If a club has no `subdomain` on the row (shouldn't happen for a Stripe-ready club), falls back to `FRONTEND_URL` (`https://torny.co`).
 
 ### The `/book/complete` landing page (FE must build)
 
-The FE needs to host a page at `/book/complete` that handles both outcomes:
+Lives on each club's public site at `/book/complete` (same page served under every `{subdomain}.torny.co`). Handles both outcomes:
 
 **`?result=success` path:**
 
@@ -358,7 +358,7 @@ curl -X POST -H "Content-Type: application/json" \
 # → 200 { data: { venue_booking_id, booking_ref, checkout_url, ... } }
 
 # 2. Open checkout_url in a browser. Use Stripe test card 4242 4242 4242 4242, any future expiry, any CVV.
-#    Stripe redirects to FRONTEND_URL/book/complete?booking_ref=…&result=success.
+#    Stripe redirects to https://<club.subdomain>.torny.co/book/complete?booking_ref=…&result=success.
 
 # 3. Verify the webhook flipped the booking (as the club admin).
 curl -H "Authorization: Bearer $JWT" "$API/clubs/5/venue-bookings/128"

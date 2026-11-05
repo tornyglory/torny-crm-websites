@@ -387,17 +387,34 @@ async function saveEditNote(c: MemberCommunication) {
     editNoteSaving.value = false
   }
 }
-async function deleteNote(c: MemberCommunication) {
+// Per-note delete confirmation. Uses a CrmModal rather than the native
+// browser confirm() so it matches the rest of the CRM's dialog shell.
+const deletingNoteId = ref<number | null>(null)
+const confirmDeleteNote = ref<MemberCommunication | null>(null)
+
+function askDeleteNote(c: MemberCommunication) {
+  confirmDeleteNote.value = c
+}
+function cancelDeleteNote() {
+  if (deletingNoteId.value != null) return
+  confirmDeleteNote.value = null
+}
+async function doDeleteNote() {
+  const note = confirmDeleteNote.value
+  if (!note) return
   const cid = clubStore.current?.id
   const uid = memberId.value
   if (cid == null || !uid) return
-  if (!window.confirm('Delete this note? This cannot be undone from the UI.')) return
+  deletingNoteId.value = note.communication_id
   try {
-    await communicationsApi.removeCommunication(cid, uid, c.communication_id)
+    await communicationsApi.removeCommunication(cid, uid, note.communication_id)
     toast.success('Note deleted.')
+    confirmDeleteNote.value = null
     await loadComms()
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Could not delete note.')
+  } finally {
+    deletingNoteId.value = null
   }
 }
 function canEditNote(c: MemberCommunication): boolean {
@@ -1725,7 +1742,7 @@ async function submitEdit() {
                           type="button"
                           class="notes-row__action notes-row__action--danger"
                           aria-label="Delete note"
-                          @click="deleteNote(c)"
+                          @click="askDeleteNote(c)"
                         >
                           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4l1 9a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1l1-9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
                           Delete
@@ -2096,6 +2113,50 @@ async function submitEdit() {
             <path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4l1 9a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1l1-9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           {{ deletingPaymentId != null ? 'Deleting…' : 'Delete payment' }}
+        </button>
+      </template>
+    </CrmModal>
+
+    <CrmModal
+      :open="confirmDeleteNote != null"
+      eyebrow="Note"
+      title="Delete this note?"
+      width="sm"
+      @close="cancelDeleteNote"
+    >
+      <p v-if="confirmDeleteNote" class="confirm-delete__body">
+        <span class="confirm-delete__lead">
+          {{ confirmDeleteNote.note_type ? noteTypeLabel(confirmDeleteNote.note_type) : 'Note' }}
+          <template v-if="confirmDeleteNote.sent_by_name"> · {{ confirmDeleteNote.sent_by_name }}</template>
+        </span>
+        <span class="confirm-delete__date">{{ commsTime(confirmDeleteNote.occurred_at ?? confirmDeleteNote.sent_at) }}</span>
+      </p>
+      <p v-if="confirmDeleteNote?.body" class="confirm-delete__meta">
+        “{{ confirmDeleteNote.body.length > 160 ? confirmDeleteNote.body.slice(0, 160) + '…' : confirmDeleteNote.body }}”
+      </p>
+      <p class="confirm-delete__meta confirm-delete__meta--muted">
+        The note disappears from this timeline. It's soft-deleted on the backend, so admins with database access can restore it if needed.
+      </p>
+
+      <template #footer>
+        <button
+          type="button"
+          class="btn btn--outline"
+          :disabled="deletingNoteId != null"
+          @click="cancelDeleteNote"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="btn btn--primary confirm-delete__danger"
+          :disabled="deletingNoteId != null"
+          @click="doDeleteNote"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M3 4h10M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5 4l1 9a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1l1-9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          {{ deletingNoteId != null ? 'Deleting…' : 'Delete note' }}
         </button>
       </template>
     </CrmModal>

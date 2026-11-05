@@ -26,6 +26,16 @@ import {
   type VenueAddon,
 } from '@torny/api-client'
 import HeroImageUploader from './HeroImageUploader.vue'
+import TornyTimePicker from '@/components/TornyTimePicker.vue'
+
+/** Normalise a SQL TIME value (HH:MM:SS) to the HH:MM shape that
+ *  TornyTimePicker + the native `<input type="time">` both expect.
+ *  Null / empty / already-trimmed values pass through. */
+function trimSeconds(t: string | null | undefined): string {
+  if (!t) return ''
+  const match = /^(\d{1,2}:\d{2})(?::\d{2})?$/.exec(t.trim())
+  return match?.[1] ?? t
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -47,7 +57,8 @@ interface SlotForm {
   sub: string
   price_dollars: string            // admins type dollars — convert on save
   duration_hours: string
-  default_start_time: string
+  /** Empty / null = no default. TornyTimePicker emits `null` when cleared. */
+  default_start_time: string | null
   is_disabled: boolean
 }
 
@@ -136,7 +147,7 @@ function hydrateFromServer(pkg: VenuePackage): void {
       sub: s.sub ?? '',
       price_dollars: String((s.price_cents ?? 0) / 100),
       duration_hours: s.duration_hours != null ? String(s.duration_hours) : '',
-      default_start_time: s.default_start_time ?? '',
+      default_start_time: trimSeconds(s.default_start_time),
       is_disabled: s.is_disabled ?? false,
     })),
     addons: pkg.addons.map((a) => ({
@@ -203,7 +214,7 @@ function slotToWire(s: SlotForm): VenueSlot {
     sub: s.sub.trim() || null,
     price_cents: toCents(s.price_dollars),
     duration_hours: s.duration_hours.trim() ? Number(s.duration_hours) : null,
-    default_start_time: s.default_start_time.trim() || null,
+    default_start_time: (s.default_start_time ?? '').trim() || null,
     is_disabled: s.is_disabled,
   }
   if (s.id != null) base.id = s.id
@@ -388,7 +399,7 @@ async function save(): Promise<void> {
               </label>
               <label class="field">
                 <span class="field__label">Default start time</span>
-                <input v-model="slot.default_start_time" type="text" placeholder="09:00" pattern="^\d{2}:\d{2}$" />
+                <TornyTimePicker v-model="slot.default_start_time" placeholder="Pick a time" />
               </label>
             </div>
           </li>

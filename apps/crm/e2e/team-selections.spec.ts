@@ -213,14 +213,20 @@ test.describe('Team selections', () => {
     await page.getByLabel(/competition/i).fill('Pennant Div 3')
     await page.getByLabel(/round/i).fill('Round 8')
     await page.getByLabel(/opponent/i).fill('Petone A')
-    // TornyDatePicker is a popover — click the field to open, click
-    // Today to pick a date (fine for the mocked backend; the brief's
-    // starts_in_past guard runs server-side), then set the time via the
-    // adjacent native input.
+    // TornyDatePicker + TornyTimePicker are both popover-based. Open the
+    // date one, pick Today; open the time one, nudge the minute grid and
+    // commit via Set. The mocked backend doesn't enforce the brief's
+    // starts_in_past guard so Today-at-12:30 lands cleanly.
     await page.locator('.torny-dp .torny-dp__field').click()
     await page.locator('.torny-dp__panel').last().getByRole('button', { name: /^today$/i }).click()
     await expect(page.locator('.torny-dp__panel')).toHaveCount(0, { timeout: 2_000 })
-    await page.getByLabel(/fixture start time/i).fill('12:30')
+
+    await page.locator('.torny-tp .torny-tp__field').click()
+    // Seeded draft is already 12:30 AM (createForm default). Hitting Set
+    // commits that round-trip through the popover's draft → model path —
+    // the test cares about the commit, not which minute cell was picked.
+    await page.locator('.torny-tp__panel').last().getByRole('button', { name: /^set$/i }).click()
+    await expect(page.locator('.torny-tp__panel')).toHaveCount(0, { timeout: 2_000 })
 
     await page.getByRole('button', { name: /create \+ start picking/i }).click()
 

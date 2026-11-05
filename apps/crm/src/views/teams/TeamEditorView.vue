@@ -36,6 +36,7 @@ import { useClubStore } from '@/stores/club'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import TornySelect from '@/components/TornySelect.vue'
 import TornyDatePicker from '@/components/TornyDatePicker.vue'
+import TornyTimePicker from '@/components/TornyTimePicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -573,11 +574,9 @@ function goBack() {
               v-model="createForm.starts_at_date"
               placeholder="Pick a date"
             />
-            <input
+            <TornyTimePicker
               v-model="createForm.starts_at_time"
-              type="time"
-              class="field__input create__time"
-              aria-label="Fixture start time"
+              placeholder="Pick a time"
             />
           </div>
         </div>

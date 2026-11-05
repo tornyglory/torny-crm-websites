@@ -1020,7 +1020,6 @@ const emptyForm = () => ({
   phone: '',
   role: 'Player' as MemberRole,
   membership: 'Playing member' as MembershipType,
-  sendInvite: true,
   markPending: true,
 })
 const form = reactive(emptyForm())
@@ -1096,7 +1095,7 @@ async function submit() {
       // keeps the payload honest.
       membership_type_id: isPaying ? tierIdForMembership(form.membership) : undefined,
       membership_type: isPaying ? form.membership : undefined,
-      send_invite: isPaying ? form.sendInvite : false,
+      send_invite: false,
       member_status: form.type,
     })
     const name = `${form.firstName.trim()} ${form.lastName.trim()}`
@@ -1108,6 +1107,11 @@ async function submit() {
       case 'stub_created': toast.success(`${name} added${typeLabel ? ' ' + typeLabel : ''}.`); break
     }
     closeAdd()
+    // Clear filters so the newly-added row is guaranteed to show up on the
+    // "All" tab regardless of the previous filter / search state. The
+    // membershipFilter watcher calls loadRoster() on its own; the explicit
+    // Promise.all below covers the summary + any filter-already-'all' case.
+    resetFilters()
     await Promise.all([loadRoster(), loadSummary()])
   } catch (err) {
     if (err instanceof ApiError) {
@@ -1691,18 +1695,6 @@ async function submit() {
         </div>
 
         <template v-if="form.type === 'member'">
-          <div class="switch-row">
-            <div>
-              <div class="switch-row__label">Send an email invite</div>
-              <div class="switch-row__hint">Prompts them to set a password and download the Torny app.</div>
-            </div>
-            <button
-              type="button"
-              class="switch"
-              :class="{ 'is-on': form.sendInvite }"
-              @click="form.sendInvite = !form.sendInvite"
-            ><span class="switch__knob" /></button>
-          </div>
           <div class="switch-row">
             <div>
               <div class="switch-row__label">Mark as pending</div>

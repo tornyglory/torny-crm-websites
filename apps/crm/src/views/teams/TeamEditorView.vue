@@ -225,7 +225,7 @@ function addRink() {
   rinks.value.push({
     id: nextTempId(),
     position: nextPosition,
-    label: `Rink ${nextPosition + 1}`,
+    label: `Team ${nextPosition + 1}`,
     slots: slotShape.map((s, i) => ({
       id: nextTempId() - i - 1,
       position: s.position,
@@ -242,6 +242,47 @@ function removeRink(idx: number) {
   if (readOnly.value) return
   rinks.value.splice(idx, 1)
   scheduleSave()
+}
+
+/** Legacy records persist labels like `Rink 1`, `Rink 2` from the
+ *  pre-wording-change era. Treat them as unnamed so the UI shows
+ *  `Team N` instead. Trimmed empty strings also fall back. */
+function teamDisplayName(label: string | null | undefined, idx: number): string {
+  const trimmed = (label ?? '').trim()
+  if (!trimmed) return `Team ${idx + 1}`
+  if (/^Rink\s+\d+$/i.test(trimmed)) return `Team ${idx + 1}`
+  return trimmed
+}
+
+/** The raw value shown inside the editable input. Legacy `Rink N`
+ *  labels show as empty so the placeholder (`Team N`) takes over —
+ *  that way the admin isn't editing a string we're trying to deprecate.
+ *  Empty strings stay empty so deleting the name doesn't snap back to
+ *  the placeholder-as-value during a keystroke. */
+function teamEditValue(label: string | null | undefined): string {
+  const raw = label ?? ''
+  if (/^Rink\s+\d+$/i.test(raw.trim())) return ''
+  return raw
+}
+
+function onTeamNameInput(idx: number, event: Event) {
+  const rink = rinks.value[idx]
+  if (!rink) return
+  rink.label = (event.target as HTMLInputElement).value
+  scheduleSave()
+}
+
+/** Trim + collapse multiple spaces when the admin moves away from the
+ *  field. Keeps whatever they typed; empty strings persist as empty and
+ *  the display falls back to `Team N`. */
+function onTeamNameBlur(idx: number) {
+  const rink = rinks.value[idx]
+  if (!rink) return
+  const next = (rink.label ?? '').replace(/\s+/g, ' ').trim()
+  if (next !== rink.label) {
+    rink.label = next
+    scheduleSave()
+  }
 }
 
 /** Temporary negative ids for not-yet-persisted rinks + slots. The
@@ -517,7 +558,7 @@ function goBack() {
       <div>
         <div class="ed__eyebrow">New selection</div>
         <h1 class="ed__heading">Pick a fixture</h1>
-        <p class="ed__sub">Set the fixture details first. We’ll seed your rinks and you can start dropping players in.</p>
+        <p class="ed__sub">Set the fixture details first. We’ll seed your teams and you can start dropping players in.</p>
       </div>
     </header>
 
@@ -591,7 +632,7 @@ function goBack() {
           />
         </div>
         <div class="field">
-          <span class="field__label">Rinks</span>
+          <span class="field__label">Teams</span>
           <TornySelect
             v-model="createForm.rink_count"
             :options="rinkCountOptions"
@@ -708,17 +749,28 @@ function goBack() {
       <div class="ed__board">
         <section class="rinks">
           <div class="rinks__head">
-            <div class="rinks__label">Rinks</div>
+            <div class="rinks__label">Teams</div>
             <button
               v-if="!readOnly"
               type="button"
               class="btn btn--ghost"
               @click="addRink"
-            >+ Add rink</button>
+            >+ Add team</button>
           </div>
           <article v-for="(r, i) in rinks" :key="r.id" class="rink">
             <div class="rink__head">
-              <h3 class="rink__label">{{ r.label }}</h3>
+              <input
+                v-if="!readOnly"
+                class="rink__label-input"
+                type="text"
+                maxlength="60"
+                :value="teamEditValue(r.label)"
+                :placeholder="`Team ${i + 1}`"
+                :aria-label="`Team ${i + 1} name`"
+                @input="onTeamNameInput(i, $event)"
+                @blur="onTeamNameBlur(i)"
+              />
+              <h3 v-else class="rink__label">{{ teamDisplayName(r.label, i) }}</h3>
               <button
                 v-if="!readOnly && rinks.length > 1"
                 class="rink__remove"
@@ -909,6 +961,31 @@ function goBack() {
 .rink { padding: 20px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; }
 .rink__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .rink__label { font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.01em; margin: 0; color: var(--color-ink); }
+.rink__label-input {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed transparent;
+  padding: 2px 4px;
+  margin: 0 0 0 -4px;
+  outline: none;
+  min-width: 120px;
+  max-width: 320px;
+  width: 100%;
+  border-radius: 4px;
+  transition: background 0.12s, border-color 0.12s;
+}
+.rink__label-input::placeholder { color: var(--color-mute); font-weight: 600; }
+.rink__label-input:hover { background: var(--color-sand); border-bottom-color: var(--color-hairline); }
+.rink__label-input:focus {
+  background: #fff;
+  border-bottom-color: var(--color-ink);
+  box-shadow: 0 1px 0 0 var(--color-ink);
+}
 .rink__remove { background: transparent; border: 0; font-family: var(--font-body); font-size: 12px; color: var(--color-danger); cursor: pointer; }
 
 .rink__slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

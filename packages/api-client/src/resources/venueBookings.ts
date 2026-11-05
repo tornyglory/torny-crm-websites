@@ -321,3 +321,45 @@ export async function submit(
   )
   return res.data
 }
+
+// ── Public Stripe Checkout (brief 77) ───────────────────────────
+
+/** Response from the public checkout endpoint. The FE immediately
+ *  does `window.location.href = checkout_url` to send the renter to
+ *  Stripe-hosted Checkout. All *_cents fields match the booking row. */
+export interface VenueBookingCheckoutResult {
+  venue_booking_id: number
+  booking_ref: string
+  total_cents: number
+  deposit_cents: number
+  platform_fee_cents: number
+  club_receives_cents: number
+  currency: string
+  checkout_url: string
+  checkout_session_id: string
+}
+
+/** 409 `club_not_payment_ready` response body. Surface the club_contact
+ *  so the renter can call / email them directly as a fallback. */
+export interface ClubNotPaymentReadyData {
+  club_contact: {
+    name: string
+    email: string | null
+    phone: string | null
+  }
+}
+
+/** `POST /public/clubs/:slug/venue-bookings/checkout` — public, no auth.
+ *  Creates the booking row + a Stripe Checkout Session on the club's
+ *  connected account in one call. Returns the Stripe-hosted URL. */
+export async function checkout(
+  slug: string,
+  input: SubmitVenueBookingInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<VenueBookingCheckoutResult> {
+  const res = await publicFetch<Envelope<VenueBookingCheckoutResult>>(
+    `${VENUE_BASE}/public/clubs/${encodeURIComponent(slug)}/venue-bookings/checkout`,
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+  )
+  return res.data
+}

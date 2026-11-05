@@ -347,6 +347,9 @@ const canSubmit = computed(() =>
 const submitting = ref(false)
 const submitError = ref<string | null>(null)
 const bookingRef = ref<string | null>(null)
+/** Set when the club isn't Stripe-connected and the renter should contact
+ *  them directly. Populated from the `club_not_payment_ready` 409 body. */
+const clubContactFallback = ref<{ name: string; email: string | null; phone: string | null } | null>(null)
 
 function makeBookingRef(): string {
   const now = new Date()
@@ -416,9 +419,36 @@ function buildVenueBookingsPayload() {
   }
 }
 
+/** Fall back for props-mode (demo / preview) packages that don't carry
+ *  server ids, or when the Stripe checkout endpoint reports the club
+ *  isn't connected. Submits the booking as an enquiry and lands the
+ *  renter on an honest "request received" confirmation. */
+async function submitWithoutPayment() {
+  const pkg = selectedPackage.value
+  const slot = selectedSlot.value
+  if (pkg?.id != null && slot?.id != null) {
+    const { slug, input } = buildVenueBookingsPayload()
+    const created = await venueBookings.submit(slug, input)
+    bookingRef.value = created.booking_ref
+  } else {
+    await enquiries.create(clubSlug.value!, {
+      full_name: form.fullName.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim() || null,
+      topic: 'facilities',
+      message: buildMessage(),
+      consent_reply: true,
+    })
+    bookingRef.value = makeBookingRef()
+  }
+  currentStep.value = 3
+  if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
 async function submit() {
   if (!canSubmit.value || submitting.value) return
   submitError.value = null
+  clubContactFallback.value = null
   if (!clubSlug.value) {
     submitError.value = "This preview isn't connected to a live club. Publish the site first."
     return
@@ -427,27 +457,30 @@ async function submit() {
   try {
     const pkg = selectedPackage.value
     const slot = selectedSlot.value
-    // Prefer the structured `venue_bookings` submit when we have server
-    // ids (fetch mode). Fall back to the legacy `enquiries` submit for
-    // props-mode packages that don't carry ids (e.g. seeded demo data
-    // before brief 73 ships for a given club).
+    // Primary path (brief 77): paid checkout against the club's connected
+    // Stripe account. Requires server ids — props-mode demo packages
+    // skip straight to the enquiry fallback.
     if (pkg?.id != null && slot?.id != null) {
       const { slug, input } = buildVenueBookingsPayload()
-      const created = await venueBookings.submit(slug, input)
-      bookingRef.value = created.booking_ref
-    } else {
-      await enquiries.create(clubSlug.value, {
-        full_name: form.fullName.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim() || null,
-        topic: 'facilities',
-        message: buildMessage(),
-        consent_reply: true,
-      })
-      bookingRef.value = makeBookingRef()
+      try {
+        const result = await venueBookings.checkout(slug, input)
+        if (typeof window !== 'undefined' && result.checkout_url) {
+          window.location.href = result.checkout_url
+          return
+        }
+      } catch (err) {
+        // Club hasn't onboarded to Stripe — surface the contact block AND
+        // still land the booking as an enquiry so the admin sees it.
+        if (err instanceof ApiError && err.code === 'club_not_payment_ready') {
+          const contact = (err.body?.data as { club_contact?: typeof clubContactFallback.value } | undefined)?.club_contact
+          if (contact) clubContactFallback.value = contact
+          await submitWithoutPayment()
+          return
+        }
+        throw err
+      }
     }
-    currentStep.value = 3
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+    await submitWithoutPayment()
   } catch (err) {
     if (err instanceof ApiError) {
       submitError.value = err.message || "We couldn't send that. Try again."
@@ -736,7 +769,7 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
               :disabled="!canSubmit || submitting"
               @click="submit"
             >
-              {{ submitting ? 'Submitting…' : props.submitLabel }}
+              {{ submitting ? 'Taking you to Stripe…' : `Pay deposit · $${deposit}` }}
               <svg v-if="!submitting" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7h8M7 3.5L10.5 7 7 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
           </div>
@@ -775,38 +808,44 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
       </div>
     </template>
 
-    <!-- ── STEP 3 — Confirmation ─────────────────────────────── -->
+    <!-- ── STEP 3 — Request received (no-Stripe fallback) ──────
+         The Stripe-paid path redirects to /book/complete and never
+         renders this step. We only land here when the club hasn't
+         connected Stripe OR the package came from props-mode demo
+         data, so the renter submitted an enquiry — nothing charged. -->
     <template v-else>
       <div class="vb__confirm-hero">
         <div class="vb__confirm-ref">REF · {{ bookingRef }}</div>
         <div class="vb__confirm-check"><svg viewBox="0 0 32 32" width="28" height="28" fill="none"><path d="M9 17l5 5 10-11" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        <div class="vb__confirm-eyebrow">You're booked in</div>
+        <div class="vb__confirm-eyebrow">Request received</div>
         <h2 class="vb__confirm-title">
-          See you {{ selectedDateLabel.split(',')[0] || 'soon' }}, {{ form.fullName.split(' ')[0] || 'there' }}.
+          Thanks{{ form.fullName ? `, ${form.fullName.split(' ')[0]}` : '' }} — we've logged your booking.
         </h2>
-        <p class="vb__confirm-sub">{{ confirmationCopy }}</p>
-        <div v-if="bookingRef" class="vb__confirm-ctas">
-          <a class="vb__confirm-ghost" href="#">Add to calendar ↗</a>
-        </div>
-        <div class="vb__confirm-badge">● BOOKING CONFIRMED</div>
+        <p class="vb__confirm-sub">
+          <template v-if="clubContactFallback">
+            {{ clubContactFallback.name }} hasn't enabled online payments yet — contact them directly to confirm the deposit and lock in your date.
+          </template>
+          <template v-else>
+            {{ hostName || 'The club' }} will be in touch to confirm the date, take the deposit, and go through the setup with you.
+          </template>
+        </p>
       </div>
 
       <div class="vb__confirm-body">
         <section class="vb__card vb__card--details">
           <div class="vb__card-head vb__card-head--split">
-            <h3 class="vb__card-title">Booking details</h3>
-            <span class="vb__pill vb__pill--ok">● Deposit paid</span>
+            <h3 class="vb__card-title">What you requested</h3>
+            <span class="vb__pill">● Awaiting confirmation</span>
           </div>
           <dl class="vb__detail-list">
             <div><dt>When</dt><dd>{{ selectedDateLabel }}<br /><span class="vb__muted">{{ selectedSlot?.label }}</span></dd></div>
-            <div><dt>Where</dt><dd>{{ selectedPackage?.name }}<br /><span class="vb__muted">Confirmation emailed to {{ form.email }}</span></dd></div>
+            <div><dt>Where</dt><dd>{{ selectedPackage?.name }}<br /><span class="vb__muted">Copy emailed to {{ form.email }}</span></dd></div>
             <div><dt>Occasion</dt><dd>{{ form.occasion }} · {{ form.guests }} guests<br /><span class="vb__muted">{{ form.setupStyle }}</span></dd></div>
           </dl>
           <ul class="vb__detail-lines">
             <li v-for="(l, i) in lineItems" :key="i"><span>{{ l.label }}</span><span>${{ l.amount.toFixed(2) }}</span></li>
-            <li class="vb__detail-total"><span>Total</span><span>${{ total.toFixed(2) }}</span></li>
-            <li class="vb__detail-deposit"><span>Deposit paid today</span><span>−${{ deposit.toFixed(2) }}</span></li>
-            <li class="vb__detail-balance"><span>Balance <template v-if="balanceDueDate">due {{ balanceDueDate }}</template></span><span>${{ balance.toFixed(2) }}</span></li>
+            <li class="vb__detail-total"><span>Estimated total</span><span>${{ total.toFixed(2) }}</span></li>
+            <li class="vb__detail-balance"><span>Deposit to secure (payable to the club)</span><span>${{ deposit.toFixed(2) }}</span></li>
           </ul>
         </section>
 
@@ -815,23 +854,36 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
           <ol class="vb__timeline-list">
             <li class="vb__timeline-item vb__timeline-item--done">
               <span class="vb__timeline-dot">✓</span>
-              <div><div class="vb__timeline-title">Deposit taken</div><div class="vb__timeline-sub">${{ deposit }} received · just now</div></div>
+              <div><div class="vb__timeline-title">Request sent</div><div class="vb__timeline-sub">The club has your details</div></div>
             </li>
             <li class="vb__timeline-item vb__timeline-item--active">
               <span class="vb__timeline-dot">2</span>
-              <div><div class="vb__timeline-title">{{ hostName || 'Your host' }} will call in the next two days</div><div class="vb__timeline-sub">To confirm access, catering timing, and go through the setup with you.</div></div>
-            </li>
-            <li v-if="balance > 0" class="vb__timeline-item">
-              <span class="vb__timeline-dot">3</span>
-              <div><div class="vb__timeline-title">Balance due <template v-if="balanceDueDate">{{ balanceDueDate }}</template></div><div class="vb__timeline-sub">Auto-charged to card on file. Change any time before then.</div></div>
+              <div>
+                <div class="vb__timeline-title">
+                  <template v-if="clubContactFallback">Contact {{ clubContactFallback.name }}</template>
+                  <template v-else>{{ hostName || 'Your host' }} will be in touch</template>
+                </div>
+                <div class="vb__timeline-sub">
+                  <template v-if="clubContactFallback">
+                    <a v-if="clubContactFallback.email" :href="`mailto:${clubContactFallback.email}`">{{ clubContactFallback.email }}</a>
+                    <template v-if="clubContactFallback.email && clubContactFallback.phone"> · </template>
+                    <a v-if="clubContactFallback.phone" :href="`tel:${clubContactFallback.phone}`">{{ clubContactFallback.phone }}</a>
+                  </template>
+                  <template v-else>To confirm the deposit, catering, and setup.</template>
+                </div>
+              </div>
             </li>
             <li class="vb__timeline-item">
-              <span class="vb__timeline-dot">{{ balance > 0 ? '4' : '3' }}</span>
-              <div><div class="vb__timeline-title">Show up · {{ selectedDateLabel.split(',')[0] }}</div><div class="vb__timeline-sub">Doors open from 1:30 for setup. Bond returned within 5 days.</div></div>
+              <span class="vb__timeline-dot">3</span>
+              <div><div class="vb__timeline-title">Pay the deposit</div><div class="vb__timeline-sub">Settled directly with the club. Your slot is secured once the deposit lands.</div></div>
+            </li>
+            <li class="vb__timeline-item">
+              <span class="vb__timeline-dot">4</span>
+              <div><div class="vb__timeline-title">Show up · {{ selectedDateLabel.split(',')[0] }}</div><div class="vb__timeline-sub">Doors open from 1:30 for setup.</div></div>
             </li>
           </ol>
 
-          <div v-if="hostName" class="vb__host-card">
+          <div v-if="hostName && !clubContactFallback" class="vb__host-card">
             <div class="vb__host-avatar">{{ initialsForHost() }}</div>
             <div class="vb__host-copy">
               <div class="vb__host-name">{{ hostName }}</div>

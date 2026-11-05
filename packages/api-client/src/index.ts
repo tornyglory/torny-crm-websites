@@ -436,6 +436,8 @@ export type {
   SubmitVenueBookingInput,
   VenueBookingDeleteResult,
   VenueBookingErrorCode,
+  VenueBookingCheckoutResult,
+  ClubNotPaymentReadyData,
 } from './resources/venueBookings'
 
 export * as stripeConnect from './resources/stripeConnect'

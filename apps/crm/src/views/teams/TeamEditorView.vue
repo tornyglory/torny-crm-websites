@@ -94,8 +94,25 @@ const assignedIds = computed(() => {
   return set
 })
 
-const availablePool = computed(() =>
-  pool.value.filter((m) => !assignedIds.value.has(m.user_id)),
+const poolSearch = ref('')
+
+const availablePool = computed(() => {
+  const unassigned = pool.value.filter((m) => !assignedIds.value.has(m.user_id))
+  const q = poolSearch.value.trim().toLowerCase()
+  if (!q) return unassigned
+  return unassigned.filter((m) => {
+    if (m.name.toLowerCase().includes(q)) return true
+    if (m.preferred_position && m.preferred_position.toLowerCase().includes(q)) return true
+    if (m.playing_level && m.playing_level.toLowerCase().includes(q)) return true
+    return false
+  })
+})
+
+/** Total unassigned (ignores the search filter) — used for the "N of M"
+ *  pool count badge so admins see how many players are truly available
+ *  vs just filtered out by search. */
+const availablePoolTotal = computed(
+  () => pool.value.filter((m) => !assignedIds.value.has(m.user_id)).length,
 )
 
 // ── Loaders ───────────────────────────────────────────────────
@@ -310,10 +327,10 @@ function onTeamNameBlur(idx: number) {
 }
 
 /** Display fallback for a slot position in read-only mode — empty →
- *  `Player N`. Keeps the output sport-agnostic. */
-function slotDisplayName(position: string | null | undefined, idx: number): string {
+ *  `Position` (matches the editable input's placeholder). */
+function slotDisplayName(position: string | null | undefined): string {
   const trimmed = (position ?? '').trim()
-  return trimmed || `Player ${idx + 1}`
+  return trimmed || 'Position'
 }
 
 /** Raw value shown inside the editable slot-position input. Returns
@@ -388,16 +405,43 @@ async function saveRoster() {
   saving.value = true
   try {
     const updated = await teamSelections.update(cid, sid, buildRosterPayload())
-    // Rehydrate local state from the server echo so temp ids get
-    // replaced with real ones and notified_member_id reflects the
-    // backend's view.
     selection.value = updated
-    rinks.value = cloneRinks(updated.rinks)
+    // Surgical rehydrate — adopt server-assigned ids + server-computed
+    // notify fields, but preserve the admin's just-typed rink.label +
+    // slot.position locally. Until brief 75 ships, the backend
+    // enforces the bowls enum on slot.position and silently rejects
+    // non-bowls values; without this merge, the server echo would
+    // yank the slot back to its stored "Lead" immediately.
+    rinks.value = mergeServerRinks(rinks.value, updated.rinks)
   } catch (err) {
     toast.error(err instanceof ApiError ? err.message : 'Could not save roster.')
   } finally {
     saving.value = false
   }
+}
+
+/** Walk the server response in parallel with the current local rinks
+ *  (by position index) and prefer the admin's typed labels. Server
+ *  wins on ids, notify fields, and member snapshots. Local wins on
+ *  rink.label + slot.position. */
+function mergeServerRinks(
+  local: TeamSelectionRink[],
+  server: TeamSelectionRink[],
+): TeamSelectionRink[] {
+  return server.map((srvRink, rinkIdx) => {
+    const locRink = local[rinkIdx]
+    return {
+      ...srvRink,
+      label: locRink?.label ?? srvRink.label,
+      slots: srvRink.slots.map((srvSlot, slotIdx) => {
+        const locSlot = locRink?.slots[slotIdx]
+        return {
+          ...srvSlot,
+          position: locSlot?.position ?? srvSlot.position,
+        }
+      }),
+    }
+  })
 }
 
 /** Explicit "Save draft" bypasses the debounce — the admin is telling
@@ -854,12 +898,12 @@ function goBack() {
                   type="text"
                   maxlength="40"
                   :value="slotPositionValue(s.position)"
-                  :placeholder="`Player ${si + 1}`"
+                  placeholder="Position"
                   :aria-label="`Team ${i + 1} player ${si + 1} role`"
                   @input="onSlotPositionInput(i, si, $event)"
                   @blur="onSlotPositionBlur(i, si)"
                 />
-                <div v-else class="slot__position">{{ slotDisplayName(s.position, si) }}</div>
+                <div v-else class="slot__position">{{ slotDisplayName(s.position) }}</div>
                 <template v-if="s.member">
                   <div class="slot__member">
                     <div class="slot__name">{{ s.member.name }}</div>
@@ -872,7 +916,7 @@ function goBack() {
                     v-if="!readOnly"
                     type="button"
                     class="slot__clear"
-                    :aria-label="`Clear ${slotDisplayName(s.position, si)}`"
+                    :aria-label="`Clear ${slotDisplayName(s.position)}`"
                     @click="clearSlot(i, si)"
                   >×</button>
                 </template>
@@ -904,9 +948,42 @@ function goBack() {
         <aside class="pool">
           <div class="pool__head">
             <h3 class="pool__label">Available</h3>
-            <span class="pool__count">{{ availablePool.length }}</span>
+            <span class="pool__count">
+              <template v-if="poolSearch.trim() && availablePool.length !== availablePoolTotal">
+                {{ availablePool.length }} / {{ availablePoolTotal }}
+              </template>
+              <template v-else>{{ availablePoolTotal }}</template>
+            </span>
           </div>
-          <div v-if="poolLoading && availablePool.length === 0" class="pool__loading">Loading roster…</div>
+          <div class="pool__search">
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <circle cx="6" cy="6" r="4" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M10 10l2.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <input
+              v-model="poolSearch"
+              type="search"
+              class="pool__search-input"
+              placeholder="Search name, position, level…"
+              aria-label="Search available players"
+            />
+            <button
+              v-if="poolSearch"
+              type="button"
+              class="pool__search-clear"
+              aria-label="Clear search"
+              @click="poolSearch = ''"
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 2.5l5 5M7.5 2.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div v-if="poolLoading && availablePool.length === 0 && !poolSearch" class="pool__loading">Loading roster…</div>
+          <div v-else-if="availablePool.length === 0 && poolSearch.trim()" class="pool__empty">
+            No matches for "{{ poolSearch.trim() }}".
+          </div>
+          <div v-else-if="availablePool.length === 0" class="pool__empty">
+            Everyone's placed — no players left in the pool.
+          </div>
           <ul v-else class="pool__list">
             <li
               v-for="m in availablePool"
@@ -1160,6 +1237,49 @@ function goBack() {
 .pool__count { font-family: var(--font-mono); font-size: 11px; padding: 1px 8px; background: var(--color-hairline); color: var(--color-graphite); border-radius: 999px; }
 .pool__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .pool__loading { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); text-align: center; padding: 16px 0; }
+.pool__empty { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); text-align: center; padding: 20px 8px; line-height: 1.4; }
+.pool__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 10px;
+  background: var(--color-ground);
+  color: var(--color-fog);
+  transition: border-color 0.12s, background 0.12s;
+}
+.pool__search:focus-within { border-color: var(--color-ink); background: #fff; color: var(--color-ink); }
+.pool__search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--color-ink);
+  padding: 0;
+}
+.pool__search-input::placeholder { color: var(--color-mute); }
+.pool__search-input::-webkit-search-cancel-button { display: none; }
+.pool__search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: transparent;
+  border: 0;
+  color: var(--color-mute);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.pool__search-clear:hover { background: var(--color-hairline); color: var(--color-ink); }
 
 .chip { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 10px; cursor: grab; background: #fff; }
 .chip:hover { border-color: var(--color-mute); }

@@ -12,6 +12,7 @@ import {
   events as eventsApi,
   tournaments as tournamentsApi,
   venueBookings as venueBookingsApi,
+  teamSelections as teamSelectionsApi,
 } from '@torny/api-client'
 import { useHonourCategoriesStore } from '@/stores/honourCategories'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -380,6 +381,38 @@ if (typeof window !== 'undefined') {
   onBeforeUnmount(() => window.removeEventListener('torny:tournaments-count', onTournamentsCountUpdate))
 }
 
+// ── Team selections upcoming count ────────────────────────────
+// Sidebar badge shows how many upcoming selections (draft / confirmed /
+// sent) the admin has in flight. Reads brief 74's list endpoint with
+// `limit=1` so we only pay for the counts envelope.
+const teamSelectionsUpcomingCount = ref<number | null>(null)
+async function loadTeamSelectionsCount(clubId: number) {
+  try {
+    const res = await teamSelectionsApi.list(clubId, { scope: 'upcoming', limit: 1 })
+    teamSelectionsUpcomingCount.value = res.total
+  } catch {
+    teamSelectionsUpcomingCount.value = null
+  }
+}
+
+watch(
+  () => club.current?.id,
+  (id) => {
+    if (id != null && typeof id === 'number') void loadTeamSelectionsCount(id)
+    else teamSelectionsUpcomingCount.value = null
+  },
+  { immediate: true },
+)
+
+function onTeamSelectionsCountUpdate(e: Event) {
+  const detail = (e as CustomEvent).detail
+  if (typeof detail === 'number') teamSelectionsUpcomingCount.value = detail
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('torny:team-selections-count', onTeamSelectionsCountUpdate)
+  onBeforeUnmount(() => window.removeEventListener('torny:team-selections-count', onTeamSelectionsCountUpdate))
+}
+
 interface NavGroup {
   label: string
   items: NavItem[]
@@ -430,7 +463,14 @@ const sidebarGroups = computed<NavGroup[]>(() => [
           ? { count: eventsUpcomingCount.value, countTone: 'neutral' as const }
           : {}),
       },
-      { to: '/crm/teams', label: 'Team selections', icon: 'teams', count: 4, countTone: 'neutral' },
+      {
+        to: '/crm/teams',
+        label: 'Team selections',
+        icon: 'teams',
+        ...(teamSelectionsUpcomingCount.value != null
+          ? { count: teamSelectionsUpcomingCount.value, countTone: 'neutral' as const }
+          : {}),
+      },
       {
         to: '/crm/tournaments',
         label: 'Tournaments',

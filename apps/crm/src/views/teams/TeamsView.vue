@@ -1,53 +1,92 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+/**
+ * Team selections list — brief 74.
+ *
+ * Two scope tabs (upcoming / past) backed by `GET /clubs/:id/team-
+ * selections?scope=…`. Fill bar per row from the server-computed
+ * confirmed_count / total_slots so we don't need to open the full
+ * selection to render the list.
+ */
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-
-type Status = 'draft' | 'confirmed' | 'sent' | 'played'
-
-interface Team {
-  id: string
-  competition: string
-  round: string
-  opponent: string
-  venue: 'home' | 'away'
-  when: string
-  format: string
-  status: Status
-  confirmedCount: number
-  totalPositions: number
-  managerNote?: string
-}
+import {
+  ApiError,
+  teamSelections,
+  type TeamSelectionListItem,
+  type TeamSelectionStatus,
+} from '@torny/api-client'
+import { useToast } from '@/composables/useToast'
+import { useClubStore } from '@/stores/club'
 
 const router = useRouter()
+const toast = useToast()
+const clubStore = useClubStore()
 
-const teams = ref<Team[]>([
-  { id: 't1', competition: 'Pennant Div 3', round: 'Round 8', opponent: 'Petone A', venue: 'home', when: 'Sat 23 Aug · 12:30pm', format: 'Fours × 2', status: 'draft', confirmedCount: 4, totalPositions: 8 },
-  { id: 't2', competition: 'Pennant Div 3', round: 'Round 7', opponent: 'Kelburn A', venue: 'away', when: 'Sat 16 Aug · 12:30pm', format: 'Fours × 2', status: 'confirmed', confirmedCount: 8, totalPositions: 8, managerNote: 'M. Tuilagi captain — call by 11am' },
-  { id: 't3', competition: 'Champion of Champions', round: 'Semi-final', opponent: 'D. Peters (Naenae)', venue: 'home', when: 'Sun 24 Aug · 1:00pm', format: 'Singles', status: 'sent', confirmedCount: 1, totalPositions: 1 },
-  { id: 't4', competition: 'Kelburn Fours Champs', round: 'Final', opponent: 'Reggie’s Four', venue: 'home', when: 'Sat 30 Aug · 10:00am', format: 'Fours', status: 'draft', confirmedCount: 2, totalPositions: 4 },
-  { id: 't5', competition: 'Pennant Div 3', round: 'Round 6', opponent: 'Wainuiomata B', venue: 'home', when: 'Sat 09 Aug', format: 'Fours × 2', status: 'played', confirmedCount: 8, totalPositions: 8 },
-])
+type Scope = 'upcoming' | 'past'
+const activeTab = ref<Scope>('upcoming')
+const selections = ref<TeamSelectionListItem[]>([])
+const loading = ref(false)
+const errorMsg = ref<string | null>(null)
 
-const activeTab = ref<'upcoming' | 'past'>('upcoming')
+async function load() {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  loading.value = true
+  errorMsg.value = null
+  try {
+    const res = await teamSelections.list(cid, { scope: activeTab.value, limit: 50 })
+    selections.value = res.selections
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Could not load team selections.'
+    errorMsg.value = msg
+    toast.error(msg)
+  } finally {
+    loading.value = false
+  }
+}
 
-const upcoming = computed(() => teams.value.filter((t) => t.status !== 'played'))
-const past = computed(() => teams.value.filter((t) => t.status === 'played'))
-const visible = computed(() => (activeTab.value === 'upcoming' ? upcoming.value : past.value))
+onMounted(load)
+watch(() => clubStore.current?.id, load)
+watch(activeTab, load)
 
-const statusTone: Record<Status, string> = {
+const statusTone: Record<TeamSelectionStatus, string> = {
   draft: 'warn',
   confirmed: 'ok',
   sent: 'info',
   played: 'muted',
+  cancelled: 'danger',
 }
 
-function openEditor(t: Team) {
-  router.push({ name: 'team-editor', params: { id: t.id } })
+function openEditor(t: TeamSelectionListItem) {
+  router.push({ name: 'team-editor', params: { id: String(t.id) } })
 }
 
 function newSelection() {
   router.push({ name: 'team-editor', params: { id: 'new' } })
 }
+
+function formatWhen(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('en-NZ', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  } catch {
+    return iso
+  }
+}
+
+function fillPercent(t: TeamSelectionListItem): number {
+  if (t.total_slots <= 0) return 0
+  return Math.round((t.confirmed_count / t.total_slots) * 100)
+}
+
+/** Header count is just the current tab's length — the list endpoint
+ *  already filtered by scope so no client-side split is needed. */
+const visibleCount = computed(() => selections.value.length)
 </script>
 
 <template>
@@ -56,42 +95,57 @@ function newSelection() {
       <div>
         <div class="teams__eyebrow">Selections</div>
         <h1 class="teams__heading">Team selections</h1>
-        <p class="teams__sub">Every draft, confirmation, and post-match card. {{ upcoming.length }} upcoming.</p>
+        <p class="teams__sub">
+          Every draft, confirmation, and post-match card.
+          <template v-if="activeTab === 'upcoming'">{{ visibleCount }} upcoming.</template>
+          <template v-else>{{ visibleCount }} past.</template>
+        </p>
       </div>
       <button class="btn btn--primary" @click="newSelection">+ New selection</button>
     </header>
 
     <div class="teams__tabs">
       <button class="tab" :class="{ 'is-active': activeTab === 'upcoming' }" @click="activeTab = 'upcoming'">
-        <span>Upcoming</span><span class="tab__count">{{ upcoming.length }}</span>
+        <span>Upcoming</span>
       </button>
       <button class="tab" :class="{ 'is-active': activeTab === 'past' }" @click="activeTab = 'past'">
-        <span>Past</span><span class="tab__count">{{ past.length }}</span>
+        <span>Past</span>
       </button>
     </div>
 
-    <ul class="list">
-      <li v-for="t in visible" :key="t.id" class="row" @click="openEditor(t)">
+    <div v-if="loading && selections.length === 0" class="state state--loading">Loading…</div>
+    <div v-else-if="errorMsg" class="state state--error">{{ errorMsg }}</div>
+    <div v-else-if="selections.length === 0" class="state state--empty">
+      <div class="state__title">
+        <template v-if="activeTab === 'upcoming'">No upcoming selections.</template>
+        <template v-else>No past selections.</template>
+      </div>
+      <div class="state__sub">
+        <template v-if="activeTab === 'upcoming'">Create one to start picking your team for the next fixture.</template>
+        <template v-else>Once selections play out, they’ll show here.</template>
+      </div>
+      <button v-if="activeTab === 'upcoming'" class="btn btn--primary" @click="newSelection">+ New selection</button>
+    </div>
+
+    <ul v-else class="list">
+      <li v-for="t in selections" :key="t.id" class="row" @click="openEditor(t)">
         <div class="row__left">
           <div class="row__comp">{{ t.competition }}</div>
-          <div class="row__title">{{ t.round }} · {{ t.opponent }}</div>
+          <div class="row__title">{{ t.round_label }} · {{ t.opponent }}</div>
           <div class="row__meta">
             <span class="tag" :class="`tag--${t.venue}`">{{ t.venue }}</span>
-            <span>{{ t.when }}</span>
+            <span>{{ formatWhen(t.starts_at) }}</span>
             <span class="dot">·</span>
-            <span>{{ t.format }}</span>
+            <span>{{ t.format_label }}</span>
           </div>
-          <div v-if="t.managerNote" class="row__note">“{{ t.managerNote }}”</div>
+          <div v-if="t.manager_note" class="row__note">“{{ t.manager_note }}”</div>
         </div>
         <div class="row__right">
           <div class="row__fill">
             <div class="fill__bar">
-              <div
-                class="fill__inner"
-                :style="{ width: `${(t.confirmedCount / t.totalPositions) * 100}%` }"
-              />
+              <div class="fill__inner" :style="{ width: `${fillPercent(t)}%` }" />
             </div>
-            <div class="fill__label">{{ t.confirmedCount }} / {{ t.totalPositions }} confirmed</div>
+            <div class="fill__label">{{ t.confirmed_count }} / {{ t.total_slots }} confirmed</div>
           </div>
           <span class="badge" :class="`badge--${statusTone[t.status]}`">{{ t.status }}</span>
         </div>
@@ -110,8 +164,12 @@ function newSelection() {
 .teams__tabs { display: flex; gap: 6px; margin-bottom: 20px; padding: 4px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 999px; width: fit-content; }
 .tab { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: transparent; border: none; border-radius: 999px; cursor: pointer; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-fog); }
 .tab.is-active { background: #fff; color: var(--color-ink); font-weight: 600; box-shadow: var(--shadow-sm); }
-.tab__count { font-family: var(--font-mono); font-size: 11px; padding: 1px 7px; background: var(--color-hairline); color: var(--color-graphite); border-radius: 999px; }
-.tab.is-active .tab__count { background: var(--color-accent-soft); color: var(--color-accent); }
+
+.state { padding: 48px 24px; text-align: center; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; color: var(--color-fog); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.state__title { font-family: var(--font-display); font-size: 18px; color: var(--color-ink); }
+.state__sub { font-size: 13px; max-width: 420px; }
+.state--error { color: var(--color-danger); }
+.state .btn { margin-top: 12px; }
 
 .list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .row { display: flex; gap: 16px; align-items: center; padding: 16px 20px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; cursor: pointer; transition: border-color 0.15s ease, transform 0.05s ease; }
@@ -138,6 +196,7 @@ function newSelection() {
 .badge--warn { background: #FEF3C7; color: #92400E; }
 .badge--info { background: var(--color-accent-soft); color: var(--color-accent-strong); }
 .badge--muted { background: var(--color-hairline); color: var(--color-graphite); }
+.badge--danger { background: #FEE2E2; color: #991B1B; }
 
 .btn { padding: 9px 14px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
 .btn--primary { background: var(--color-ink); color: #fff; }

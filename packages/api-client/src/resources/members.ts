@@ -27,8 +27,24 @@ export type MemberType = 'member' | 'prospect' | 'visitor'
 /** How this member was first attached to the club — set by the backend on
  *  insert so the roster + Member Detail page can show provenance (brief 56
  *  §4a). `'enquiry'` + `'application'` carry a `source_ref_id` pointing at
- *  the originating row; `'manual'` + `'import'` leave it null. */
-export type MemberSource = 'enquiry' | 'application' | 'manual' | 'import'
+ *  the originating row; `'manual'` + `'import'` leave it null.
+ *
+ *  Sport-flexibility added `'tournament_entry'`: guest players minted
+ *  automatically when a public entry on an `open_to_visitors=1`
+ *  tournament includes someone without a Torny account. Their row is
+ *  minted as `{ role: 'player', member_status: 'visitor',
+ *  source: 'tournament_entry' }` and surfaced in the Members → Visitors
+ *  tab for the admin to promote. */
+export type MemberSource =
+  | 'claim'
+  | 'invite'
+  | 'bulk_import'
+  | 'self_signup'
+  | 'manual'
+  | 'enquiry'
+  | 'application'
+  | 'import'
+  | 'tournament_entry'
 export type MemberRole = 'owner' | 'admin' | 'committee' | 'player'
 export type MembershipCadence = 'annual' | 'monthly' | 'season'
 export type MembershipTone = 'accent' | 'mint' | 'tangerine' | 'violet'

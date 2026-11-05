@@ -252,6 +252,8 @@ export type {
   PublicSort,
   PublicListTournamentsParams,
   TournamentErrorCode,
+  EntryTemplate,
+  VisitorCreated,
 } from './resources/tournaments'
 export * as applications from './resources/applications'
 export type {
@@ -451,6 +453,29 @@ export type {
   UpdateTournamentSettingsInput,
   TournamentSettingsErrorCode,
 } from './resources/tournamentSettings'
+
+export * as teamAnnouncements from './resources/teamAnnouncements'
+export type {
+  TeamAnnouncement,
+  TeamAnnouncementListItem,
+  TeamAnnouncementMember,
+  TeamAnnouncementStatus,
+  TeamAnnouncementsListResponse,
+  ListTeamAnnouncementsParams,
+  CreateTeamAnnouncementInput,
+  UpdateTeamAnnouncementInput,
+  TeamAnnouncementErrorCode,
+} from './resources/teamAnnouncements'
+
+export * as tournamentResults from './resources/tournamentResults'
+export type {
+  TournamentResult,
+  TournamentResultEntry,
+  TournamentResultsResponse,
+  TournamentResultInput,
+  SubmitResultsInput,
+  TournamentResultErrorCode,
+} from './resources/tournamentResults'
 
 export { SAM_BASE, CRM_BASE, MEDIA_BASE, BULK_EMAIL_BASE, VENUE_BASE } from './config'
 export { ApiError, authedFetch, publicFetch, TOKEN_STORAGE_KEY } from './http'

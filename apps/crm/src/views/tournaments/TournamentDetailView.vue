@@ -345,7 +345,7 @@ function goBack() {
           <div class="table__head">
             <div class="col-sel"></div>
             <div class="col-num">#</div>
-            <div class="col-team">TEAM / CAPTAIN</div>
+            <div class="col-team">TEAM NAME</div>
             <div class="col-roster">TEAM</div>
             <div class="col-paid">PAID</div>
             <div class="col-when">REGISTERED</div>

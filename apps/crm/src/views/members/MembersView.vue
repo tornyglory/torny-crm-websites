@@ -81,7 +81,10 @@ interface Member {
   bio?: string | null
   /** Where this member came from — enquiry / application / manual / import.
    *  Drives the "from enquiry" subline on the Prospect standing pill. */
-  source?: 'enquiry' | 'application' | 'manual' | 'import' | null
+  /** Mirrors `MemberSource` on the api-client — kept as string to accept
+   *  any new provenance value the backend adds (brief sport-flexibility
+   *  added `tournament_entry`). */
+  source?: string | null
   /** The originating enquiry / application id when source is set. */
   sourceRefId?: number | null
 }

@@ -104,6 +104,30 @@ export interface TournamentEntry {
   checkout_url?: string | null
 }
 
+/** Sport-agnostic entry contract — shipped in the sport-flexibility
+ *  arc (§7 in the brief). Admin defines on tournament create. All
+ *  fields optional so bowls tournaments can leave `null` and keep
+ *  working. */
+export interface EntryTemplate {
+  /** Strict equality against roster length at submit time. */
+  players_required: number
+  /** Informational only — admin reads but server doesn't enforce. */
+  reserves_max?: number
+  /** Freeform position labels — "Lead", "Steerer", "Goalkeeper".
+   *  FE renders one picker per role. */
+  roles?: string[]
+  /** Freeform division labels for the entry form. */
+  divisions?: string[]
+}
+
+/** Guest row minted when `open_to_visitors=1` and someone enters
+ *  without being a Torny user. One row per guest in the roster. */
+export interface VisitorCreated {
+  user_id: number
+  email: string | null
+  name: string | null
+}
+
 export interface Tournament {
   id: number
   club_id: number
@@ -128,7 +152,14 @@ export interface Tournament {
   prize_pool_cents: number | null
   prize_notes: string | null
   payment_method: TournamentPaymentMethod
+  /** When true, roster can include guest players (no Torny account).
+   *  Public entry auto-mints them as `member_status='visitor'` on this
+   *  club. When false, roster must be existing active members only;
+   *  non-members get 403 `tournament_members_only`. */
   open_to_visitors: boolean
+  /** Admin-defined entry shape — see `EntryTemplate`. Null for legacy
+   *  tournaments created before sport-flexibility shipped. */
+  entry_template: EntryTemplate | null
   requires_bcnz: boolean
   min_age: number | null
   max_age: number | null
@@ -322,6 +353,12 @@ export interface EnterTournamentResult {
   entry: TournamentEntry
   next_step: 'pay' | 'wait_confirmation' | 'done'
   waitlist_position: number | null
+  /** Populated when `open_to_visitors=1` and the roster had guests.
+   *  One row per guest minted on this club with
+   *  `member_status='visitor' + source='tournament_entry'`. Empty for
+   *  members-only tournaments. The FE should surface a "Welcome to
+   *  {club}" toast per row. */
+  visitors_created?: VisitorCreated[]
 }
 
 export interface WithdrawEntryInput {

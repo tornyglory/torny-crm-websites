@@ -35,6 +35,7 @@ import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import TornySelect from '@/components/TornySelect.vue'
+import TornyDatePicker from '@/components/TornyDatePicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -398,7 +399,11 @@ const createForm = reactive({
   round_label: '',
   opponent: '',
   venue: 'home' as TeamSelectionVenue,
-  starts_at_local: '',
+  /** YYYY-MM-DD — fed to TornyDatePicker. The time half lives in
+   *  `starts_at_time` so the picker stays date-only (its popover
+   *  doesn't do time). Combined into ISO in submitCreate. */
+  starts_at_date: '',
+  starts_at_time: '12:30',
   preset: 'fours' as FormatPreset,
   rink_count: 2,
   format_label: 'Fours × 2',
@@ -439,14 +444,15 @@ async function submitCreate() {
   if (createForm.competition.trim() === '' ||
       createForm.round_label.trim() === '' ||
       createForm.opponent.trim() === '' ||
-      createForm.starts_at_local === '' ||
+      createForm.starts_at_date === '' ||
       createForm.format_label.trim() === '') {
     toast.error('Fill in all the required fields.')
     return
   }
   creating.value = true
   try {
-    const startsAtIso = new Date(createForm.starts_at_local).toISOString()
+    const time = createForm.starts_at_time || '12:30'
+    const startsAtIso = new Date(`${createForm.starts_at_date}T${time}:00`).toISOString()
     const shape = createPresets[createForm.preset].shape
     const created = await teamSelections.create(cid, {
       competition: createForm.competition.trim(),
@@ -560,15 +566,21 @@ function goBack() {
             :options="venueOptions"
           />
         </div>
-        <label class="field">
+        <div class="field">
           <span class="field__label">When</span>
-          <input
-            v-model="createForm.starts_at_local"
-            type="datetime-local"
-            class="field__input"
-            required
-          />
-        </label>
+          <div class="create__when">
+            <TornyDatePicker
+              v-model="createForm.starts_at_date"
+              placeholder="Pick a date"
+            />
+            <input
+              v-model="createForm.starts_at_time"
+              type="time"
+              class="field__input create__time"
+              aria-label="Fixture start time"
+            />
+          </div>
+        </div>
       </div>
 
       <div class="create__row create__row--3">
@@ -934,6 +946,8 @@ function goBack() {
 .create__row--2 { grid-template-columns: 1fr 1fr; }
 .create__row--3 { grid-template-columns: 1fr 120px 1fr; }
 .create__actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--color-hairline); }
+.create__when { display: grid; grid-template-columns: 1fr 110px; gap: 8px; align-items: stretch; }
+.create__time { padding: 10px 12px; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field__label { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-fog); }

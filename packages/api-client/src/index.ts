@@ -477,5 +477,30 @@ export type {
   TournamentResultErrorCode,
 } from './resources/tournamentResults'
 
+export * as teamSelections from './resources/teamSelections'
+export type {
+  TeamSelection,
+  TeamSelectionListItem,
+  TeamSelectionsListResponse,
+  TeamSelectionRink,
+  TeamSelectionSlot,
+  TeamSelectionMemberSnapshot,
+  TeamSelectionStatus,
+  TeamSelectionVenue,
+  TeamSelectionPosition,
+  FormatShape,
+  ListTeamSelectionsParams,
+  CreateTeamSelectionInput,
+  UpdateFixtureInput,
+  UpdateRosterInput,
+  UpdateRosterRinkInput,
+  UpdateRosterSlotInput,
+  PublishInput,
+  CancelInput,
+  NotifySummary,
+  PublishResult,
+  TeamSelectionErrorCode,
+} from './resources/teamSelections'
+
 export { SAM_BASE, CRM_BASE, MEDIA_BASE, BULK_EMAIL_BASE, VENUE_BASE } from './config'
 export { ApiError, authedFetch, publicFetch, TOKEN_STORAGE_KEY } from './http'

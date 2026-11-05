@@ -135,6 +135,12 @@ export interface RosterMember {
   /** Enquiry / application id this member was converted from, when
    *  `source` is `'enquiry'` or `'application'`. Null otherwise. */
   source_ref_id?: number | null
+  /** ISO 8601 UTC of the most recent `sent` or `played` team selection
+   *  this member appeared in (brief 74 §2.b). Null = never picked.
+   *  Server-derived from `team_selection_slots`; not stored. Optional
+   *  on the type because older backends don't ship it until brief 74
+   *  lands. */
+  last_played_at?: string | null
 }
 
 export interface RosterCounts {

@@ -2405,7 +2405,10 @@ async function submitEdit() {
 .pay-seasons { margin: 0 -22px -20px; display: flex; flex-direction: column; border-top: 1px solid var(--color-hairline); }
 .pay-season { display: flex; flex-direction: column; background: #fff; }
 .pay-season + .pay-season { border-top: 1px solid var(--color-hairline); }
-.pay-season--past { background: var(--color-surface); }
+/* No background tint for past/settled seasons — the "Current" pill +
+   "settled" meta text already signal the state. Keeps paid rows clean
+   white to match the user's expectation that paid = done = clean. */
+.pay-season--past { background: #fff; }
 .pay-season__head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 20px 24px 10px; flex-wrap: wrap; }
 .pay-season__title-row { display: inline-flex; align-items: center; gap: 10px; }
 .pay-season__title { font-family: var(--font-display); font-size: 18px; font-weight: 600; letter-spacing: -0.01em; color: var(--color-ink); margin: 0; line-height: 1.1; }

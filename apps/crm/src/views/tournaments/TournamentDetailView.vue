@@ -291,16 +291,22 @@ function goBack() {
         </div>
       </div>
       <nav class="tabs">
-        <button
-          v-for="t in ['overview', 'entries', 'draw', 'results', 'settings'] as const"
-          :key="t"
-          type="button"
-          class="tab"
-          :class="{ 'is-on': activeTab === t }"
-          @click="activeTab = t"
-        >
-          {{ t === 'entries' ? `Entries · ${entries.length}` : t }}
-        </button>
+        <template v-for="t in ['overview', 'entries', 'draw', 'results', 'settings'] as const" :key="t">
+          <RouterLink
+            v-if="t === 'results' && tournamentId != null"
+            :to="{ name: 'tournament-results', params: { id: tournamentId } }"
+            class="tab"
+          >results</RouterLink>
+          <button
+            v-else
+            type="button"
+            class="tab"
+            :class="{ 'is-on': activeTab === t }"
+            @click="activeTab = t"
+          >
+            {{ t === 'entries' ? `Entries · ${entries.length}` : t }}
+          </button>
+        </template>
       </nav>
     </header>
 

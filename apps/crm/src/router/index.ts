@@ -77,6 +77,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'tournaments/new', name: 'tournament-new', component: () => import('@/views/tournaments/TournamentFormView.vue') },
       { path: 'tournaments/:id', name: 'tournament-detail', component: () => import('@/views/tournaments/TournamentDetailView.vue') },
       { path: 'tournaments/:id/edit', name: 'tournament-edit', component: () => import('@/views/tournaments/TournamentFormView.vue') },
+      { path: 'tournaments/:id/results', name: 'tournament-results', component: () => import('@/views/tournaments/TournamentResultsView.vue') },
       { path: 'website', redirect: { name: 'website', params: { pageSlug: 'home' } } },
       { path: 'website/:pageSlug', name: 'website', component: () => import('@/views/website/WebsiteEditorView.vue') },
       { path: 'communications', name: 'communications', component: () => import('@/views/communications/CommunicationsView.vue') },

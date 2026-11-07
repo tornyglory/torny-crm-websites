@@ -55,6 +55,7 @@ export type {
   UpdateMemberPatch,
   UpdateMemberResponse,
   UpdateMemberErrorCode,
+  PublicMemberMatch,
 } from './resources/members'
 export * as events from './resources/events'
 export type {
@@ -246,6 +247,7 @@ export type {
   UpdateEntryInput,
   EnterTournamentInput,
   EnterTournamentResult,
+  EnterTournamentCheckoutResult,
   WithdrawEntryInput,
   ListTournamentsParams,
   ListEntriesParams,

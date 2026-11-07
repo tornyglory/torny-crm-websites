@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { tournaments, type EnterTournamentInput, type PublicTournamentDetail, type TournamentFormat } from '@torny/api-client'
+import {
+  tournaments,
+  ApiError,
+  type EnterTournamentInput,
+  type PublicTournamentDetail,
+  type TournamentFormat,
+  type PublicMemberMatch,
+} from '@torny/api-client'
 
 const route = useRoute()
 const club = useClub()
@@ -45,12 +52,20 @@ interface RosterSlot {
   position: string
   filled: boolean
   name: string
+  email: string                                // free-text (open) path
+  pickedMember: PublicMemberMatch | null       // member picker (private) path
   handle: string | null
   isCaptain: boolean
   method: 'torny' | 'invite' | null
   initials: string
   colorClass: 'mint' | 'accent' | 'violet' | 'tangerine'
 }
+
+/** Admin's "Open to visitors" toggle drives everything — see brief 78.
+ *  Open = free-text roster + Stripe Checkout. Private = member picker +
+ *  offline payment. No fee-based branching. */
+const isOpen = computed(() => tournament.value?.open_to_visitors === true)
+const isPrivate = computed(() => tournament.value?.open_to_visitors === false)
 
 const railClasses: RosterSlot['colorClass'][] = ['mint', 'accent', 'violet', 'tangerine']
 
@@ -73,6 +88,8 @@ watchEffect(() => {
     position,
     filled: idx === 0 && prefillCaptain,
     name: idx === 0 && prefillCaptain ? 'You' : '',
+    email: '',
+    pickedMember: null,
     handle: null,
     isCaptain: idx === 0,
     method: idx === 0 && prefillCaptain ? 'torny' : null,
@@ -80,6 +97,28 @@ watchEffect(() => {
     colorClass: railClasses[idx % railClasses.length],
   }))
 })
+
+/** Which user_ids are already on the roster — so the MemberPicker can
+ *  hide them from the result list and prevent dupes. */
+const pickedUserIds = computed(() =>
+  roster.value.map((r) => r.pickedMember?.user_id).filter((id): id is number => id != null),
+)
+
+function onMemberPicked(idx: number, match: PublicMemberMatch | null) {
+  const slot = roster.value[idx]
+  if (!slot) return
+  slot.pickedMember = match
+  slot.filled = match != null
+  if (match) {
+    slot.name = `${match.first_name} ${match.last_name}`
+    slot.initials = match.initials
+    slot.handle = match.handle
+  } else {
+    slot.name = ''
+    slot.initials = ''
+    slot.handle = null
+  }
+}
 
 // Gate the form when a guest lands on a Torny-members-only tournament.
 const isGated = computed(() => !isSignedIn.value && tournament.value?.open_to_visitors === false)
@@ -164,36 +203,82 @@ function updateGuestName(idx: number, value: string) {
 
 const submitting = ref(false)
 const submitError = ref<string | null>(null)
+/** `members_only` 403 (private, brief 78 §2) — populated with the server's
+ *  `non_member_emails` so the FE can surface which rows are the problem. */
+const nonMemberEmails = ref<string[]>([])
+/** `club_not_payment_ready` 409 (open, brief 78 §2) — show the club's
+ *  contact details so the renter can book directly. */
+const clubContactFallback = ref<{ name: string; email: string | null; phone: string | null } | null>(null)
+
+/** Build the roster portion of the submit payload. Open tournaments
+ *  send `{ position, name, email }`; private tournaments send
+ *  `{ position, user_id }` sourced from the member picker. */
+function buildRosterPayload(): EnterTournamentInput['roster'] {
+  return roster.value
+    .filter((r) => r.filled)
+    .map((r) => {
+      if (isPrivate.value && r.pickedMember) {
+        return { position: r.position, user_id: r.pickedMember.user_id, name: r.name || null }
+      }
+      return { position: r.position, name: r.name || null, email: r.email.trim() || null }
+    })
+}
 
 async function submit() {
   if (!tournament.value) return
   submitError.value = null
+  nonMemberEmails.value = []
+  clubContactFallback.value = null
   submitting.value = true
+
   const input: EnterTournamentInput = {
     team_name: teamName.value.trim() || null,
-    roster: roster.value.filter((r) => r.filled).map((r) => ({
-      position: r.position,
-      name: r.name || null,
-    })),
+    roster: buildRosterPayload(),
     captain_contact: captainEmail.value
       ? { email: captainEmail.value, phone: captainPhone.value || null }
       : undefined,
   }
+
   try {
-    const result = await tournaments.enter(tournament.value.id, input)
-    // When Stripe triggers (club connected + payment_method=online + fee>0)
-    // the entry response carries a Checkout URL. Redirect the player to
-    // Stripe to pay; the webhook flips `status: confirmed` within ~2s of
-    // payment. Fall back to the offline path (free / unconnected club)
-    // when the URL is absent.
-    const checkoutUrl = result.entry?.checkout_url
-    if (checkoutUrl) {
-      window.location.href = checkoutUrl
+    if (isOpen.value) {
+      // Open tournament — pay deposit via Stripe Checkout.
+      const result = await tournaments.enterWithCheckout(tournament.value.id, input)
+      if (result.checkout_url) {
+        window.location.href = result.checkout_url
+        return
+      }
+      // Waitlisted — no charge, no redirect. Show offline-style confirmation.
+      await navigateTo(
+        `/tournaments/${tournamentSlug.value}/entry-complete?entry_id=${result.entry.id}&result=success&offline=1`,
+      )
       return
     }
-    await navigateTo(`/tournament/entry-complete?entry_id=${result.entry.id}&result=success&offline=1`)
+
+    // Private tournament — members only, offline payment.
+    const result = await tournaments.enter(tournament.value.id, input)
+    await navigateTo(
+      `/tournaments/${tournamentSlug.value}/entry-complete?entry_id=${result.entry.id}&result=success&offline=1`,
+    )
   } catch (err) {
-    submitError.value = err instanceof Error ? err.message : 'Something went wrong. Try again.'
+    if (err instanceof ApiError) {
+      // Open + unconnected club → render the contact fallback inline.
+      if (err.code === 'club_not_payment_ready') {
+        const contact = (err.body?.data as { club_contact?: typeof clubContactFallback.value } | undefined)?.club_contact
+        if (contact) clubContactFallback.value = contact
+        submitError.value = err.message || "This club isn't accepting online payments yet."
+      } else if (err.code === 'members_only') {
+        // Private + non-member roster — call out the bad rows.
+        const emails = (err.body?.data as { non_member_emails?: string[] } | undefined)?.non_member_emails ?? []
+        nonMemberEmails.value = emails
+        submitError.value = emails.length > 0
+          ? `Only club members can enter this tournament. Please remove: ${emails.join(', ')}`
+          : (err.message || "This tournament is for club members only.")
+      } else {
+        submitError.value = err.message || 'Something went wrong. Try again.'
+      }
+    } else {
+      submitError.value = err instanceof Error ? err.message : 'Something went wrong. Try again.'
+    }
     submitting.value = false
   }
 }
@@ -300,8 +385,24 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
                     <div class="slot__pos-name">{{ slot.position }}</div>
                   </div>
 
+                  <!-- Private tournament: member picker. Captain picks from
+                       the host club's member list — no non-member emails get
+                       in, so the backend `members_only` 403 stays defensive. -->
+                  <template v-if="isPrivate">
+                    <div class="slot__body slot__body--guest">
+                      <MemberPicker
+                        :club-slug="clubSlug"
+                        :position="slot.position"
+                        :is-captain="slot.isCaptain"
+                        :exclude-user-ids="pickedUserIds.filter((id) => id !== slot.pickedMember?.user_id)"
+                        :model-value="slot.pickedMember"
+                        @update:model-value="(v: PublicMemberMatch | null) => onMemberPicked(idx, v)"
+                      />
+                    </div>
+                  </template>
+
                   <!-- Guest mode: plain name inputs, no handle lookup or invite -->
-                  <template v-if="!isSignedIn">
+                  <template v-else-if="!isSignedIn">
                     <div class="slot__body slot__body--guest">
                       <div class="slot__avatar" :class="slot.filled ? `slot__avatar--${slot.colorClass}` : 'slot__avatar--empty'">
                         <template v-if="slot.filled">{{ slot.initials }}</template>
@@ -412,12 +513,25 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
               </p>
               <div class="confirm__row">
                 <button type="button" class="btn-primary" :disabled="submitting" @click="submit">
-                  {{ submitting ? 'Confirming…' : `Confirm & pay ${shortFeeLabel}` }} <span class="btn-primary__arrow">→</span>
+                  <template v-if="submitting">
+                    <template v-if="isOpen">Taking you to Stripe…</template>
+                    <template v-else>Submitting…</template>
+                  </template>
+                  <template v-else-if="isOpen">Pay entry fee · {{ shortFeeLabel }}</template>
+                  <template v-else>Submit entry</template>
+                  <span class="btn-primary__arrow">→</span>
                 </button>
-                <button type="button" class="btn-secondary">Save as draft</button>
                 <div class="confirm__step">STEP 3 OF 3</div>
               </div>
-              <div v-if="submitError" class="confirm__error">{{ submitError }}</div>
+              <div v-if="submitError" class="confirm__error">
+                {{ submitError }}
+                <!-- `club_not_payment_ready` fallback — contact the club directly. -->
+                <div v-if="clubContactFallback" class="confirm__error-contact">
+                  <strong>{{ clubContactFallback.name }}</strong>
+                  <a v-if="clubContactFallback.email" :href="`mailto:${clubContactFallback.email}`">{{ clubContactFallback.email }}</a>
+                  <a v-if="clubContactFallback.phone" :href="`tel:${clubContactFallback.phone}`">{{ clubContactFallback.phone }}</a>
+                </div>
+              </div>
             </section>
           </div>
 
@@ -449,7 +563,7 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
                 </div>
               </div>
 
-              <div class="rail__fees">
+              <div v-if="isOpen" class="rail__fees">
                 <div class="rail__fee-row">
                   <span class="rail__fee-label">Team entry fee</span>
                   <span class="rail__fee-value">{{ formatMoney(tournament.entry_fee_cents) }}</span>
@@ -462,18 +576,30 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
 
               <div class="rail__actions">
                 <button type="button" class="rail__cta" :disabled="submitting" @click="submit">
-                  {{ submitting ? 'Confirming…' : 'Confirm & pay' }} <span>→</span>
+                  <template v-if="submitting">
+                    <template v-if="isOpen">Taking you to Stripe…</template>
+                    <template v-else>Submitting…</template>
+                  </template>
+                  <template v-else-if="isOpen">Pay {{ shortFeeLabel }}</template>
+                  <template v-else>Submit entry</template>
+                  <span>→</span>
                 </button>
-                <button type="button" class="rail__cta rail__cta--ghost">Save as draft</button>
               </div>
 
               <div class="rail__fine">
-                Card is charged only when your team's confirmed. Withdraw any time before entries close on
-                <span class="rail__fine-strong">{{ formatShortDate(tournament.entries_close_at) }}, {{ formatCloseTime(tournament.entries_close_at) }}</span>.
+                <template v-if="isOpen">
+                  You'll be taken to Stripe to pay the deposit. Withdraw any time before entries close on
+                  <span class="rail__fine-strong">{{ formatShortDate(tournament.entries_close_at) }}, {{ formatCloseTime(tournament.entries_close_at) }}</span>
+                  for a full refund.
+                </template>
+                <template v-else>
+                  {{ tournament.club.name }} will contact you about paying on the day. Withdraw any time before entries close on
+                  <span class="rail__fine-strong">{{ formatShortDate(tournament.entries_close_at) }}, {{ formatCloseTime(tournament.entries_close_at) }}</span>.
+                </template>
               </div>
             </section>
 
-            <section class="rail__card rail__card--trust">
+            <section v-if="isOpen" class="rail__card rail__card--trust">
               <div class="rail__trust-head">
                 <div class="rail__trust-icon">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5L2.5 4V7.5C2.5 11 5 13.5 8 14.5C11 13.5 13.5 11 13.5 7.5V4L8 1.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5.5 8L7 9.5L10.5 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -619,7 +745,9 @@ const startsCode = computed(() => formatDayCode(tournament.value?.starts_at ?? n
 .confirm__legal-link { color: var(--color-ink); font-weight: 500; text-decoration: underline; }
 .confirm__row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .confirm__step { margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: var(--color-fog); font-weight: 700; }
-.confirm__error { padding: 12px 16px; background: rgba(220,47,59,0.08); border: 1px solid rgba(220,47,59,0.24); border-radius: 12px; font-family: var(--font-body); font-size: 13px; color: #DC2F3B; }
+.confirm__error { padding: 12px 16px; background: rgba(220,47,59,0.08); border: 1px solid rgba(220,47,59,0.24); border-radius: 12px; font-family: var(--font-body); font-size: 13px; color: #DC2F3B; display: flex; flex-direction: column; gap: 10px; }
+.confirm__error-contact { display: flex; flex-wrap: wrap; gap: 14px; padding-top: 8px; border-top: 1px dashed rgba(220,47,59,0.24); align-items: baseline; color: var(--color-ink); font-weight: 500; }
+.confirm__error-contact a { color: var(--color-ink); text-decoration: underline; }
 
 .btn-primary { padding: 14px 26px; background: var(--color-ink); border: 0; border-radius: 999px; font-family: var(--font-body); font-weight: 700; font-size: 14px; color: white; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
 .btn-primary:disabled { opacity: 0.6; cursor: default; }

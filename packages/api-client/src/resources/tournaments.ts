@@ -361,6 +361,21 @@ export interface EnterTournamentResult {
   visitors_created?: VisitorCreated[]
 }
 
+/** Open-tournament Stripe Checkout result (brief 78 §1).
+ *  `checkout_url` is null when the entry landed on the waitlist — FE
+ *  should render the waitlist confirmation instead of redirecting. */
+export interface EnterTournamentCheckoutResult {
+  entry: TournamentEntry
+  entry_fee_cents: number
+  platform_fee_cents: number
+  club_receives_cents: number
+  currency: string
+  checkout_url: string | null
+  checkout_session_id: string | null
+  next_step: 'pay' | 'wait_confirmation'
+  waitlist_position?: number
+}
+
 export interface WithdrawEntryInput {
   reason?: string
 }
@@ -613,8 +628,10 @@ export async function withdrawEntry(
 // ── Entrant + public endpoints ──────────────────────────────────
 
 /**
- * Submit an entry. Auth optional — guests can enter open-to-visitors
- * tournaments by passing `captain_contact.email`.
+ * Submit an entry to a **private** (`open_to_visitors=false`) tournament.
+ * Auth optional — guests can enter open-to-visitors tournaments by
+ * passing `captain_contact.email`. Members-only enforcement kicks in on
+ * `open_to_visitors=false` (403 `members_only` with `non_member_emails`).
  */
 export async function enter(
   tournamentId: number,
@@ -623,6 +640,25 @@ export async function enter(
 ): Promise<EnterTournamentResult> {
   const res = await authedFetch<Envelope<EnterTournamentResult>>(
     `${CRM_BASE}/tournaments/${tournamentId}/enter`,
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+  )
+  return res.data
+}
+
+/**
+ * Submit an entry to an **open** (`open_to_visitors=true`) tournament and
+ * mint a Stripe Checkout Session for the entry fee in the same call.
+ * Public — no auth. Returns a `checkout_url` the FE redirects to; webhook
+ * flips the entry to `confirmed` + `paid_cents` once the renter pays.
+ * Hits the Venue stack (NOT the CRM stack) — see brief 78 §1.
+ */
+export async function enterWithCheckout(
+  tournamentId: number,
+  input: EnterTournamentInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<EnterTournamentCheckoutResult> {
+  const res = await publicFetch<Envelope<EnterTournamentCheckoutResult>>(
+    `${VENUE_BASE}/tournaments/${tournamentId}/enter/checkout`,
     { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
   )
   return res.data

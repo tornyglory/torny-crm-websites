@@ -217,6 +217,10 @@ const errors = computed(() => {
   }
   if (form.entry_cap < 1) e.entry_cap = 'At least 1.'
   if (form.entry_fee_dollars < 0) e.entry_fee_dollars = 'Fee cannot be negative.'
+  // Open tournaments must charge a fee — Torny's platform fee comes off the top. Brief 78 §3.
+  if (form.open_to_visitors && form.entry_fee_dollars <= 0) {
+    e.entry_fee_dollars = 'Open tournaments require an entry fee.'
+  }
   return e
 })
 
@@ -795,7 +799,9 @@ const descLen = computed(() => form.description.length)
         <label class="toggle-row">
           <div class="toggle-row__text">
             <div class="toggle-row__title">Open to visitors</div>
-            <div class="toggle-row__sub">Players from other clubs can enter</div>
+            <div class="toggle-row__sub">
+              Anyone can enter. Entries are paid online via Stripe — a small Torny service fee is deducted. Private tournaments stay members-only with offline payment.
+            </div>
           </div>
           <input v-model="form.open_to_visitors" type="checkbox" class="toggle" />
         </label>
@@ -834,12 +840,14 @@ const descLen = computed(() => form.description.length)
                 id="ct-fee"
                 v-model.number="form.entry_fee_dollars"
                 type="number"
-                min="0"
+                :min="form.open_to_visitors ? 1 : 0"
                 step="0.5"
                 class="input"
                 :class="{ 'input--error': errors.entry_fee_dollars }"
               />
             </div>
+            <div v-if="errors.entry_fee_dollars" class="field__hint field__hint--err">{{ errors.entry_fee_dollars }}</div>
+            <div v-else-if="form.open_to_visitors" class="field__hint">Required for open tournaments. Captains pay via Stripe on submit.</div>
           </div>
           <div class="field">
             <label class="field__label" for="ct-prize">Prize pool <span class="field__opt">optional</span></label>

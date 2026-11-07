@@ -944,3 +944,33 @@ export async function patchMember(
   )
   return res.data
 }
+
+// ── Public member search (brief 78 §5) ──────────────────────────
+
+/** One match in the public typeahead. Name-only payload — no email,
+ *  no phone, no DOB. `user_id` is the token the FE hands back to the
+ *  tournament `/enter` endpoint. */
+export interface PublicMemberMatch {
+  user_id: number
+  first_name: string
+  last_name: string
+  handle: string | null
+  initials: string
+}
+
+/** `GET /public/clubs/:slug/members?search=...` — powers the private
+ *  tournament roster picker. No auth. Returns up to `limit` matches
+ *  (default 10, max 25). Backend requires search length ≥ 2. */
+export async function publicSearch(
+  slug: string,
+  search: string,
+  opts: { limit?: number; signal?: AbortSignal } = {},
+): Promise<PublicMemberMatch[]> {
+  const qs = new URLSearchParams({ search })
+  if (opts.limit != null) qs.set('limit', String(opts.limit))
+  const res = await publicFetch<Envelope<{ members: PublicMemberMatch[] }>>(
+    `${CRM_BASE}/public/clubs/${encodeURIComponent(slug)}/members?${qs.toString()}`,
+    { method: 'GET', signal: opts.signal },
+  )
+  return res.data.members
+}

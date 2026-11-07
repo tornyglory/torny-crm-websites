@@ -1,22 +1,27 @@
 <script setup lang="ts">
 /**
- * Tournament entry checkout completion page.
+ * Tournament-entry checkout completion page (brief 78 §6).
  *
- * Stripe Checkout redirects here after a player pays (or cancels)
- * their tournament entry fee. Reads `?result=` + `?entry_id=` from the
- * query string.
+ * Stripe Checkout redirects here after an open-tournament entry pays
+ * (or cancels). The `[slug]` segment is whatever the backend
+ * success_url contains — tournament id in Stripe's case, but the page
+ * only reads `?entry_id=` + `?result=` from the query string, so the
+ * path param is ignored. Lives on each club subdomain:
+ * https://{club.subdomain}.torny.co/tournaments/{tid}/entry-complete.
  *
- * Mirrors `/book/complete` — no fetch, just read + render. The webhook
- * has already set `tournament_entries.status` server-side.
+ * Also handles the private-tournament / unconnected-club fallback via
+ * `?result=success&offline=1` — the enter page navigates here after a
+ * non-Stripe submit (brief 78 §9).
+ *
+ * No API fetch. Webhook has already set `tournament_entries.status`
+ * server-side by the time the browser lands here; the confirmation
+ * email from Stripe + our own email are the canonical receipt.
  */
 const route = useRoute()
 const club = useClub()
 
 const result = computed<'success' | 'cancelled' | 'offline' | 'unknown'>(() => {
   const r = String(route.query.result ?? '')
-  // `?offline=1` is passed by the enter page when the club isn't on
-  // Stripe or the tournament is free — the entry is already recorded,
-  // payment happens via the club directly.
   if (r === 'success' && route.query.offline === '1') return 'offline'
   if (r === 'success') return 'success'
   if (r === 'cancelled') return 'cancelled'

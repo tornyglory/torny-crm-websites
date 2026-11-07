@@ -127,11 +127,52 @@ async function persistBrandAsset(field: 'logo_url' | 'favicon_url', value: strin
     clubStore.setBrandAssets({
       logoUrl: res.logo_url,
       faviconUrl: res.favicon_url,
+      imageStyle: res.image_style,
     })
     toast.success(value ? `${field === 'logo_url' ? 'Logo' : 'Favicon'} saved.` : `${field === 'logo_url' ? 'Logo' : 'Favicon'} removed.`)
   } catch (err) {
     const msg = err instanceof ApiError ? err.message : `Could not save ${field.replace('_', ' ')}`
     toast.error(msg || 'Could not save')
+  }
+}
+
+// ── Image style (brief 79) ────────────────────────────────────────
+// One treatment per club, applied site-wide via <body data-image-style>.
+// Defaults to 'soft' until the backend echoes a stored value.
+type ImageStyleOption = 'soft' | 'studio' | 'archive'
+const imageStyleOptions: Array<{ value: ImageStyleOption; label: string; sub: string }> = [
+  { value: 'soft',    label: 'Soft',    sub: 'Warm and rounded — forgiving on phone photos.' },
+  { value: 'studio',  label: 'Studio',  sub: 'Crisp, punchy, editorial — glossy brochure look.' },
+  { value: 'archive', label: 'Archive', sub: 'Monochrome with a brand tint — unifies mixed sources.' },
+]
+const imageStyle = computed<ImageStyleOption>(() => clubStore.current?.imageStyle ?? 'soft')
+const imageStyleSaving = ref(false)
+
+async function onImageStyle(next: ImageStyleOption) {
+  if (next === imageStyle.value || imageStyleSaving.value) return
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') {
+    toast.error('No active club — refresh and try again.')
+    return
+  }
+  const prev = imageStyle.value
+  // Optimistic — surface flips immediately.
+  clubStore.setBrandAssets({ imageStyle: next })
+  imageStyleSaving.value = true
+  try {
+    const res = await clubs.updateBrandAssets(clubId, { image_style: next })
+    clubStore.setBrandAssets({
+      logoUrl: res.logo_url,
+      faviconUrl: res.favicon_url,
+      imageStyle: res.image_style ?? next,
+    })
+    toast.success(`Image style set to ${next.charAt(0).toUpperCase()}${next.slice(1)}.`)
+  } catch (err) {
+    clubStore.setBrandAssets({ imageStyle: prev })
+    const msg = err instanceof ApiError ? err.message : 'Could not save image style'
+    toast.error(msg || 'Could not save')
+  } finally {
+    imageStyleSaving.value = false
   }
 }
 
@@ -449,6 +490,37 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
           @update:slug="onColorSchemeSlugChange"
         />
       </div>
+      <!-- Image style — applies one treatment to every image on the public
+           site (heroes, event covers, member avatars, etc). Brief 79. -->
+      <div class="ws-card">
+        <div class="ws-card__eyebrow">Image style</div>
+        <p class="ws-image-style__lede">
+          How photos look across your public site. Changes the rounded corners, tone,
+          and overlay treatment for every image at once.
+        </p>
+        <div class="ws-image-style__grid">
+          <button
+            v-for="option in imageStyleOptions"
+            :key="option.value"
+            type="button"
+            class="ws-image-style__card"
+            :class="{ 'is-active': imageStyle === option.value }"
+            :disabled="imageStyleSaving"
+            @click="onImageStyle(option.value)"
+          >
+            <div class="ws-image-style__preview" :data-style="option.value">
+              <div class="ws-image-style__preview-photo" />
+            </div>
+            <div class="ws-image-style__meta">
+              <div class="ws-image-style__name">
+                {{ option.label }}
+                <span v-if="imageStyle === option.value" class="ws-image-style__pill">Selected</span>
+              </div>
+              <div class="ws-image-style__sub">{{ option.sub }}</div>
+            </div>
+          </button>
+        </div>
+      </div>
     </template>
 
     <!-- SEO -->
@@ -745,6 +817,54 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 .ws-brand-nav-toggle__copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .ws-brand-nav-toggle__title { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
 .ws-brand-nav-toggle__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); line-height: 1.4; }
+
+/* Image-style picker — three option cards with a visual preview on top. */
+.ws-image-style__lede { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); line-height: 1.5; margin: 0 0 14px; }
+.ws-image-style__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ws-image-style__card {
+  display: flex; flex-direction: column; gap: 0;
+  padding: 0; background: #fff;
+  border: 1px solid var(--color-hairline); border-radius: 14px;
+  cursor: pointer; text-align: left; overflow: hidden;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+.ws-image-style__card:hover:not(:disabled) { border-color: color-mix(in oklab, var(--color-ink) 40%, var(--color-hairline)); }
+.ws-image-style__card:disabled { cursor: progress; opacity: 0.7; }
+.ws-image-style__card.is-active {
+  border-color: var(--color-ink);
+  box-shadow: 0 0 0 1px var(--color-ink), 0 10px 24px -14px rgba(15, 23, 42, 0.3);
+}
+.ws-image-style__preview {
+  position: relative; aspect-ratio: 4 / 3;
+  background: linear-gradient(135deg, #CED8E6 0%, #B4C5DC 100%);
+  overflow: hidden;
+}
+.ws-image-style__preview-photo {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 30% 70%, rgba(22,163,74,0.45) 0%, transparent 42%),
+    radial-gradient(circle at 70% 30%, rgba(234,88,12,0.35) 0%, transparent 38%),
+    linear-gradient(140deg, #4F6B8A 0%, #2F3F55 55%, #1C2635 100%);
+  background-blend-mode: screen, screen, normal;
+}
+.ws-image-style__preview[data-style="soft"] { border-radius: 16px; margin: 10px; aspect-ratio: auto; height: calc(100% - 20px); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04); }
+.ws-image-style__preview[data-style="soft"] .ws-image-style__preview-photo { filter: saturate(0.98) contrast(1.02) brightness(1.01); border-radius: 15px; }
+.ws-image-style__preview[data-style="studio"] { border-radius: 4px; margin: 10px; aspect-ratio: auto; height: calc(100% - 20px); }
+.ws-image-style__preview[data-style="studio"] .ws-image-style__preview-photo { filter: saturate(1.06) contrast(1.06) brightness(1.02); border-radius: 3px; }
+.ws-image-style__preview[data-style="archive"] { border-radius: 12px; margin: 10px; aspect-ratio: auto; height: calc(100% - 20px); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); }
+.ws-image-style__preview[data-style="archive"] .ws-image-style__preview-photo { filter: grayscale(0.88) contrast(1.08); border-radius: 11px; }
+.ws-image-style__preview[data-style="archive"]::after {
+  content: ''; position: absolute; inset: 10px;
+  background: var(--color-ink);
+  mix-blend-mode: color; opacity: 0.35; pointer-events: none; border-radius: 11px;
+}
+.ws-image-style__meta { padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 4px; }
+.ws-image-style__name { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); display: inline-flex; align-items: center; gap: 8px; }
+.ws-image-style__pill { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #16A34A; background: rgba(22,163,74,0.14); padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+.ws-image-style__sub { font-family: var(--font-body); font-size: 11.5px; color: var(--color-fog); line-height: 1.5; }
+@media (max-width: 720px) {
+  .ws-image-style__grid { grid-template-columns: 1fr; }
+}
 
 .ws-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .ws-field label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }

@@ -139,6 +139,7 @@ export * as clubs from './resources/clubs'
 export type {
   BrandAssetsPatch,
   BrandAssetsResponse,
+  ImageStyle,
 } from './resources/clubs'
 export * as directory from './resources/directory'
 export type { DirectoryClub, ClubSearchParams, ClubSearchResult } from './resources/directory'

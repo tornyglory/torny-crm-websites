@@ -96,6 +96,9 @@ export interface SiteClub {
   brand_primary: string | null
   logo_url: string | null
   favicon_url: string | null
+  /** Image treatment preset (brief 79). Added to the public hydrate
+   *  payload once the backend ships; defaults to `'soft'` when absent. */
+  image_style?: 'soft' | 'studio' | 'archive'
   onboarded_at: string | null
   fonts?: SiteFonts
   style?: SiteStyle

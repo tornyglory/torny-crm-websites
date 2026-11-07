@@ -102,4 +102,42 @@
   --card-border: 1px solid var(--color-hairline);
   --card-shadow: none;
   --btn-radius: var(--radius-pill);
+
+  /* ── Image treatment (brief 79) ─────────────────────────────────
+     Three presets keyed off `<body data-image-style="...">`. The
+     TornyImage wrapper + any block that renders an <img> references
+     these vars so the picker in Settings → Brand propagates globally.
+     Default block below = 'soft'. */
+  --image-radius-sm: 10px;
+  --image-radius-md: 16px;
+  --image-radius-lg: 28px;
+  --image-ring: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --image-filter: saturate(0.98) contrast(1.02) brightness(1.01);
+  --image-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.55) 100%);
+  --image-overlay-color: transparent;
+  --image-overlay-opacity: 0;
+}
+
+/* Studio — crisp, editorial, glossy. Tighter corners + punchier contrast. */
+[data-image-style='studio'] {
+  --image-radius-sm: 4px;
+  --image-radius-md: 8px;
+  --image-radius-lg: 14px;
+  --image-ring: none;
+  --image-filter: saturate(1.06) contrast(1.06) brightness(1.02);
+  --image-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.65) 100%);
+  --image-overlay-color: transparent;
+  --image-overlay-opacity: 0;
+}
+
+/* Archive — monochrome with a brand-color duotone tint for unity. */
+[data-image-style='archive'] {
+  --image-radius-sm: 8px;
+  --image-radius-md: 12px;
+  --image-radius-lg: 20px;
+  --image-ring: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  --image-filter: grayscale(0.88) contrast(1.08);
+  --image-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.60) 100%);
+  --image-overlay-color: var(--color-ink);
+  --image-overlay-opacity: 0.35;
 }

@@ -36,6 +36,17 @@ const navLinks = computed<NavLink[]>(() => {
 const headerSticky = computed<boolean>(() => Boolean(site.value?.club?.navigation?.headerSticky))
 const headerLogoOnly = computed<boolean>(() => Boolean(site.value?.club?.navigation?.logoInHeader))
 
+// Image treatment preset — brief 79. Drives the design-tokens image
+// vars (radius, filter, scrim, duotone overlay) via a single body
+// attribute. Defaults to 'soft' when the backend hasn't shipped the
+// field yet (step 3 of brief 79).
+const imageStyle = computed<'soft' | 'studio' | 'archive'>(
+  () => site.value?.club?.image_style ?? 'soft',
+)
+useHead(() => ({
+  bodyAttrs: { 'data-image-style': imageStyle.value },
+}))
+
 const chromeClub = computed<SiteChromeClub>(() => ({
   name: club.value?.name ?? 'Torny',
   logoUrl: club.value?.logo_url ?? null,

@@ -77,11 +77,101 @@ const brandFaviconUrl = computed<string>({
   },
 })
 
-const brand = ref({
-  primary: clubStore.current?.brandPrimary ?? '#2563EB',
-  accent: '#16A34A',
-  font: 'Inter',
-})
+// ── Brand colour overrides (brief 81) ─────────────────────────────
+// Admin-picked hex values that override the colour-scheme preset on
+// the public site. `null` on either = "no override" (fall back to
+// scheme defaults). Values persist to clubs_data via
+// PATCH /brand-assets, same pattern as logo/favicon/image_style.
+const PALETTE_DEFAULT_PRIMARY = '#2563EB'
+const PALETTE_DEFAULT_ACCENT = '#16A34A'
+const brandPrimary = ref<string>(clubStore.current?.brandPrimary ?? PALETTE_DEFAULT_PRIMARY)
+const brandAccent = ref<string>(clubStore.current?.brandAccent ?? PALETTE_DEFAULT_ACCENT)
+const brandPrimaryOverridden = ref<boolean>(clubStore.current?.brandPrimary != null)
+const brandAccentOverridden = ref<boolean>(clubStore.current?.brandAccent != null)
+const brandSaving = ref<'primary' | 'accent' | null>(null)
+const HEX_RE = /^#[0-9A-Fa-f]{6}$/
+
+async function persistBrandColour(field: 'brand_primary' | 'brand_accent', value: string | null) {
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') {
+    toast.error('No active club — refresh and try again.')
+    return
+  }
+  if (value !== null && !HEX_RE.test(value)) {
+    toast.error(`${field === 'brand_primary' ? 'Primary' : 'Accent'} colour must be a 6-digit hex (#RRGGBB).`)
+    return
+  }
+  brandSaving.value = field === 'brand_primary' ? 'primary' : 'accent'
+  try {
+    // Workaround for brief 24's "at least one of logo_url / favicon_url"
+    // validator until brief 81's relaxation ships — echo the current URLs
+    // alongside every brand-colour patch. Backend treats same-value as
+    // no-op. Remove once the validator accepts brand_primary / brand_accent
+    // as sufficient.
+    const res = await clubs.updateBrandAssets(clubId, {
+      [field]: value,
+      logo_url: clubStore.current?.logoUrl ?? null,
+      favicon_url: clubStore.current?.faviconUrl ?? null,
+    } as Parameters<typeof clubs.updateBrandAssets>[1])
+    // Backend may not echo brief 81 fields yet — trust the submitted value.
+    const echoedPrimary = 'brand_primary' in res ? res.brand_primary : undefined
+    const echoedAccent = 'brand_accent' in res ? res.brand_accent : undefined
+    const nextPrimary = field === 'brand_primary'
+      ? (echoedPrimary !== undefined ? echoedPrimary : value)
+      : (echoedPrimary !== undefined ? echoedPrimary : (clubStore.current?.brandPrimary ?? null))
+    const nextAccent = field === 'brand_accent'
+      ? (echoedAccent !== undefined ? echoedAccent : value)
+      : (echoedAccent !== undefined ? echoedAccent : (clubStore.current?.brandAccent ?? null))
+    clubStore.setBrandAssets({
+      logoUrl: res.logo_url,
+      faviconUrl: res.favicon_url,
+      imageStyle: res.image_style,
+      brandPrimary: nextPrimary,
+      brandAccent: nextAccent,
+    })
+    if (field === 'brand_primary') {
+      brandPrimary.value = nextPrimary ?? PALETTE_DEFAULT_PRIMARY
+      brandPrimaryOverridden.value = nextPrimary != null
+    } else {
+      brandAccent.value = nextAccent ?? PALETTE_DEFAULT_ACCENT
+      brandAccentOverridden.value = nextAccent != null
+    }
+    toast.success(value === null
+      ? `${field === 'brand_primary' ? 'Primary' : 'Accent'} reset to the palette default.`
+      : `${field === 'brand_primary' ? 'Primary' : 'Accent'} colour saved.`)
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Could not save colour.'
+    toast.error(msg)
+  } finally {
+    brandSaving.value = null
+  }
+}
+
+/** Fired from the `<input type="color">` change event. Browsers fire
+ *  `change` on close of the colour picker, not every pixel drag — so
+ *  one API call per selection, no debounce needed. */
+function onBrandColourChange(field: 'brand_primary' | 'brand_accent', hex: string) {
+  const normalised = hex.toUpperCase()
+  void persistBrandColour(field, normalised)
+}
+
+function resetBrandColour(field: 'brand_primary' | 'brand_accent') {
+  void persistBrandColour(field, null)
+}
+
+// Keep local refs in sync with the store so a hydrateFull round-trip
+// doesn't clobber mid-edit state.
+watch(
+  () => [clubStore.current?.brandPrimary, clubStore.current?.brandAccent] as const,
+  ([p, a]) => {
+    if (brandSaving.value === 'primary') return
+    if (brandSaving.value === 'accent') return
+    brandPrimary.value = p ?? PALETTE_DEFAULT_PRIMARY
+    brandAccent.value = a ?? PALETTE_DEFAULT_ACCENT
+    brandPrimaryOverridden.value = p != null
+    brandAccentOverridden.value = a != null
+  },
+)
 
 // Toggle persists immediately via the shared navigation PATCH — simpler
 // than batching into the main Save Navigation flow, matches the
@@ -593,19 +683,53 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
       </div>
       <div class="ws-card">
         <div class="ws-card__eyebrow">Colours</div>
+        <p class="ws-image-style__lede">
+          Override the colour-scheme preset below with the exact hex values from your club's branding.
+          Reset to use whatever the chosen palette provides.
+        </p>
         <div class="ws-colours">
           <div class="ws-colour">
-            <input type="color" v-model="brand.primary" />
+            <input
+              type="color"
+              :value="brandPrimary"
+              :disabled="brandSaving === 'primary'"
+              @change="onBrandColourChange('brand_primary', ($event.target as HTMLInputElement).value)"
+            />
             <div class="ws-colour__body">
-              <div>Primary</div>
-              <span class="ws-mono">{{ brand.primary }}</span>
+              <div class="ws-colour__row">
+                <span>Primary</span>
+                <button
+                  v-if="brandPrimaryOverridden"
+                  type="button"
+                  class="ws-colour__reset"
+                  :disabled="brandSaving === 'primary'"
+                  @click="resetBrandColour('brand_primary')"
+                >Reset</button>
+                <span v-else class="ws-colour__badge">palette default</span>
+              </div>
+              <span class="ws-mono">{{ brandPrimary }}</span>
             </div>
           </div>
           <div class="ws-colour">
-            <input type="color" v-model="brand.accent" />
+            <input
+              type="color"
+              :value="brandAccent"
+              :disabled="brandSaving === 'accent'"
+              @change="onBrandColourChange('brand_accent', ($event.target as HTMLInputElement).value)"
+            />
             <div class="ws-colour__body">
-              <div>Accent</div>
-              <span class="ws-mono">{{ brand.accent }}</span>
+              <div class="ws-colour__row">
+                <span>Accent</span>
+                <button
+                  v-if="brandAccentOverridden"
+                  type="button"
+                  class="ws-colour__reset"
+                  :disabled="brandSaving === 'accent'"
+                  @click="resetBrandColour('brand_accent')"
+                >Reset</button>
+                <span v-else class="ws-colour__badge">palette default</span>
+              </div>
+              <span class="ws-mono">{{ brandAccent }}</span>
             </div>
           </div>
         </div>
@@ -939,8 +1063,15 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 
 .ws-colours { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ws-colour { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--color-hairline); border-radius: 10px; }
-.ws-colour input { width: 40px; height: 40px; border: 0; padding: 0; border-radius: 8px; cursor: pointer; }
+.ws-colour input[type="color"] { width: 40px; height: 40px; border: 0; padding: 0; border-radius: 8px; cursor: pointer; }
+.ws-colour input[type="color"]:disabled { cursor: progress; opacity: 0.6; }
+.ws-colour__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .ws-colour__body div { font-family: var(--font-body); font-size: 12px; color: var(--color-ink); font-weight: 600; }
+.ws-colour__row { display: flex; align-items: center; gap: 8px; }
+.ws-colour__reset { padding: 2px 10px; background: transparent; border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 600; color: var(--color-fog); cursor: pointer; }
+.ws-colour__reset:hover:not(:disabled) { border-color: var(--color-ink); color: var(--color-ink); }
+.ws-colour__reset:disabled { opacity: 0.5; cursor: not-allowed; }
+.ws-colour__badge { padding: 2px 8px; background: var(--color-surface); border-radius: 999px; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; }
 
 .ws-upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ws-upload__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); margin-bottom: 8px; }

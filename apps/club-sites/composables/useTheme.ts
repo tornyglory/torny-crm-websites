@@ -74,6 +74,11 @@ export async function useTheme() {
       const declarations: string[] = []
       const primary = club.value?.brand_primary
       if (primary) declarations.push(`--color-accent: ${primary} !important;`)
+      // Brief 81: optional secondary-accent override. Lands on
+      // --color-accent-strong (used for hover / active states) so it
+      // doesn't clobber --color-accent (the main brand colour).
+      const accent = site.value?.club?.brand_accent
+      if (accent) declarations.push(`--color-accent-strong: ${accent} !important;`)
 
       const f = fonts.value
       if (f) {

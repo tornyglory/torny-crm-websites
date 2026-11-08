@@ -98,6 +98,9 @@ export interface SiteClub {
   region: string | null
   country: string | null
   brand_primary: string | null
+  /** Hex override that takes precedence over the colour scheme's
+   *  secondary accent. Brief 81. Null falls back to the preset. */
+  brand_accent?: string | null
   logo_url: string | null
   favicon_url: string | null
   /** Image treatment preset (brief 79). Added to the public hydrate

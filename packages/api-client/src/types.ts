@@ -144,6 +144,9 @@ export interface Club {
   slug?: string | null
   domain?: string | null
   brandPrimary?: string | null
+  /** Optional accent-colour override. When null, public site falls
+   *  back to the colour-scheme preset. Brief 81. */
+  brandAccent?: string | null
   logoUrl?: string | null
   faviconUrl?: string | null
   /** Image treatment preset for the public site (brief 79). One of

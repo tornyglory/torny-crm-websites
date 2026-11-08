@@ -26,6 +26,11 @@ export interface BrandAssetsPatch {
   logo_url?: string | null
   favicon_url?: string | null
   image_style?: ImageStyle
+  /** 6-digit hex (`#RRGGBB`). Null clears the override — public site
+   *  falls back to the colour-scheme preset's token. Brief 81. */
+  brand_primary?: string | null
+  /** 6-digit hex (`#RRGGBB`). Null clears the override. Brief 81. */
+  brand_accent?: string | null
 }
 
 export interface BrandAssetsResponse {
@@ -34,6 +39,9 @@ export interface BrandAssetsResponse {
   favicon_url: string | null
   /** Default `'soft'` on the server; present once brief 79 ships. */
   image_style?: ImageStyle
+  /** Hex overrides — present once brief 81 ships. Null = no override. */
+  brand_primary?: string | null
+  brand_accent?: string | null
 }
 
 interface Envelope<T> {

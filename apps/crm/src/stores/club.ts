@@ -90,6 +90,7 @@ export const useClubStore = defineStore('club', () => {
         slug: full.slug ?? null,
         domain: full.domain ?? null,
         brandPrimary: full.brandPrimary ?? c.brandPrimary ?? null,
+        brandAccent: full.brandAccent ?? c.brandAccent ?? null,
         logoUrl: full.logoUrl ?? c.logoUrl ?? null,
         faviconUrl: full.faviconUrl ?? c.faviconUrl ?? null,
         imageStyle: full.imageStyle ?? c.imageStyle,
@@ -143,6 +144,8 @@ export const useClubStore = defineStore('club', () => {
     logoUrl?: string | null
     faviconUrl?: string | null
     imageStyle?: 'soft' | 'studio' | 'archive'
+    brandPrimary?: string | null
+    brandAccent?: string | null
   }) {
     const c = current.value
     if (!c) return
@@ -151,6 +154,8 @@ export const useClubStore = defineStore('club', () => {
       ...(patch.logoUrl !== undefined ? { logoUrl: patch.logoUrl } : {}),
       ...(patch.faviconUrl !== undefined ? { faviconUrl: patch.faviconUrl } : {}),
       ...(patch.imageStyle !== undefined ? { imageStyle: patch.imageStyle } : {}),
+      ...(patch.brandPrimary !== undefined ? { brandPrimary: patch.brandPrimary } : {}),
+      ...(patch.brandAccent !== undefined ? { brandAccent: patch.brandAccent } : {}),
     })
   }
 

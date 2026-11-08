@@ -211,15 +211,15 @@ const detailHref = computed(() => featured.value ? `/tournaments/${featured.valu
 .ut-hero__inner { position: relative; z-index: 2; width: 100%; max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; justify-content: space-between; gap: 40px; }
 
 .ut-hero__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.ut-hero__pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); border-radius: 999px; font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 11px; color: #FFFFFF; letter-spacing: 0.14em; font-weight: 700; backdrop-filter: blur(12px); }
+.ut-hero__pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); border-radius: 999px; font-family: var(--font-mono); font-size: 11px; color: #FFFFFF; letter-spacing: 0.14em; font-weight: 700; backdrop-filter: blur(12px); }
 .ut-hero__pill--mint { background: rgba(22,163,74,0.24); border: 1px solid rgba(22,163,74,0.4); color: #86EFAC; }
 .ut-hero__pill-dot { width: 5px; height: 5px; border-radius: 999px; background: #86EFAC; }
-.ut-hero__hosted { margin-left: auto; text-align: right; font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 11px; color: rgba(255,255,255,0.5); letter-spacing: 0.14em; font-weight: 600; line-height: 1.4; }
+.ut-hero__hosted { margin-left: auto; text-align: right; font-family: var(--font-mono); font-size: 11px; color: rgba(255,255,255,0.5); letter-spacing: 0.14em; font-weight: 600; line-height: 1.4; }
 
 .ut-hero__bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 60px; }
 .ut-hero__copy { max-width: 720px; }
-.ut-hero__eyebrow { font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 12px; color: rgba(255,255,255,0.6); letter-spacing: 0.14em; font-weight: 600; margin-bottom: 16px; }
-.ut-hero__title { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: var(--weight-semibold, 600); font-size: var(--h, 88px); color: #FFFFFF; letter-spacing: -0.045em; line-height: 92%; margin: 0 0 20px; }
+.ut-hero__eyebrow { font-family: var(--font-mono); font-size: 12px; color: rgba(255,255,255,0.6); letter-spacing: 0.14em; font-weight: 600; margin-bottom: 16px; }
+.ut-hero__title { font-family: var(--font-display); font-weight: var(--weight-semibold, 600); font-size: var(--h, 88px); color: #FFFFFF; letter-spacing: -0.045em; line-height: 92%; margin: 0 0 20px; }
 .ut-hero__title--sm { --h: 48px; --h-md: 44px; --h-sm: 40px; --h-xs: 32px; }
 .ut-hero__title--md { --h: 72px; --h-md: 64px; --h-sm: 56px; --h-xs: 40px; }
 .ut-hero__title--lg { --h: 88px; --h-md: 80px; --h-sm: 64px; --h-xs: 44px; }
@@ -227,32 +227,32 @@ const detailHref = computed(() => featured.value ? `/tournaments/${featured.valu
 @media (max-width: 1279px) { .ut-hero__title { font-size: var(--h-md, 80px); } }
 @media (max-width: 1023px) { .ut-hero__title { font-size: var(--h-sm, 64px); } }
 @media (max-width: 639px)  { .ut-hero__title { font-size: var(--h-xs, 44px); } }
-.ut-hero__desc { font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 16px; color: rgba(255,255,255,0.72); line-height: 150%; margin: 0 0 32px; max-width: 540px; }
+.ut-hero__desc { font-family: var(--font-body); font-size: 16px; color: rgba(255,255,255,0.72); line-height: 150%; margin: 0 0 32px; max-width: 540px; }
 
 .ut-hero__ctas { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.ut-hero__cta { display: inline-flex; align-items: center; gap: 10px; padding: 16px 28px; border-radius: 999px; font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 15px; font-weight: 700; text-decoration: none; }
+.ut-hero__cta { display: inline-flex; align-items: center; gap: 10px; padding: 16px 28px; border-radius: 999px; font-family: var(--font-body); font-size: 15px; font-weight: 700; text-decoration: none; }
 .ut-hero__cta--primary { background: #FFFFFF; color: #0A0A0B; }
 .ut-hero__cta--secondary { background: transparent; color: #FFFFFF; border: 1px solid rgba(255,255,255,0.24); font-weight: 600; }
 
 .ut-hero__card { width: 340px; flex-shrink: 0; padding: 28px; background: rgba(255,255,255,0.06); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; color: #FFFFFF; display: flex; flex-direction: column; gap: 20px; }
-.ut-hero__card-label { font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 10px; color: #FCA5A5; letter-spacing: 0.14em; font-weight: 700; }
+.ut-hero__card-label { font-family: var(--font-mono); font-size: 10px; color: #FCA5A5; letter-spacing: 0.14em; font-weight: 700; }
 .ut-hero__countdown { display: flex; align-items: baseline; gap: 12px; }
-.ut-hero__countdown-val { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: 700; font-size: 64px; letter-spacing: -0.03em; line-height: 100%; color: #FFFFFF; }
-.ut-hero__countdown-unit { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: 700; font-size: 22px; letter-spacing: -0.02em; line-height: 100%; }
-.ut-hero__countdown-when { font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 10px; color: rgba(255,255,255,0.6); letter-spacing: 0.14em; font-weight: 600; margin-top: 4px; }
+.ut-hero__countdown-val { font-family: var(--font-display); font-weight: 700; font-size: 64px; letter-spacing: -0.03em; line-height: 100%; color: #FFFFFF; }
+.ut-hero__countdown-unit { font-family: var(--font-display); font-weight: 700; font-size: 22px; letter-spacing: -0.02em; line-height: 100%; }
+.ut-hero__countdown-when { font-family: var(--font-mono); font-size: 10px; color: rgba(255,255,255,0.6); letter-spacing: 0.14em; font-weight: 600; margin-top: 4px; }
 .ut-hero__hr { height: 1px; background: rgba(255,255,255,0.1); }
 .ut-hero__card-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.ut-hero__card-small { font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 10px; color: rgba(255,255,255,0.5); letter-spacing: 0.14em; font-weight: 600; margin-bottom: 4px; }
-.ut-hero__card-mid { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: 700; font-size: 22px; color: #FFFFFF; letter-spacing: -0.02em; line-height: 100%; }
-.ut-hero__card-tiny { font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 12px; color: rgba(255,255,255,0.5); font-weight: 500; }
-.ut-hero__progress-head { display: flex; justify-content: space-between; font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 10px; color: rgba(255,255,255,0.5); letter-spacing: 0.14em; font-weight: 600; margin-bottom: 8px; }
+.ut-hero__card-small { font-family: var(--font-mono); font-size: 10px; color: rgba(255,255,255,0.5); letter-spacing: 0.14em; font-weight: 600; margin-bottom: 4px; }
+.ut-hero__card-mid { font-family: var(--font-display); font-weight: 700; font-size: 22px; color: #FFFFFF; letter-spacing: -0.02em; line-height: 100%; }
+.ut-hero__card-tiny { font-family: var(--font-body); font-size: 12px; color: rgba(255,255,255,0.5); font-weight: 500; }
+.ut-hero__progress-head { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 10px; color: rgba(255,255,255,0.5); letter-spacing: 0.14em; font-weight: 600; margin-bottom: 8px; }
 .ut-hero__progress-pct { color: #FFFFFF; }
 .ut-hero__progress { height: 6px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; }
 .ut-hero__progress-fill { height: 100%; background: linear-gradient(90deg, #86EFAC 0%, #FBBF77 100%); border-radius: 999px; }
 
 .ut-hero__stub { position: relative; z-index: 2; max-width: 640px; margin: auto; padding: 0 32px; text-align: center; }
-.ut-hero__stub-title { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: 700; font-size: 28px; color: #FFFFFF; letter-spacing: -0.02em; margin-bottom: 12px; }
-.ut-hero__stub-sub { font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 15px; color: rgba(255,255,255,0.7); line-height: 150%; }
+.ut-hero__stub-title { font-family: var(--font-display); font-weight: 700; font-size: 28px; color: #FFFFFF; letter-spacing: -0.02em; margin-bottom: 12px; }
+.ut-hero__stub-sub { font-family: var(--font-body); font-size: 15px; color: rgba(255,255,255,0.7); line-height: 150%; }
 
 @media (max-width: 960px) {
   .ut-hero { padding: 56px 32px; min-height: auto; }

@@ -72,13 +72,6 @@ export async function useTheme() {
     }),
     style: computed(() => {
       const declarations: string[] = []
-      const primary = club.value?.brand_primary
-      if (primary) declarations.push(`--color-accent: ${primary} !important;`)
-      // Brief 81: optional secondary-accent override. Lands on
-      // --color-accent-strong (used for hover / active states) so it
-      // doesn't clobber --color-accent (the main brand colour).
-      const accent = site.value?.club?.brand_accent
-      if (accent) declarations.push(`--color-accent-strong: ${accent} !important;`)
 
       const f = fonts.value
       if (f) {
@@ -90,8 +83,21 @@ export async function useTheme() {
       const s = style.value
       if (s) declarations.push(...styleDeclarations(s))
 
+      // Colour scheme first (the preset palette) so per-club brand
+      // overrides below have the final word. Without this order, both
+      // sets of declarations used !important and the scheme — later in
+      // the list — won, which is why admin-picked Primary/Accent values
+      // weren't reaching the CTA buttons.
       const cs = colorScheme.value
       if (cs) declarations.push(...colorSchemeDeclarations(cs))
+
+      const primary = club.value?.brand_primary
+      if (primary) declarations.push(`--color-accent: ${primary} !important;`)
+      // Brief 81: secondary-accent override. Lands on --color-accent-strong
+      // (used by primary CTA buttons across the blocks) so admins see
+      // their accent on every page's main action.
+      const accent = site.value?.club?.brand_accent
+      if (accent) declarations.push(`--color-accent-strong: ${accent} !important;`)
 
       if (declarations.length === 0) return []
       return [{ innerHTML: `:root { ${declarations.join(' ')} }` }]

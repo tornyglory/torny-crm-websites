@@ -173,19 +173,19 @@ function href(t: PublicTournamentCard): string {
 </template>
 
 <style scoped>
-.ut-list { padding: 80px 0; background: var(--site-bg, #FFFFFF); color: var(--site-ink, #0A0A0B); }
+.ut-list { padding: 80px 0; background: var(--color-ground); color: var(--color-ink); }
 .ut-list__inner { max-width: 1240px; margin: 0 auto; padding: 0 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 32px; }
 
 .ut-list__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; }
 .ut-list__head-copy { max-width: 540px; }
-.ut-list__eyebrow { display: inline-flex; align-items: center; gap: 8px; font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #16A34A; font-weight: 600; margin-bottom: 12px; }
+.ut-list__eyebrow { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #16A34A; font-weight: 600; margin-bottom: 12px; }
 .ut-list__eyebrow-dot { width: 6px; height: 6px; border-radius: 999px; background: #16A34A; }
-.ut-list__heading { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: var(--weight-semibold, 600); font-size: clamp(36px, 5vw, 48px); letter-spacing: -0.03em; line-height: 100%; margin: 0 0 10px; color: var(--site-ink, #0A0A0B); }
-.ut-list__desc { font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 15px; color: #6B6B72; line-height: 150%; margin: 0; }
-.ut-list__cta { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; background: #FFFFFF; border: 1px solid #E7E7E1; border-radius: 999px; font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 13px; font-weight: 600; color: var(--site-ink, #0A0A0B); text-decoration: none; }
-.ut-list__cta:hover { background: var(--site-ink, #0A0A0B); color: #FFFFFF; border-color: var(--site-ink, #0A0A0B); }
+.ut-list__heading { font-family: var(--font-display); font-weight: var(--weight-semibold, 600); font-size: clamp(36px, 5vw, 48px); letter-spacing: -0.03em; line-height: 100%; margin: 0 0 10px; color: var(--color-ink); }
+.ut-list__desc { font-family: var(--font-body); font-size: 15px; color: #6B6B72; line-height: 150%; margin: 0; }
+.ut-list__cta { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; background: #FFFFFF; border: 1px solid #E7E7E1; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); text-decoration: none; }
+.ut-list__cta:hover { background: var(--color-ink); color: #FFFFFF; border-color: var(--color-ink); }
 
-.ut-list__stub { padding: 48px 32px; border: 1px dashed #E7E7E1; border-radius: 16px; text-align: center; font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); color: #6B6B72; }
+.ut-list__stub { padding: 48px 32px; border: 1px dashed #E7E7E1; border-radius: 16px; text-align: center; font-family: var(--font-body); color: #6B6B72; }
 
 .ut-list__body { background: #FFFFFF; border: 1px solid #E7E7E1; border-radius: 20px; overflow: hidden; }
 .ut-list__row { display: flex; align-items: center; gap: 24px; padding: 24px 28px; text-decoration: none; color: inherit; border-bottom: 1px solid #E7E7E1; transition: background-color 0.15s ease; }
@@ -193,27 +193,27 @@ function href(t: PublicTournamentCard): string {
 .ut-list__row:hover { background: #FAFAF7; }
 
 .ut-list__date { width: 88px; padding: 12px 8px; border-radius: 12px; text-align: center; flex-shrink: 0; }
-.ut-list__date-weekday, .ut-list__date-month { font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 10px; letter-spacing: 0.14em; font-weight: 700; }
-.ut-list__date-day { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: 700; font-size: 32px; letter-spacing: -0.03em; line-height: 100%; margin: 2px 0; }
+.ut-list__date-weekday, .ut-list__date-month { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; font-weight: 700; }
+.ut-list__date-day { font-family: var(--font-display); font-weight: 700; font-size: 32px; letter-spacing: -0.03em; line-height: 100%; margin: 2px 0; }
 .ut-list__date--mint, .ut-list__date--mint .ut-list__date-weekday, .ut-list__date--mint .ut-list__date-day, .ut-list__date--mint .ut-list__date-month { color: #16A34A; }
 .ut-list__date--tangerine, .ut-list__date--tangerine .ut-list__date-weekday, .ut-list__date--tangerine .ut-list__date-day, .ut-list__date--tangerine .ut-list__date-month { color: #EA580C; }
 .ut-list__date--violet, .ut-list__date--violet .ut-list__date-weekday, .ut-list__date--violet .ut-list__date-day, .ut-list__date--violet .ut-list__date-month { color: #7C3AED; }
 
 .ut-list__body-col { flex: 1; min-width: 0; }
 .ut-list__row-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
-.ut-list__row-pill { padding: 3px 8px; border-radius: 999px; font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 9px; letter-spacing: 0.14em; font-weight: 600; }
+.ut-list__row-pill { padding: 3px 8px; border-radius: 999px; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em; font-weight: 600; }
 .ut-list__row-pill--mint { background: rgba(22,163,74,0.12); color: #16A34A; }
 .ut-list__row-pill--tangerine { background: rgba(234,88,12,0.12); color: #EA580C; }
 .ut-list__row-pill--violet { background: rgba(124,58,237,0.12); color: #7C3AED; }
-.ut-list__row-eyebrow { font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 10px; color: #6B6B72; letter-spacing: 0.14em; font-weight: 600; }
-.ut-list__row-title { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: 700; font-size: 24px; color: var(--site-ink, #0A0A0B); letter-spacing: -0.02em; line-height: 105%; margin-bottom: 6px; }
-.ut-list__row-sub { font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 12px; color: #6B6B72; }
+.ut-list__row-eyebrow { font-family: var(--font-mono); font-size: 10px; color: #6B6B72; letter-spacing: 0.14em; font-weight: 600; }
+.ut-list__row-title { font-family: var(--font-display); font-weight: 700; font-size: 24px; color: var(--color-ink); letter-spacing: -0.02em; line-height: 105%; margin-bottom: 6px; }
+.ut-list__row-sub { font-family: var(--font-body); font-size: 12px; color: #6B6B72; }
 
 .ut-list__stats { width: 200px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
 .ut-list__stats-numbers { text-align: right; }
-.ut-list__stats-val { font-family: var(--site-font-display, 'Space Grotesk', system-ui, sans-serif); font-weight: 700; font-size: 24px; color: var(--site-ink, #0A0A0B); letter-spacing: -0.02em; line-height: 100%; }
-.ut-list__stats-cap { font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 12px; color: #6B6B72; font-weight: 500; }
-.ut-list__stats-label { display: block; font-family: var(--site-font-mono, 'JetBrains Mono', monospace); font-size: 9px; color: #6B6B72; letter-spacing: 0.14em; font-weight: 600; margin-top: 4px; text-transform: uppercase; }
+.ut-list__stats-val { font-family: var(--font-display); font-weight: 700; font-size: 24px; color: var(--color-ink); letter-spacing: -0.02em; line-height: 100%; }
+.ut-list__stats-cap { font-family: var(--font-body); font-size: 12px; color: #6B6B72; font-weight: 500; }
+.ut-list__stats-label { display: block; font-family: var(--font-mono); font-size: 9px; color: #6B6B72; letter-spacing: 0.14em; font-weight: 600; margin-top: 4px; text-transform: uppercase; }
 .ut-list__stats-label.is-warn { color: #EA580C; }
 
 .ut-list__progress { width: 100%; height: 3px; background: #F5F5F2; border-radius: 999px; overflow: hidden; }
@@ -222,7 +222,7 @@ function href(t: PublicTournamentCard): string {
 .ut-list__progress-fill--tangerine { background: #EA580C; }
 .ut-list__progress-fill--violet { background: #7C3AED; }
 
-.ut-list__row-enter { padding: 8px 16px; background: var(--site-ink, #0A0A0B); color: #FFFFFF; border-radius: 999px; font-family: var(--site-font-body, 'Inter', system-ui, sans-serif); font-size: 12px; font-weight: 600; }
+.ut-list__row-enter { padding: 8px 16px; background: var(--color-ink); color: #FFFFFF; border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 600; }
 
 @media (max-width: 760px) {
   .ut-list { padding: 56px 0; }

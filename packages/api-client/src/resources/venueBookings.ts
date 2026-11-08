@@ -363,3 +363,36 @@ export async function checkout(
   )
   return res.data
 }
+
+// ── Public availability lookup (brief 84) ───────────────────────
+
+/** One already-taken slot inside the queried window. */
+export interface TakenSlot {
+  /** ISO date `YYYY-MM-DD`. */
+  date: string
+  slot_id: number
+  package_id: number
+}
+
+export interface VenueAvailabilityResult {
+  taken: TakenSlot[]
+}
+
+/** `GET /public/clubs/:slug/venue-availability?from=…&to=…[&package_id=…]`
+ *  — returns every taken slot in the window (confirmed + pending + fresh
+ *  <24h pending_payment). FE derives "fully booked" per-date by intersecting
+ *  with the selected package's slot list. Public, 60s cacheable. */
+export async function publicAvailability(
+  slug: string,
+  from: string,
+  to: string,
+  opts: { packageId?: number; signal?: AbortSignal } = {},
+): Promise<VenueAvailabilityResult> {
+  const qs = new URLSearchParams({ from, to })
+  if (opts.packageId != null) qs.set('package_id', String(opts.packageId))
+  const res = await publicFetch<Envelope<VenueAvailabilityResult>>(
+    `${VENUE_BASE}/public/clubs/${encodeURIComponent(slug)}/venue-availability?${qs.toString()}`,
+    { method: 'GET', signal: opts.signal },
+  )
+  return res.data
+}

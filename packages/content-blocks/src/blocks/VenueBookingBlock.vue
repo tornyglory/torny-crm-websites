@@ -15,7 +15,7 @@
  * Enquiries inbox). Brief 62 proposes the proper `venue_bookings`
  * resource with deposit payments.
  */
-import { computed, inject, isRef, onMounted, reactive, ref, type Ref } from 'vue'
+import { computed, inject, isRef, onMounted, reactive, ref, watch, type Ref } from 'vue'
 import { enquiries, venuePackages, venueBookings, ApiError } from '@torny/api-client'
 import type {
   PublicVenuePackage,
@@ -195,7 +195,80 @@ const monthLabel = computed(() =>
   }),
 )
 
-interface CalendarCell { date: Date; day: number; inMonth: boolean; bookable: boolean }
+// ── Availability lookup (brief 84) ────────────────────────────
+// Map of YYYY-MM-DD → set of slot_ids that are already taken for the
+// currently-fetched month + package. Populated by fetchAvailability();
+// consumed by calendarCells (grey out) + the slot picker at step 2.
+const takenByDate = ref<Map<string, Set<number>>>(new Map())
+let availabilityController: AbortController | null = null
+
+function ymd(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+async function fetchAvailability() {
+  if (!clubSlug.value) return
+  const pkgId = selectedPackage.value?.id ?? null
+  if (pkgId == null) {
+    // Props-mode demo packages have no server id — nothing to look up.
+    takenByDate.value = new Map()
+    return
+  }
+  if (availabilityController) availabilityController.abort()
+  const controller = new AbortController()
+  availabilityController = controller
+
+  // Window = visible month ± a few days of overlap so prev/next hops
+  // don't flash empty while a fresh fetch is in flight.
+  const from = new Date(visibleYear.value, visibleMonth.value, 1)
+  from.setDate(from.getDate() - 7)
+  const to = new Date(visibleYear.value, visibleMonth.value + 1, 0)
+  to.setDate(to.getDate() + 7)
+
+  try {
+    const res = await venueBookings.publicAvailability(
+      clubSlug.value,
+      ymd(from),
+      ymd(to),
+      { packageId: pkgId, signal: controller.signal },
+    )
+    if (controller.signal.aborted) return
+    const next = new Map<string, Set<number>>()
+    for (const t of res.taken) {
+      const set = next.get(t.date) ?? new Set<number>()
+      set.add(t.slot_id)
+      next.set(t.date, set)
+    }
+    takenByDate.value = next
+  } catch {
+    // Network blip — leave the previous map in place. Worst case the
+    // renter clicks an already-taken date and the backend bounces on submit.
+    if (controller.signal.aborted) return
+  }
+}
+
+watch(
+  [visibleYear, visibleMonth, () => selectedPackage.value?.id, clubSlug],
+  () => { void fetchAvailability() },
+  { immediate: true },
+)
+
+/** True when every non-disabled slot on the selected package is already
+ *  taken on `date` — the calendar greys the cell out. */
+function isDateFullyBooked(date: Date): boolean {
+  const pkg = selectedPackage.value
+  if (!pkg) return false
+  const openSlots = pkg.slots.filter((s) => !s.disabled && s.id != null)
+  if (openSlots.length === 0) return false
+  const taken = takenByDate.value.get(ymd(date))
+  if (!taken) return false
+  return openSlots.every((s) => taken.has(s.id as number))
+}
+
+interface CalendarCell { date: Date; day: number; inMonth: boolean; bookable: boolean; fullyBooked: boolean }
 const calendarCells = computed<CalendarCell[]>(() => {
   const first = new Date(visibleYear.value, visibleMonth.value, 1)
   const last = new Date(visibleYear.value, visibleMonth.value + 1, 0)
@@ -204,25 +277,39 @@ const calendarCells = computed<CalendarCell[]>(() => {
   const cells: CalendarCell[] = []
   for (let i = 0; i < dow; i++) {
     const d = new Date(first.getTime() - (dow - i) * 86400_000)
-    cells.push({ date: d, day: d.getDate(), inMonth: false, bookable: false })
+    cells.push({ date: d, day: d.getDate(), inMonth: false, bookable: false, fullyBooked: false })
   }
   for (let d = 1; d <= last.getDate(); d++) {
     const date = new Date(visibleYear.value, visibleMonth.value, d)
+    const afterLeadTime = date.getTime() >= earliestBookable.value.getTime()
+    const fullyBooked = afterLeadTime && isDateFullyBooked(date)
     cells.push({
       date,
       day: d,
       inMonth: true,
-      bookable: date.getTime() >= earliestBookable.value.getTime(),
+      bookable: afterLeadTime && !fullyBooked,
+      fullyBooked,
     })
   }
   // Pad trailing to complete the last week.
   while (cells.length % 7 !== 0) {
     const last = cells[cells.length - 1]!
     const d = new Date(last.date.getTime() + 86400_000)
-    cells.push({ date: d, day: d.getDate(), inMonth: false, bookable: false })
+    cells.push({ date: d, day: d.getDate(), inMonth: false, bookable: false, fullyBooked: false })
   }
   return cells
 })
+
+/** True when the given slot is taken for the currently-selected date.
+ *  Drives the "already booked" disabled state on the slot picker at
+ *  step 2. */
+function isSlotTakenForSelectedDate(slotId: number | null | undefined): boolean {
+  if (slotId == null) return false
+  const date = selectedDate.value
+  if (!date) return false
+  const taken = takenByDate.value.get(ymd(date))
+  return taken?.has(slotId) ?? false
+}
 
 const selectedDate = ref<Date | null>(null)
 function pickDate(cell: CalendarCell) {
@@ -252,6 +339,7 @@ const selectedDateLabel = computed(() => {
 const selectedSlot = ref<VenueBookingSlot | null>(null)
 function pickSlot(s: VenueBookingSlot) {
   if (s.disabled) return
+  if (isSlotTakenForSelectedDate(s.id)) return
   selectedSlot.value = s
 }
 function isSelectedSlot(s: VenueBookingSlot): boolean {
@@ -584,15 +672,18 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
               class="vb__cal-day"
               :class="{
                 'vb__cal-day--out': !cell.inMonth,
-                'vb__cal-day--muted': cell.inMonth && !cell.bookable,
+                'vb__cal-day--muted': cell.inMonth && !cell.bookable && !cell.fullyBooked,
+                'vb__cal-day--full': cell.inMonth && cell.fullyBooked,
                 'vb__cal-day--free': cell.inMonth && cell.bookable,
                 'vb__cal-day--selected': cell.inMonth && isSelectedDate(cell),
               }"
               :disabled="!cell.inMonth || !cell.bookable"
+              :title="cell.fullyBooked ? 'Fully booked' : undefined"
               @click="pickDate(cell)"
             >
               <span class="vb__cal-day-n">{{ cell.day }}</span>
               <span v-if="cell.inMonth && cell.bookable" class="vb__cal-day-sub">Free</span>
+              <span v-else-if="cell.inMonth && cell.fullyBooked" class="vb__cal-day-sub vb__cal-day-sub--full">Booked</span>
             </button>
           </div>
         </section>
@@ -619,13 +710,15 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
               class="vb__slot"
               :class="{
                 'vb__slot--selected': isSelectedSlot(s),
-                'vb__slot--disabled': s.disabled,
+                'vb__slot--disabled': s.disabled || isSlotTakenForSelectedDate(s.id),
               }"
+              :title="isSlotTakenForSelectedDate(s.id) ? 'Already booked' : undefined"
               @click="pickSlot(s)"
             >
               <div class="vb__slot-copy">
                 <div class="vb__slot-label">{{ s.label }}</div>
                 <div v-if="s.sub" class="vb__slot-sub">{{ s.sub }}</div>
+                <div v-if="isSlotTakenForSelectedDate(s.id)" class="vb__slot-sub vb__slot-sub--taken">Already booked</div>
               </div>
               <div class="vb__slot-check" aria-hidden="true">
                 <svg v-if="isSelectedSlot(s)" width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -962,6 +1055,8 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 .vb__cal-day--muted { background: var(--color-surface); color: var(--color-mute); cursor: not-allowed; }
 .vb__cal-day--muted .vb__cal-day-sub { color: var(--color-mute); }
 .vb__cal-day--free { background: #F0FDF4; }
+.vb__cal-day--full { background: #FEF2F2; color: var(--color-mute); cursor: not-allowed; }
+.vb__cal-day-sub--full { color: #B91C1C; }
 .vb__cal-day--selected { background: var(--color-ink); color: #fff; border-color: var(--color-ink); }
 .vb__cal-day--selected .vb__cal-day-sub { color: rgba(255,255,255,0.7); }
 
@@ -985,6 +1080,7 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 .vb__slot-copy { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .vb__slot-label { font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--color-ink); }
 .vb__slot-sub { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: var(--color-fog); text-transform: uppercase; }
+.vb__slot-sub--taken { color: #B91C1C; margin-top: 2px; }
 .vb__slot-check { width: 22px; height: 22px; border-radius: 999px; border: 1px solid var(--color-hairline); display: inline-flex; align-items: center; justify-content: center; color: #fff; background: #fff; flex-shrink: 0; }
 .vb__slot--selected .vb__slot-check { background: var(--color-accent); border-color: var(--color-accent); }
 

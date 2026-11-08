@@ -442,6 +442,8 @@ export type {
   VenueBookingErrorCode,
   VenueBookingCheckoutResult,
   ClubNotPaymentReadyData,
+  TakenSlot,
+  VenueAvailabilityResult,
 } from './resources/venueBookings'
 
 export * as stripeConnect from './resources/stripeConnect'

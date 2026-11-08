@@ -50,11 +50,16 @@ interface AuthErrorBody {
 export class AuthError extends Error {
   status: number
   code?: string
-  constructor(status: number, message: string, code?: string) {
+  /** Optional structured data from the error body. Carries, for example,
+   *  the `{ available, reason, slug }` block on a signup `slug_unavailable`
+   *  response so the FE can show which problem the user hit. */
+  data?: unknown
+  constructor(status: number, message: string, code?: string, data?: unknown) {
     super(message)
     this.name = 'AuthError'
     this.status = status
     this.code = code
+    this.data = data
   }
 }
 
@@ -144,6 +149,82 @@ export async function resetPassword(
     signal: opts.signal,
   })
   if (!res.ok) await throwOnError(res)
+}
+
+// ── Public signup — backend brief 88 ──────────────────────────────
+// Atomic: creates user + organisation + Stripe Customer + Checkout
+// Session in one call. Response includes a 30-day JWT (treat the same
+// as /login's token) and the Stripe Checkout URL for the renter to
+// finish card capture. Lives on VENUE_BASE.
+
+import { VENUE_BASE } from '../config'
+
+export type OrgType =
+  | 'sports_and_recreation'
+  | 'fitness_and_wellness'
+  | 'arts_and_culture'
+  | 'community_and_civic'
+  | 'youth_groups'
+  | 'hospitality'
+  | 'holiday_accommodation'
+  | 'events_venue'
+  | 'non_profit'
+  | 'other'
+
+export type PlanKey = 'starter' | 'pro'
+
+export interface SignupInput {
+  user: { name: string; email: string; password: string }
+  organisation: {
+    name: string
+    slug: string
+    org_type: OrgType
+    country?: string      // defaults 'NZ'
+    timezone?: string     // defaults 'Pacific/Auckland'
+  }
+  plan: PlanKey
+  success_url: string
+  cancel_url: string
+}
+
+export interface SignupResult {
+  user: { id: number; name: string; email: string }
+  organisation: { id: number; slug: string; name: string }
+  auth_token: string
+  checkout_url: string
+  public_site: string
+}
+
+/** Signup error codes per brief 88 §2. The `data` block varies by code
+ *  — `slug_unavailable` carries `{ available, reason, slug }`. */
+export type SignupErrorCode =
+  | 'bad_body' | 'bad_name' | 'bad_email' | 'bad_password'
+  | 'bad_org_name' | 'bad_org_type' | 'bad_plan' | 'bad_url'
+  | 'slug_unavailable' | 'email_in_use'
+  | 'stripe_price_unconfigured' | 'stripe_customer_create_failed' | 'stripe_checkout_create_failed'
+  | 'signup_tx_failed'
+
+/** `POST /public/signup` on VENUE_BASE. Public, no auth. Returns both
+ *  the session JWT and the Stripe Checkout URL — FE stores the token,
+ *  then window.location.href = checkout_url. */
+export async function signup(
+  input: SignupInput,
+  opts: { idempotencyKey?: string; signal?: AbortSignal } = {},
+): Promise<SignupResult> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey
+  const res = await fetch(`${VENUE_BASE}/public/signup`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(input),
+    signal: opts.signal,
+  })
+  const json = await readJson<AuthErrorBody & { data?: SignupResult }>(res)
+  if (!res.ok || json.status === 'error') {
+    throw new AuthError(res.status, json.message ?? 'Signup failed', json.code, (json as { data?: unknown }).data)
+  }
+  if (!json.data) throw new AuthError(res.status, 'Malformed signup response')
+  return json.data
 }
 
 // ── Account self-service — backend brief 71 ───────────────────────

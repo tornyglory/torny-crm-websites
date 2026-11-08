@@ -155,7 +155,22 @@ export type {
   EmailChangeRequestResult,
   PasswordChangeInput,
   PasswordChangeResult,
+  OrgType,
+  PlanKey,
+  SignupInput,
+  SignupResult,
+  SignupErrorCode,
 } from './resources/auth'
+export * as billing from './resources/billing'
+export type {
+  PlanState,
+  PlanSource,
+  SubscriptionStatus,
+  CheckoutInput as BillingCheckoutInput,
+  CheckoutResult as BillingCheckoutResult,
+  PortalInput as BillingPortalInput,
+  PortalResult as BillingPortalResult,
+} from './resources/billing'
 export * as notifications from './resources/notifications'
 export type {
   NotificationKind,

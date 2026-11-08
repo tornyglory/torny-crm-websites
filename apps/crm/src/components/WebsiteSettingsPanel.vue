@@ -202,6 +202,11 @@ async function onHeaderDisplay(next: HeaderDisplayOption) {
       headerDisplay: next,
       // Keep the legacy boolean in sync so older FE builds keep working.
       logoInHeader: next === 'logo',
+      // Brief 25's validator requires at least one of header / footer /
+      // headerSticky — echo the current sticky value so a display-only
+      // patch passes the check. Backend treats same-value as a no-op.
+      // Remove once brief 80's validator relaxation ships.
+      headerSticky: headerSticky.value,
     })
     clubStore.setNavigation({
       header: res.header ?? DEFAULT_HEADER,
@@ -233,6 +238,9 @@ async function saveHeaderName() {
   const payload: Parameters<typeof navigationApi.updateForClub>[1] = {
     // null clears — fall back to club.name on the public site.
     headerName: trimmed.length === 0 ? null : trimmed,
+    // Workaround for brief 25's "at least one of header / footer /
+    // headerSticky" validator — see onHeaderDisplay for the rationale.
+    headerSticky: headerSticky.value,
   }
   headerNameSaving.value = true
   try {

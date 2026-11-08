@@ -72,9 +72,13 @@ Rules:
 { "status": "error", "code": "bad_header_name", "message": "header_name must be 1–80 characters, or null to clear" }
 ```
 
-### Validator relaxation — same as brief 79
+### ⚠️ Relax the "at least one of header / footer / headerSticky" validator
 
-Brief 25's "at least one of header / footer / headerSticky / logoInHeader" check (if it exists) needs to accept `headerName` and `headerDisplay` too. Otherwise a display-only patch 400s. If no such check exists, ignore.
+Confirmed in prod — brief 25's endpoint rejects a PATCH body that contains only `headerName` + `headerDisplay` with 400 "at least one of header, footer or headerSticky is required". Update the check to accept the new fields too:
+
+> At least one of `header`, `footer`, `headerSticky`, `logoInHeader`, `headerName`, or `headerDisplay` must be present.
+
+Until this ships, the FE sends the current `headerSticky` alongside every header-display/name change as a no-op workaround (see the FE commit trailing this brief). Shipping the validator change removes the workaround.
 
 ### 200 response — echo includes both new fields
 

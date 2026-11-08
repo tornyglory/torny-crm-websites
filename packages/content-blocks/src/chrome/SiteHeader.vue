@@ -17,6 +17,27 @@ const initials = computed(() => {
     .join('')
 })
 
+/** What to actually render in the header (brief 80).
+ *  - `headerDisplay` is the authoritative source when present.
+ *  - Falls back to the legacy `logoOnly` boolean when the new prop is undefined.
+ *  - Clamps to a mode the available assets can satisfy:
+ *      no logoUrl + requested 'logo' → 'name'
+ *      no logoUrl + requested 'both' → 'name'
+ */
+const resolvedDisplay = computed<'logo' | 'name' | 'both'>(() => {
+  const requested = props.headerDisplay ?? (props.logoOnly ? 'logo' : 'name')
+  if (!props.club.logoUrl && requested !== 'name') return 'name'
+  return requested
+})
+/** The text to display in the brand block when the mode includes a name.
+ *  Falls back to `club.name` when the custom override is null/blank. */
+const displayName = computed<string>(() => {
+  const override = (props.headerName ?? '').trim()
+  return override || props.club.name
+})
+const showLogo = computed(() => resolvedDisplay.value !== 'name' && !!props.club.logoUrl)
+const showName = computed(() => resolvedDisplay.value !== 'logo')
+
 function isActive(href: string | undefined): boolean {
   if (!href) return false
   const path = props.currentPath
@@ -77,17 +98,20 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header class="site-header" :class="{ 'site-header--sticky': sticky, 'site-header--logo-only': logoOnly && club.logoUrl }">
-    <a class="site-header__brand" :href="'/'" :aria-label="club.name">
-      <span v-if="club.logoUrl" class="site-header__logo-wrap">
-        <img :src="club.logoUrl" :alt="`${club.name} logo`" class="site-header__logo" />
+  <header class="site-header" :class="{ 'site-header--sticky': sticky, 'site-header--logo-only': resolvedDisplay === 'logo' }">
+    <a class="site-header__brand" :href="'/'" :aria-label="displayName">
+      <span v-if="showLogo" class="site-header__logo-wrap">
+        <img :src="club.logoUrl!" :alt="`${displayName} logo`" class="site-header__logo" />
       </span>
-      <span v-else class="site-header__chip">{{ initials }}</span>
-      <!-- Brand text is hidden when logoOnly is on + a logo is uploaded. The
+      <!-- Initial chip fills the gap when the mode wants a logo but no
+           image is uploaded, or when the mode is name-only and we still
+           want a visual marker on narrow viewports. -->
+      <span v-else-if="resolvedDisplay !== 'logo'" class="site-header__chip">{{ initials }}</span>
+      <!-- Brand text is hidden when the display mode is logo-only. The
            club name moves to the brand link's aria-label above so screen
            readers still announce it. -->
-      <span v-if="!(logoOnly && club.logoUrl)" class="site-header__brand-text">
-        <span class="site-header__name">{{ club.name }}</span>
+      <span v-if="showName" class="site-header__brand-text">
+        <span class="site-header__name">{{ displayName }}</span>
         <span v-if="club.strapline" class="site-header__strapline">{{ club.strapline }}</span>
       </span>
     </a>

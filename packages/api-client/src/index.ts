@@ -389,6 +389,7 @@ export * as navigation from './resources/navigation'
 export type {
   UpdateNavigationInput,
   UpdateNavigationResponse,
+  HeaderDisplay,
 } from './resources/navigation'
 export * as clubSettings from './resources/clubSettings'
 export type {

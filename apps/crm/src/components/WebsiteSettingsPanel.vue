@@ -186,6 +186,76 @@ async function onImageStyle(next: ImageStyleOption) {
   }
 }
 
+// ── Brief 80 persistence handlers ─────────────────────────────────
+async function onHeaderDisplay(next: HeaderDisplayOption) {
+  if (next === headerDisplay.value || headerDisplaySaving.value) return
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') {
+    toast.error('No active club — refresh and try again.')
+    return
+  }
+  const prev = headerDisplay.value
+  headerDisplay.value = next
+  headerDisplaySaving.value = true
+  try {
+    const res = await navigationApi.updateForClub(clubId, {
+      headerDisplay: next,
+      // Keep the legacy boolean in sync so older FE builds keep working.
+      logoInHeader: next === 'logo',
+    })
+    clubStore.setNavigation({
+      header: res.header ?? DEFAULT_HEADER,
+      footer: res.footer ?? DEFAULT_FOOTER,
+      headerSticky: res.headerSticky,
+      logoInHeader: res.logoInHeader,
+      headerName: res.headerName ?? null,
+      headerDisplay: res.headerDisplay ?? next,
+    })
+    logoInHeader.value = res.logoInHeader
+    toast.success('Header display updated.')
+  } catch (err) {
+    headerDisplay.value = prev
+    const msg = err instanceof ApiError ? err.message : 'Could not update header display.'
+    toast.error(msg)
+  } finally {
+    headerDisplaySaving.value = false
+  }
+}
+
+async function saveHeaderName() {
+  if (!headerNameDirty.value || headerNameSaving.value) return
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') {
+    toast.error('No active club — refresh and try again.')
+    return
+  }
+  const trimmed = headerName.value.trim()
+  const payload: Parameters<typeof navigationApi.updateForClub>[1] = {
+    // null clears — fall back to club.name on the public site.
+    headerName: trimmed.length === 0 ? null : trimmed,
+  }
+  headerNameSaving.value = true
+  try {
+    const res = await navigationApi.updateForClub(clubId, payload)
+    clubStore.setNavigation({
+      header: res.header ?? DEFAULT_HEADER,
+      footer: res.footer ?? DEFAULT_FOOTER,
+      headerSticky: res.headerSticky,
+      logoInHeader: res.logoInHeader,
+      headerName: res.headerName ?? null,
+      headerDisplay: res.headerDisplay ?? headerDisplay.value,
+    })
+    headerName.value = res.headerName ?? ''
+    headerNameInitial.value = res.headerName ?? ''
+    toast.success(trimmed ? `Header name saved.` : 'Using the club name.')
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Could not save header name.'
+    toast.error(msg)
+  } finally {
+    headerNameSaving.value = false
+  }
+}
+
 const seo = ref({
   metaTitle: 'Kelburn Bowling Club — Wellington',
   metaDescription: 'A friendly lawn bowls club in the heart of Wellington. Est. 1908. Join us for roll-ups, pennant, and socials.',
@@ -218,6 +288,30 @@ const headerSticky = ref<boolean>(Boolean(clubStore.current?.navigation?.headerS
  *  button required, so admins get instant feedback. */
 const logoInHeader = ref<boolean>(Boolean(clubStore.current?.navigation?.logoInHeader))
 const logoInHeaderSaving = ref(false)
+
+// ── Brief 80 — header display mode + custom name ────────────────
+// Three-state display (logo / name / both) supersedes the old boolean.
+// `headerName` is a nullable override of `club.name` in the header.
+type HeaderDisplayOption = 'logo' | 'name' | 'both'
+function initialHeaderDisplay(): HeaderDisplayOption {
+  const nav = clubStore.current?.navigation
+  if (nav?.headerDisplay === 'logo' || nav?.headerDisplay === 'name' || nav?.headerDisplay === 'both') {
+    return nav.headerDisplay
+  }
+  return nav?.logoInHeader ? 'logo' : 'name'
+}
+const headerDisplay = ref<HeaderDisplayOption>(initialHeaderDisplay())
+const headerDisplayOptions: Array<{ value: HeaderDisplayOption; label: string; sub: string }> = [
+  { value: 'name', label: 'Name only',    sub: 'The club name in text. Works even without a logo uploaded.' },
+  { value: 'logo', label: 'Logo only',    sub: 'Just the uploaded logo image. Needs a logo on file.' },
+  { value: 'both', label: 'Logo + name',  sub: 'Logo mark next to the name — a classic header lockup.' },
+]
+const headerDisplaySaving = ref(false)
+const headerName = ref<string>(clubStore.current?.navigation?.headerName ?? '')
+const headerNameInitial = ref<string>(clubStore.current?.navigation?.headerName ?? '')
+const headerNameSaving = ref(false)
+const headerNameDirty = computed(() => headerName.value.trim() !== headerNameInitial.value.trim())
+
 const navDirty = ref(false)
 const navSaving = ref(false)
 
@@ -238,6 +332,10 @@ watch(
     navFooter.value = cloneNav(nav?.footer ?? DEFAULT_FOOTER)
     headerSticky.value = Boolean(nav?.headerSticky)
     logoInHeader.value = Boolean(nav?.logoInHeader)
+    // Re-sync brief 80 fields when the server echoes new values.
+    headerDisplay.value = initialHeaderDisplay()
+    headerName.value = nav?.headerName ?? ''
+    headerNameInitial.value = nav?.headerName ?? ''
   },
   { deep: true },
 )
@@ -435,25 +533,68 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
             />
           </div>
         </div>
-        <!-- Show-in-header toggle: when on, the public site header uses the
-             logo image in place of the club name text. Falls back to the
-             name when no logo is uploaded. -->
-        <div class="ws-brand-nav-toggle">
-          <div class="ws-brand-nav-toggle__copy">
-            <div class="ws-brand-nav-toggle__title">Use the logo in the header</div>
-            <div class="ws-brand-nav-toggle__hint">
-              {{ brandLogoUrl
-                ? 'Replaces the club name text with the uploaded logo in the public site nav. Mobile keeps the smaller logo mark.'
-                : 'Upload a logo above to use this.' }}
-            </div>
-          </div>
+      </div>
+      <!-- Header display + custom header name — brief 80. Lives next to the
+           logo/favicon because it's a brand-identity choice. -->
+      <div class="ws-card">
+        <div class="ws-card__eyebrow">Header display</div>
+        <p class="ws-image-style__lede">
+          What shows in the public site header — just the logo, just the club name, or both side-by-side.
+          Logo-only modes need a logo uploaded above.
+        </p>
+        <div class="ws-image-style__grid">
           <button
+            v-for="option in headerDisplayOptions"
+            :key="option.value"
             type="button"
-            class="ws-switch"
-            :class="{ 'is-on': logoInHeader }"
-            :disabled="!brandLogoUrl"
-            @click="toggleLogoInHeader"
-          />
+            class="ws-image-style__card ws-header-display__card"
+            :class="{ 'is-active': headerDisplay === option.value }"
+            :disabled="headerDisplaySaving || (option.value !== 'name' && !brandLogoUrl)"
+            :title="option.value !== 'name' && !brandLogoUrl ? 'Upload a logo above to use this' : undefined"
+            @click="onHeaderDisplay(option.value)"
+          >
+            <div class="ws-header-display__preview" :data-display="option.value">
+              <div v-if="option.value !== 'name'" class="ws-header-display__logo">
+                <img v-if="brandLogoUrl" :src="brandLogoUrl" :alt="`${clubStore.current?.name ?? 'Club'} logo`" />
+                <span v-else>●</span>
+              </div>
+              <div v-if="option.value !== 'logo'" class="ws-header-display__name">
+                {{ headerName.trim() || clubStore.current?.name || 'Club name' }}
+              </div>
+            </div>
+            <div class="ws-image-style__meta">
+              <div class="ws-image-style__name">
+                {{ option.label }}
+                <span v-if="headerDisplay === option.value" class="ws-image-style__pill">Selected</span>
+              </div>
+              <div class="ws-image-style__sub">{{ option.sub }}</div>
+            </div>
+          </button>
+        </div>
+        <!-- Custom name override. Hidden in logo-only mode since the text wouldn't render anyway. -->
+        <div v-if="headerDisplay !== 'logo'" class="ws-header-name">
+          <label class="ws-header-name__label" for="ws-header-name">Display name</label>
+          <div class="ws-header-name__row">
+            <input
+              id="ws-header-name"
+              v-model="headerName"
+              type="text"
+              maxlength="80"
+              :placeholder="clubStore.current?.name ?? 'Club name'"
+              @keyup.enter="saveHeaderName"
+            />
+            <button
+              type="button"
+              class="ws-header-name__save"
+              :disabled="!headerNameDirty || headerNameSaving"
+              @click="saveHeaderName"
+            >
+              {{ headerNameSaving ? 'Saving…' : 'Save' }}
+            </button>
+          </div>
+          <div class="ws-header-name__hint">
+            Leave blank to use the official club name ({{ clubStore.current?.name ?? '—' }}). Max 80 characters.
+          </div>
         </div>
       </div>
       <div class="ws-card">
@@ -827,6 +968,55 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 .ws-brand-nav-toggle__copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .ws-brand-nav-toggle__title { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
 .ws-brand-nav-toggle__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); line-height: 1.4; }
+
+/* Header display picker — three option cards with a live preview of what
+   the public header will look like. Shares the ws-image-style__card shell
+   so both pickers feel consistent on the Brand tab. Brief 80. */
+.ws-header-display__preview {
+  aspect-ratio: auto;
+  height: 72px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 16px;
+  background: #fff;
+  border-radius: 10px;
+  margin: 10px 10px 0;
+  box-shadow: inset 0 0 0 1px var(--color-hairline);
+}
+.ws-header-display__preview[data-display="logo"] { justify-content: center; }
+.ws-header-display__logo {
+  width: 32px; height: 32px; border-radius: 8px; overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--color-surface);
+  color: var(--color-mute);
+  flex-shrink: 0;
+}
+.ws-header-display__logo img { width: 100%; height: 100%; object-fit: cover; }
+.ws-header-display__name {
+  font-family: var(--font-display, var(--font-body));
+  font-size: 15px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Custom display-name input. */
+.ws-header-name { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+.ws-header-name__label {
+  font-family: var(--font-body); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog);
+}
+.ws-header-name__row { display: flex; gap: 8px; align-items: stretch; }
+.ws-header-name__row input {
+  flex: 1; min-width: 0;
+  padding: 10px 14px; border: 1px solid var(--color-hairline); border-radius: 10px;
+  font-family: var(--font-body); font-size: 14px; color: var(--color-ink); background: #fff; outline: none;
+}
+.ws-header-name__row input:focus { border-color: var(--color-ink); }
+.ws-header-name__save {
+  padding: 10px 16px; background: var(--color-ink); color: #fff;
+  border: 0; border-radius: 999px; font-family: var(--font-body);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.ws-header-name__save:disabled { opacity: 0.4; cursor: not-allowed; }
+.ws-header-name__hint { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); line-height: 1.5; }
 
 /* Image-style picker — three option cards with a visual preview on top. */
 .ws-image-style__lede { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); line-height: 1.5; margin: 0 0 14px; }

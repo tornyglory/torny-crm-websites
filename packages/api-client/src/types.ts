@@ -120,10 +120,17 @@ export interface ClubNavigation {
   footer: NavItem[]
   /** When true, the public site header stays pinned to the viewport on scroll. */
   headerSticky?: boolean
-  /** When true, the public site header shows the club logo image in place
-   *  of the club name text. Falls back to the name when no logo is on
-   *  file. Admin sets this per brief 62. */
+  /** @deprecated Superseded by `headerDisplay` (brief 80). Still populated
+   *  for backward-compat with older backends; derive new UI from
+   *  `headerDisplay` and fall back to this when the enum is absent. */
   logoInHeader?: boolean
+  /** Custom text shown in the public site header. Null falls back to
+   *  `club.name`. Brief 80. */
+  headerName?: string | null
+  /** How the club's identity renders in the header. Brief 80. Defaults
+   *  to 'name' server-side. When absent (older backend), FE derives it
+   *  from `logoInHeader`. */
+  headerDisplay?: 'logo' | 'name' | 'both'
 }
 
 /**

@@ -885,10 +885,18 @@ export interface SiteHeaderProps {
   drawerOpen?: boolean
   /** When true, the header stays pinned to the top of the viewport on scroll. */
   sticky?: boolean
-  /** When true (and `club.logoUrl` is set), the header renders the logo
-   *  image in place of the club name text. Falls back to the standard
-   *  logo + name layout when no logo is on file. Brief 62. */
+  /** @deprecated Superseded by `headerDisplay` (brief 80). Still honoured
+   *  when `headerDisplay` is undefined: `logoOnly=true → 'logo'`,
+   *  else `'name'` (or `'both'` when `club.logoUrl` is present and the
+   *  consumer wants both — but that requires the new prop). */
   logoOnly?: boolean
+  /** Brief 80 — 'logo' | 'name' | 'both'. When set, takes precedence
+   *  over `logoOnly`. Falls back to the standard name-only layout when
+   *  the chosen mode isn't possible (e.g. `'logo'` without `logoUrl`). */
+  headerDisplay?: 'logo' | 'name' | 'both'
+  /** Override text shown in the header. Falls back to `club.name` when
+   *  null / undefined. Brief 80. */
+  headerName?: string | null
 }
 
 export interface SocialLink {

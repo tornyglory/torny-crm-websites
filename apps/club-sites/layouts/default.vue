@@ -34,7 +34,24 @@ const navLinks = computed<NavLink[]>(() => {
 })
 
 const headerSticky = computed<boolean>(() => Boolean(site.value?.club?.navigation?.headerSticky))
+/** @deprecated Legacy prop — pass `headerDisplay` instead. Kept here
+ *  as the fallback input to SiteHeader until every published site
+ *  rolls over. */
 const headerLogoOnly = computed<boolean>(() => Boolean(site.value?.club?.navigation?.logoInHeader))
+/** Brief 80 — honour the enum when the backend provides it, otherwise
+ *  the header component falls back to the legacy boolean via `logoOnly`. */
+const headerDisplay = computed<'logo' | 'name' | 'both' | undefined>(() => {
+  const nav = site.value?.club?.navigation as Record<string, unknown> | undefined
+  const raw = nav?.header_display ?? nav?.headerDisplay
+  if (raw === 'logo' || raw === 'name' || raw === 'both') return raw
+  return undefined
+})
+const headerName = computed<string | null>(() => {
+  const nav = site.value?.club?.navigation as Record<string, unknown> | undefined
+  const raw = nav?.header_name ?? nav?.headerName
+  if (typeof raw === 'string' && raw.trim().length > 0) return raw
+  return null
+})
 
 // Image treatment preset — brief 79. Drives the design-tokens image
 // vars (radius, filter, scrim, duotone overlay) via a single body
@@ -107,6 +124,8 @@ const legalLinks: NavLink[] = [
       :drawer-open="drawerOpen"
       :sticky="headerSticky"
       :logo-only="headerLogoOnly"
+      :header-display="headerDisplay"
+      :header-name="headerName"
       @toggle-drawer="drawerOpen = !drawerOpen"
     />
 

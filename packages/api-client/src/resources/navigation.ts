@@ -7,13 +7,21 @@ import type { NavItem } from '../types'
 
 export type { NavItem } from '../types'
 
+/** How the club's identity renders in the public site header. Brief 80. */
+export type HeaderDisplay = 'logo' | 'name' | 'both'
+
 export interface UpdateNavigationInput {
   header?: NavItem[] | null
   footer?: NavItem[] | null
   headerSticky?: boolean | null
-  /** Toggle rendering the uploaded logo image in place of the club name
-   *  text in the public site header. Brief 62. */
+  /** @deprecated Superseded by `headerDisplay` (brief 80). Still accepted
+   *  + echoed for one release so older FE builds keep working. */
   logoInHeader?: boolean | null
+  /** Override the name shown in the header. `null` falls back to `clubs.name`.
+   *  Max 80 chars; empty/whitespace is rejected (use `null` to clear). */
+  headerName?: string | null
+  /** 'logo' | 'name' | 'both'. Null is not valid — omit to leave unchanged. */
+  headerDisplay?: HeaderDisplay
 }
 
 export interface UpdateNavigationResponse {
@@ -22,6 +30,10 @@ export interface UpdateNavigationResponse {
   footer: NavItem[] | null
   headerSticky: boolean
   logoInHeader: boolean
+  /** Present once brief 80 ships; absent on older backends. */
+  headerName?: string | null
+  /** Present once brief 80 ships. Falls back to `logoInHeader ? 'logo' : 'name'`. */
+  headerDisplay?: HeaderDisplay
 }
 
 interface Envelope<T> {

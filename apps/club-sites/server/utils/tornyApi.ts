@@ -77,9 +77,13 @@ export interface SiteNavigation {
   header: SiteNavItem[]
   footer: SiteNavItem[]
   headerSticky?: boolean
-  /** When true, the public site header renders the club logo image in
-   *  place of the club name text. Brief 62. */
+  /** @deprecated Superseded by `header_display` (brief 80). Still honoured
+   *  as the fallback when the enum is absent. */
   logoInHeader?: boolean
+  /** Brief 80 — custom header name, falls back to `club.name` when null. */
+  header_name?: string | null
+  /** Brief 80 — 'logo' | 'name' | 'both'. */
+  header_display?: 'logo' | 'name' | 'both'
 }
 
 export interface SiteClub {

@@ -994,7 +994,7 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 .vb__total-label { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: var(--color-fog); text-transform: uppercase; }
 .vb__total-sub { font-family: var(--font-body); font-size: 11px; color: var(--color-fog); margin-top: 2px; }
 .vb__total-value { font-family: var(--font-display); font-size: 36px; font-weight: 700; letter-spacing: -0.01em; line-height: 1; }
-.vb__primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; background: var(--color-accent-strong, var(--color-ink)); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; }
+.vb__primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; background: var(--color-accent, var(--color-ink)); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; }
 .vb__primary:hover:not(:disabled) { background: var(--color-graphite); }
 .vb__primary:disabled { background: var(--color-mute); cursor: not-allowed; }
 .vb__secondary { padding: 12px 18px; background: transparent; border: 1px solid var(--color-hairline); color: var(--color-ink); border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 500; cursor: pointer; }

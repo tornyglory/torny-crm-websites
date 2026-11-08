@@ -376,7 +376,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 12px 20px;
   /* Admin-overridable (brief 81) — falls back to ink. */
-  background: var(--color-accent-strong, var(--color-ink));
+  background: var(--color-accent, var(--color-ink));
   color: var(--color-ground);
   font-size: 14px;
   font-weight: var(--weight-semibold);

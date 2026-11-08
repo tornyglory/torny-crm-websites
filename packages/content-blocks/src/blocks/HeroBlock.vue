@@ -201,7 +201,7 @@ function initialsFor(name: string, initials?: string): string {
   gap: 8px;
   padding: 16px 26px;
   /* Admin-overridable (brief 81) — falls back to ink. */
-  background: var(--color-accent-strong, var(--color-ink));
+  background: var(--color-accent, var(--color-ink));
   color: var(--color-ground);
   border-radius: var(--btn-radius);
   font-family: var(--font-body);

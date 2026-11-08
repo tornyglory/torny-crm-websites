@@ -163,7 +163,7 @@ function initialsFor(name: string, initials?: string): string {
 .vhh__stat-label { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: var(--color-fog); text-transform: uppercase; }
 
 .vhh__actions { display: flex; flex-direction: row; align-items: center; gap: 20px; margin-top: 8px; }
-.vhh__primary { display: inline-flex; align-items: center; gap: 10px; padding: 16px 28px; background: var(--color-accent-strong, var(--color-ink)); color: #fff; border-radius: 999px; font-family: var(--font-body); font-size: 15px; font-weight: 600; text-decoration: none; transition: filter 120ms; }
+.vhh__primary { display: inline-flex; align-items: center; gap: 10px; padding: 16px 28px; background: var(--color-accent, var(--color-ink)); color: #fff; border-radius: 999px; font-family: var(--font-body); font-size: 15px; font-weight: 600; text-decoration: none; transition: filter 120ms; }
 .vhh__primary:hover { filter: brightness(0.92); }
 .vhh__secondary { font-family: var(--font-body); font-size: 14px; font-weight: 500; color: var(--color-graphite); text-decoration: underline; text-underline-offset: 4px; }
 .vhh__secondary:hover { color: var(--color-ink); }

@@ -208,12 +208,15 @@ async function onHeaderDisplay(next: HeaderDisplayOption) {
       // Remove once brief 80's validator relaxation ships.
       headerSticky: headerSticky.value,
     })
+    // Backend may not echo the brief 80 fields yet. Trust our submitted
+    // value in that case so the picker + store stay in sync.
+    const echoedName: string | null | undefined = 'headerName' in res ? res.headerName : undefined
     clubStore.setNavigation({
       header: res.header ?? DEFAULT_HEADER,
       footer: res.footer ?? DEFAULT_FOOTER,
       headerSticky: res.headerSticky,
       logoInHeader: res.logoInHeader,
-      headerName: res.headerName ?? null,
+      headerName: echoedName !== undefined ? echoedName : (headerName.value.trim() || null),
       headerDisplay: res.headerDisplay ?? next,
     })
     logoInHeader.value = res.logoInHeader
@@ -235,9 +238,9 @@ async function saveHeaderName() {
     return
   }
   const trimmed = headerName.value.trim()
+  const desired: string | null = trimmed.length === 0 ? null : trimmed
   const payload: Parameters<typeof navigationApi.updateForClub>[1] = {
-    // null clears — fall back to club.name on the public site.
-    headerName: trimmed.length === 0 ? null : trimmed,
+    headerName: desired,
     // Workaround for brief 25's "at least one of header / footer /
     // headerSticky" validator — see onHeaderDisplay for the rationale.
     headerSticky: headerSticky.value,
@@ -245,17 +248,24 @@ async function saveHeaderName() {
   headerNameSaving.value = true
   try {
     const res = await navigationApi.updateForClub(clubId, payload)
+    // Backend may not echo the brief 80 fields yet. When `headerName` is
+    // absent from the response, trust the value we just submitted so the
+    // input + store stay in sync (hard refresh will still reset until
+    // the backend ships).
+    const echoedName: string | null | undefined = 'headerName' in res ? res.headerName : undefined
+    const persistedName: string | null = echoedName !== undefined ? echoedName : desired
+    const echoedDisplay = (res.headerDisplay ?? headerDisplay.value)
     clubStore.setNavigation({
       header: res.header ?? DEFAULT_HEADER,
       footer: res.footer ?? DEFAULT_FOOTER,
       headerSticky: res.headerSticky,
       logoInHeader: res.logoInHeader,
-      headerName: res.headerName ?? null,
-      headerDisplay: res.headerDisplay ?? headerDisplay.value,
+      headerName: persistedName,
+      headerDisplay: echoedDisplay,
     })
-    headerName.value = res.headerName ?? ''
-    headerNameInitial.value = res.headerName ?? ''
-    toast.success(trimmed ? `Header name saved.` : 'Using the club name.')
+    headerName.value = persistedName ?? ''
+    headerNameInitial.value = persistedName ?? ''
+    toast.success(desired ? 'Header name saved.' : 'Using the club name.')
   } catch (err) {
     const msg = err instanceof ApiError ? err.message : 'Could not save header name.'
     toast.error(msg)

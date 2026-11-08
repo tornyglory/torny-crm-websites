@@ -150,9 +150,3 @@ Pass criteria:
 - **No Site Style additions.** The five presets stay as they are.
 - **No new image-radius picker.** The whole point is one knob per concern.
 - **No CRM UI changes beyond copy.** The Site Style and Image Style cards stay in place; I'll just update the lede copy on the Image Style picker so admins know it only touches tone/overlay now.
-
----
-
-## 6. Contact
-
-FE-only change — no backend ship needed. Will land as a single commit from Felicity's side.

@@ -123,7 +123,7 @@ const year = new Date().getFullYear()
         <span class="site-footer__powered-mark">
           <span class="site-footer__powered-dot" />
           <span class="site-footer__powered-wordmark">Torny</span>
-          <span class="site-footer__powered-tag">CRM</span>
+          <span class="site-footer__powered-tag">OS</span>
         </span>
       </div>
     </div>

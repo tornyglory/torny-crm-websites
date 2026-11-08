@@ -149,6 +149,7 @@ const legalLinks: NavLink[] = [
       :columns="footerColumns"
       :contact="footerContact"
       :legal-links="legalLinks"
+      :header-name="headerName"
     />
   </div>
 </template>

@@ -932,4 +932,8 @@ export interface SiteFooterProps {
   legalLinks?: NavLink[]
   /** Show the "Powered by Torny" mark. Defaults to true. */
   poweredBy?: boolean
+  /** Admin-picked display name — same value the header uses. Falls back
+   *  to `club.name` when null/undefined. Keeps the footer in sync with
+   *  whatever the admin set in Settings → Brand → Display name. */
+  headerName?: string | null
 }

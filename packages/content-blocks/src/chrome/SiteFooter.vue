@@ -6,9 +6,16 @@ const props = withDefaults(defineProps<SiteFooterProps>(), {
   poweredBy: true,
 })
 
+/** Display name — honours the admin's custom override (same value the
+ *  SiteHeader uses). Falls back to the canonical club name when unset. */
+const displayName = computed<string>(() => {
+  const override = (props.headerName ?? '').trim()
+  return override || props.club.name
+})
+
 const initials = computed(() => {
   if (props.club.initials) return props.club.initials
-  return props.club.name
+  return displayName.value
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 3)
@@ -25,11 +32,11 @@ const year = new Date().getFullYear()
       <div class="site-footer__brand-col">
         <div class="site-footer__brand">
           <span v-if="club.logoUrl" class="site-footer__logo-wrap">
-            <img :src="club.logoUrl" :alt="`${club.name} logo`" class="site-footer__logo" />
+            <img :src="club.logoUrl" :alt="`${displayName} logo`" class="site-footer__logo" />
           </span>
           <span v-else class="site-footer__chip">{{ initials }}</span>
           <div class="site-footer__brand-text">
-            <span class="site-footer__name">{{ club.name }}</span>
+            <span class="site-footer__name">{{ displayName }}</span>
             <span v-if="club.strapline" class="site-footer__strapline">{{ club.strapline }}</span>
           </div>
         </div>
@@ -100,7 +107,7 @@ const year = new Date().getFullYear()
 
     <div class="site-footer__bottom">
       <div class="site-footer__legal">
-        <span>© {{ year }} {{ club.name }}</span>
+        <span>© {{ year }} {{ displayName }}</span>
         <template v-if="legalLinks && legalLinks.length">
           <span class="site-footer__legal-sep" aria-hidden="true" />
           <a

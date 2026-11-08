@@ -21,7 +21,7 @@
 - One new read: `GET /clubs/{cid}/billing/status` returning the subscription state for the Settings → Billing UI.
 - Webhook `/stripe/webhook/platform` handles subscription events: `customer.subscription.created`, `.updated`, `.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`, `customer.subscription.trial_will_end`.
 - **Plan derivation rule:** `clubs.plan` = whatever tier the subscription says when `subscription_status ∈ ('trialing','active','past_due')`; else `'starter'`. Phase 1's superadmin PATCH stays as a manual override but is now informational only — real lifecycle is Stripe-driven.
-- 14-day free trial on first subscription. Card captured up front; charged on day 15 unless cancelled.
+- 30-day free trial on first subscription. Card captured up front; charged on day 31 unless cancelled.
 
 ---
 
@@ -105,7 +105,7 @@ Validation:
    customer: <club.stripe_customer_id>
    line_items: [{ price: <PRICE_ID_FOR_PLAN>, quantity: 1 }]
    subscription_data: {
-     trial_period_days: 14,               // only applies on FIRST subscription
+     trial_period_days: 30,               // only applies on FIRST subscription
      metadata: { torny_club_id, plan_key: 'pro' }
    }
    success_url + cancel_url from the request body
@@ -218,7 +218,7 @@ Brief 72 established a `/stripe/webhook/platform` endpoint for Connect events. R
 
 | event.type | behaviour |
 |---|---|
-| `customer.subscription.created` | First-time subscription. Store `stripe_subscription_id`, `subscription_status` (= `trialing` on day 1 since we set `trial_period_days=14`), `current_period_end`, `trial_ends_at`. Derive plan from the subscription's price ID; store on `clubs.plan`. |
+| `customer.subscription.created` | First-time subscription. Store `stripe_subscription_id`, `subscription_status` (= `trialing` on day 1 since we set `trial_period_days=30`), `current_period_end`, `trial_ends_at`. Derive plan from the subscription's price ID; store on `clubs.plan`. |
 | `customer.subscription.updated` | Plan swap or renewal. Re-derive plan from current price ID; refresh `subscription_status`, `current_period_end`. Fire an email to the admin: "You've upgraded to Pro" or "You've downgraded to Starter (effective {date})". |
 | `customer.subscription.deleted` | Final cancellation (after any cancel_at_period_end has elapsed). Set `subscription_status = 'canceled'`, keep `stripe_subscription_id` for history. Derive plan → falls back to `starter` since status isn't active. |
 | `invoice.payment_succeeded` | Routine monthly charge. Mostly informational; if `subscription_status` was `past_due`, flip back to `active`. Fire a receipt email with the Stripe-hosted invoice URL. |

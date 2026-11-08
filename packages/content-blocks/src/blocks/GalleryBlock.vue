@@ -41,12 +41,13 @@ const TONE_MAP: Record<PeopleGridTone, string> = {
 }
 const TONE_KEYS: PeopleGridTone[] = ['sky', 'tangerine', 'accent', 'ink', 'mint', 'violet']
 
+/** Split tile background: image goes on --tile-image (consumed by
+ *  .gal__tile::before so the image-style filter can run on just that
+ *  layer); gradient fallback stays on the element. Brief 79. */
 function tileStyle(img: GalleryImage, index: number): Record<string, string> {
   const styles: Record<string, string> = {}
   if (img.url) {
-    styles.backgroundImage = `url("${img.url}")`
-    styles.backgroundSize = 'cover'
-    styles.backgroundPosition = 'center'
+    styles['--tile-image'] = `url("${img.url}")`
   } else {
     const tone = img.tone ?? TONE_KEYS[index % TONE_KEYS.length]!
     styles.background = TONE_MAP[tone] ?? TONE_MAP.accent!
@@ -123,7 +124,28 @@ function tileStyle(img: GalleryImage, index: number): Record<string, string> {
 /* Grid — 3 columns with 220px min rows. Wide tiles span 2 columns, tall
    tiles span 2 rows; both flag together = huge feature. */
 .gal__grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 220px; gap: 16px; }
-.gal__tile { position: relative; border-radius: 14px; overflow: hidden; background: var(--color-surface); }
+.gal__tile { position: relative; border-radius: var(--image-radius-md, 14px); overflow: hidden; background: var(--color-surface); box-shadow: var(--image-ring, none); }
+/* Image on a pseudo so --image-filter can run without affecting the
+   caption. Brief 79. */
+.gal__tile::before {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background-image: var(--tile-image, none);
+  background-size: cover;
+  background-position: center;
+  filter: var(--image-filter, none);
+  pointer-events: none;
+}
+/* Archive duotone overlay — invisible for Soft + Studio. */
+.gal__tile::after {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background: var(--image-overlay-color, transparent);
+  mix-blend-mode: color;
+  opacity: var(--image-overlay-opacity, 0);
+  pointer-events: none;
+}
+.gal__tile > * { position: relative; z-index: 1; }
 .gal__tile--wide { grid-column: span 2; }
 .gal__tile--tall { grid-row: span 2; }
 

@@ -382,7 +382,7 @@ function initialsFor(name: string, initials?: string): string {
   overflow: hidden;
   flex-shrink: 0;
 }
-.hero__quote-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.hero__quote-avatar img { width: 100%; height: 100%; object-fit: cover; filter: var(--image-filter, none); }
 .hero__quote-meta { display: flex; flex-direction: column; gap: 2px; }
 .hero__quote-author { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: #fff; }
 .hero__quote-role {

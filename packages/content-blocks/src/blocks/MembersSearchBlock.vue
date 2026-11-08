@@ -324,7 +324,7 @@ function avatarPalette(m: PublicMember) {
 .mc:hover { transform: translateY(-2px); border-color: transparent; box-shadow: 0 10px 30px color-mix(in oklab, var(--mc-ring, var(--brand)) 22%, transparent); }
 
 .mc__avatar { width: 72px; height: 72px; border-radius: 999px; overflow: hidden; background-image: linear-gradient(160deg, var(--mc-from, #F5A623) 0%, var(--mc-to, #E85D5D) 100%); box-shadow: 0 4px 12px color-mix(in oklab, var(--mc-ring, #F5A623) 30%, transparent); display: inline-flex; align-items: center; justify-content: center; color: #fff; font-family: var(--font-display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
-.mc__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mc__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; filter: var(--image-filter, none); }
 
 .mc__name { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.01em; margin-top: 8px; }
 .mc__title { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); margin-top: -2px; }

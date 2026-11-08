@@ -42,12 +42,17 @@ const TONE_GRADIENTS: Record<VenueTone, string> = {
   violet:    'linear-gradient(160deg, #7C3AED, #4C1D95)',
   sky:       'linear-gradient(160deg, #98D8E8, #4A90A4)',
 }
+/** Split the card background into:
+ *  - a fallback `background` on the element (gradient when no image)
+ *  - a `--card-image` CSS var consumed by `.vhh__card::before`, which
+ *    layers the image under the text + takes the `--image-filter` and
+ *    Archive duotone overlay from the design tokens (brief 79).
+ *  Putting the image on a pseudo lets us filter it without washing out
+ *  the overlaid text + CTAs. */
 const cardStyle = computed<Record<string, string>>(() => {
   const out: Record<string, string> = {}
   if (props.cardImageUrl) {
-    out.backgroundImage = `linear-gradient(160deg, rgba(0,0,0,0.15), rgba(0,0,0,0.35)), url("${props.cardImageUrl}")`
-    out.backgroundSize = 'cover'
-    out.backgroundPosition = 'center'
+    out['--card-image'] = `linear-gradient(160deg, rgba(0,0,0,0.15), rgba(0,0,0,0.35)), url("${props.cardImageUrl}")`
   } else {
     out.background = TONE_GRADIENTS[props.cardTone] ?? TONE_GRADIENTS.tangerine!
   }
@@ -165,6 +170,28 @@ function initialsFor(name: string, initials?: string): string {
 
 /* Right feature card */
 .vhh__card { position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 32px; border-radius: 20px; overflow: hidden; color: #fff; min-height: 480px; }
+/* Image layered behind the card content — filter targets only this
+   layer, leaving the overlaid text + CTAs untouched. Brief 79. */
+.vhh__card::before {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background-image: var(--card-image, none);
+  background-size: cover;
+  background-position: center;
+  filter: var(--image-filter, none);
+  pointer-events: none;
+}
+/* Archive duotone overlay — invisible for Soft + Studio. */
+.vhh__card::after {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background: var(--image-overlay-color, transparent);
+  mix-blend-mode: color;
+  opacity: var(--image-overlay-opacity, 0);
+  pointer-events: none;
+}
+/* Stack the actual card body above the image + duotone layers. */
+.vhh__card > * { position: relative; z-index: 1; }
 .vhh__card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .vhh__card-eyebrow { display: inline-flex; align-items: center; gap: 10px; padding: 6px 14px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.14); border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #fff; }
 .vhh__card-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--brand); }
@@ -174,7 +201,7 @@ function initialsFor(name: string, initials?: string): string {
 .vhh__quote-body { font-family: var(--font-body); font-size: 14px; line-height: 155%; color: #fff; margin: 0; }
 .vhh__quote-foot { display: flex; align-items: center; gap: 12px; }
 .vhh__quote-avatar { width: 32px; height: 32px; border-radius: 999px; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 12px; font-weight: 700; overflow: hidden; flex-shrink: 0; }
-.vhh__quote-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.vhh__quote-avatar img { width: 100%; height: 100%; object-fit: cover; filter: var(--image-filter, none); }
 .vhh__quote-meta { display: flex; flex-direction: column; gap: 2px; }
 .vhh__quote-author { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: #fff; }
 .vhh__quote-role { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: rgba(255,255,255,0.7); text-transform: uppercase; }

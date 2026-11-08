@@ -102,7 +102,7 @@ const showAuthor = computed(() => Boolean(props.authorName || props.authorRole))
   overflow: hidden;
   flex-shrink: 0;
 }
-.pq__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.pq__avatar img { width: 100%; height: 100%; object-fit: cover; filter: var(--image-filter, none); }
 
 .pq__author-text {
   display: flex;

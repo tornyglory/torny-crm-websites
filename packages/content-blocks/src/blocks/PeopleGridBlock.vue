@@ -135,7 +135,7 @@ function toneStyle(p: PeopleGridPerson, index: number): { background: string; co
   flex-shrink: 0;
   margin-bottom: 4px;
 }
-.pg__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.pg__avatar img { width: 100%; height: 100%; object-fit: cover; filter: var(--image-filter, none); }
 .pg__name { font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; color: var(--color-ink); line-height: 1.15; }
 .pg__role { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-fog); }
 .pg__body { font-family: var(--font-body); font-size: 14px; line-height: 155%; color: var(--color-graphite); margin: 4px 0 0; }

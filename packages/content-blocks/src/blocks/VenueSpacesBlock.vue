@@ -39,12 +39,13 @@ const TONE_GRADIENTS: Record<VenueTone, string> = {
 }
 const TONE_ROTATION: VenueTone[] = ['tangerine', 'mint', 'ink', 'violet', 'sky', 'accent']
 
+/** Image goes on --slab-image so it can be filtered via a ::before
+ *  pseudo without affecting the slab's children. Gradient fallback
+ *  stays on the element. Brief 79. */
 function slabStyle(space: VenueSpaceItem, index: number): Record<string, string> {
   const out: Record<string, string> = {}
   if (space.imageUrl) {
-    out.backgroundImage = `linear-gradient(160deg, rgba(0,0,0,0.05), rgba(0,0,0,0.28)), url("${space.imageUrl}")`
-    out.backgroundSize = 'cover'
-    out.backgroundPosition = 'center'
+    out['--slab-image'] = `linear-gradient(160deg, rgba(0,0,0,0.05), rgba(0,0,0,0.28)), url("${space.imageUrl}")`
   } else {
     const tone = space.tone ?? TONE_ROTATION[index % TONE_ROTATION.length]!
     out.background = TONE_GRADIENTS[tone] ?? TONE_GRADIENTS.tangerine!
@@ -136,7 +137,26 @@ function slabStyle(space: VenueSpaceItem, index: number): Record<string, string>
 .vs__grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
 
 .vs__card { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--color-hairline); border-radius: 20px; overflow: hidden; }
-.vs__slab { position: relative; aspect-ratio: 4 / 3; padding: 20px; display: flex; align-items: flex-start; justify-content: flex-end; }
+.vs__slab { position: relative; aspect-ratio: 4 / 3; padding: 20px; display: flex; align-items: flex-start; justify-content: flex-end; overflow: hidden; }
+/* Image layered behind the slab's children — brief 79. */
+.vs__slab::before {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background-image: var(--slab-image, none);
+  background-size: cover;
+  background-position: center;
+  filter: var(--image-filter, none);
+  pointer-events: none;
+}
+.vs__slab::after {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background: var(--image-overlay-color, transparent);
+  mix-blend-mode: color;
+  opacity: var(--image-overlay-opacity, 0);
+  pointer-events: none;
+}
+.vs__slab > * { position: relative; z-index: 1; }
 .vs__badge { padding: 6px 12px; background: #fff; color: var(--color-ink); border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
 
 .vs__body { display: flex; flex-direction: column; gap: 16px; padding: 24px; }

@@ -284,7 +284,7 @@ function goingLabel(e: EventEntry): string {
 .ec__avatars { display: inline-flex; align-items: center; }
 .ec__avatar { width: 24px; height: 24px; border-radius: 999px; border: 2px solid #fff; background: var(--color-hairline); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 9px; font-weight: 700; margin-left: -6px; overflow: hidden; box-sizing: border-box; }
 .ec__avatar:first-child { margin-left: 0; }
-.ec__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ec__avatar img { width: 100%; height: 100%; object-fit: cover; filter: var(--image-filter, none); }
 .ec__going { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-graphite); flex: 1; }
 .ec__rsvp { font-family: var(--font-body); font-size: 12px; font-weight: 700; color: var(--color-ink); text-decoration: underline; text-underline-offset: 3px; }
 .ec:hover .ec__rsvp { color: var(--ec-hue, var(--color-ink)); }

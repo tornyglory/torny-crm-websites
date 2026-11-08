@@ -187,7 +187,7 @@ const hasFooter = computed(() =>
 .vp__footer-cta:hover { background: var(--color-graphite); }
 .vp__footer-person { display: flex; align-items: center; gap: 10px; }
 .vp__footer-avatar { width: 40px; height: 40px; border-radius: 999px; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 12px; font-weight: 700; overflow: hidden; flex-shrink: 0; }
-.vp__footer-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.vp__footer-avatar img { width: 100%; height: 100%; object-fit: cover; filter: var(--image-filter, none); }
 .vp__footer-name-block { display: flex; flex-direction: column; }
 .vp__footer-name { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }
 .vp__footer-role { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--color-fog); text-transform: uppercase; }

@@ -1016,7 +1016,7 @@ function spotsTaken(e: EventEntry): number {
 .evd__meta-row { display: flex; align-items: center; gap: 10px; font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); }
 .evd__meta-row svg { flex-shrink: 0; color: var(--color-fog); }
 .evd__host-avatar { width: 20px; height: 20px; border-radius: 999px; overflow: hidden; flex-shrink: 0; }
-.evd__host-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.evd__host-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; filter: var(--image-filter, none); }
 
 .evd__excerpt { font-family: var(--font-body); font-size: 14px; line-height: 1.55; color: var(--color-ink); margin: 20px 0; }
 
@@ -1028,7 +1028,7 @@ function spotsTaken(e: EventEntry): number {
 .evd__avatars { display: inline-flex; align-items: center; }
 .evd__avatar { width: 28px; height: 28px; border-radius: 999px; border: 2px solid #fff; background: var(--color-hairline); color: var(--color-graphite); display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 10px; font-weight: 700; margin-left: -8px; overflow: hidden; box-sizing: border-box; }
 .evd__avatar:first-child { margin-left: 0; }
-.evd__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.evd__avatar img { width: 100%; height: 100%; object-fit: cover; filter: var(--image-filter, none); }
 
 .evd__foot { display: flex; gap: 10px; justify-content: flex-end; }
 .evd__btn { padding: 10px 18px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; }

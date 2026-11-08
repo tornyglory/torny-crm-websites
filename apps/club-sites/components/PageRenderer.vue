@@ -76,16 +76,21 @@ provide(BLOCK_CONTEXT_KEY, computed<BlockContext>(() => ({
 .page-blocks {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  /* Same padding formula as the site header/footer + full-bleed blocks.
-     Below viewport (--container-content) + 96px, minimum 48px gutter (matches nav).
-     Above that, grows to keep content centered on a 1280px column. This aligns
-     every non-full-bleed block (Rich text, Gallery, Contact form, etc.) with
-     the nav content edges automatically. */
-  padding: 40px max(48px, calc((100vw - var(--container-content, 1280px)) / 2)) 80px;
+  /* Blocks stack flush — each block paints its own full-width background
+     via the standard width: 100vw + margin-left: calc(50% - 50vw) escape,
+     so there's no visual seam between consecutive sections even when
+     they have different background tokens. In-flow blocks that DON'T
+     escape (RichText, etc.) get the shared horizontal gutter from the
+     padding below. */
+  gap: 0;
+  /* Container background matches the ground token so any leftover
+     vertical space (e.g. above the first block on a short page) reads
+     as the theme colour rather than browser white. */
+  background: var(--color-ground);
+  padding: 0 max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
 }
-/* When the page opens with a full-bleed hero (fullBleedMedia, hero,
- * venueHireHero, …), drop the top padding so the media sits flush
- * against the site header. */
+/* Top-padding is zero by default so flush-top (hero) pages work; a page
+   with no hero gets its own breathing room from the first block's own
+   padding. */
 .page-blocks--flush-top { padding-top: 0; }
 </style>

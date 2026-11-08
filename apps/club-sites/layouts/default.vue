@@ -158,10 +158,15 @@ const legalLinks: NavLink[] = [
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  /* Theme-aware page background — picks up the colour-scheme's ground
+     token so any space between blocks (including the layout's own
+     margins) matches the chosen theme instead of browser default white. */
+  background: var(--color-ground);
 }
 
 .site__main {
   flex: 1;
   width: 100%;
+  background: var(--color-ground);
 }
 </style>

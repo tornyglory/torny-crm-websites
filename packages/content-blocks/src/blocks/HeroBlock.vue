@@ -286,6 +286,16 @@ function initialsFor(name: string, initials?: string): string {
   height: 100%;
   object-fit: cover;
   z-index: 0;
+  filter: var(--image-filter, none);
+}
+/* Archive duotone overlay (brief 79) — invisible for Soft + Studio. */
+.hero__col--media::after {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background: var(--image-overlay-color, transparent);
+  mix-blend-mode: color;
+  opacity: var(--image-overlay-opacity, 0);
+  pointer-events: none;
 }
 
 /* Head — eyebrow chip left, badge pill right. */

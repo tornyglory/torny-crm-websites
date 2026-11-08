@@ -59,6 +59,17 @@ const overlayStyle = computed(() => ({
   height: 100%;
   object-fit: cover;
   z-index: 0;
+  filter: var(--image-filter, none);
+}
+/* Archive-style duotone overlay (brief 79). Soft + Studio leave
+   `--image-overlay-color` transparent so this layer is invisible. */
+.fbi::before {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background: var(--image-overlay-color, transparent);
+  mix-blend-mode: color;
+  opacity: var(--image-overlay-opacity, 0);
+  pointer-events: none;
 }
 .fbi__overlay {
   position: absolute;

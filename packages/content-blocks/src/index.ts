@@ -35,5 +35,6 @@ export { default as SiteFooter } from './chrome/SiteFooter.vue'
 
 // Shared primitives.
 export { default as Skeleton } from './components/Skeleton.vue'
+export { default as TornyImage } from './components/TornyImage.vue'
 
 export * from './types'

@@ -89,9 +89,11 @@ const bgClass = computed(() => (props.background === 'surface' ? 'ms--bg-surface
   flex-shrink: 0;
   width: 560px;
   height: 480px;
-  border-radius: 24px;
+  /* Image-style preset drives the radius — Soft 16, Studio 8, Archive 12. */
+  border-radius: var(--image-radius-lg, 24px);
   overflow: hidden;
   background: linear-gradient(160deg, #B0E0E6 0%, #87CEEB 60%, #4A90A4 100%);
+  box-shadow: var(--image-ring, none);
 }
 .ms__media-image {
   position: absolute;
@@ -99,6 +101,16 @@ const bgClass = computed(() => (props.background === 'surface' ? 'ms--bg-surface
   width: 100%;
   height: 100%;
   object-fit: cover;
+  filter: var(--image-filter, none);
+}
+/* Archive duotone overlay (brief 79). */
+.ms__media::after {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background: var(--image-overlay-color, transparent);
+  mix-blend-mode: color;
+  opacity: var(--image-overlay-opacity, 0);
+  pointer-events: none;
 }
 
 .ms__caption,

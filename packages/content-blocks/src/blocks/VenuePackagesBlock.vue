@@ -183,7 +183,7 @@ const hasFooter = computed(() =>
 .vp__footer-eyebrow { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: var(--color-fog); text-transform: uppercase; }
 .vp__footer-text { font-family: var(--font-body); font-size: 14px; color: var(--color-ink); margin: 0; line-height: 150%; }
 .vp__footer-actions { display: flex; align-items: center; gap: 20px; flex-shrink: 0; }
-.vp__footer-cta { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; background: var(--color-ink); color: #fff; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; text-decoration: none; }
+.vp__footer-cta { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; background: var(--color-accent-strong, var(--color-ink)); color: #fff; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; text-decoration: none; }
 .vp__footer-cta:hover { background: var(--color-graphite); }
 .vp__footer-person { display: flex; align-items: center; gap: 10px; }
 .vp__footer-avatar { width: 40px; height: 40px; border-radius: 999px; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 12px; font-weight: 700; overflow: hidden; flex-shrink: 0; }

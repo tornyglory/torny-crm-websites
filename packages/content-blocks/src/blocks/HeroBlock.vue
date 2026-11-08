@@ -200,7 +200,8 @@ function initialsFor(name: string, initials?: string): string {
   align-items: center;
   gap: 8px;
   padding: 16px 26px;
-  background: var(--color-ink);
+  /* Admin-overridable (brief 81) — falls back to ink. */
+  background: var(--color-accent-strong, var(--color-ink));
   color: var(--color-ground);
   border-radius: var(--btn-radius);
   font-family: var(--font-body);
@@ -211,9 +212,7 @@ function initialsFor(name: string, initials?: string): string {
   text-decoration: none;
   transition: background-color 0.15s ease;
 }
-.hero__cta-primary:hover {
-  background: var(--color-graphite);
-}
+.hero__cta-primary:hover { filter: brightness(0.92); }
 .hero__cta-secondary {
   display: inline-flex;
   align-items: center;

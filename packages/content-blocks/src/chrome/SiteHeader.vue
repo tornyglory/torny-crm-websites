@@ -375,14 +375,17 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 12px 20px;
-  background: var(--color-ink);
+  /* Admin-overridable (brief 81) — falls back to ink. */
+  background: var(--color-accent-strong, var(--color-ink));
   color: var(--color-ground);
   font-size: 14px;
   font-weight: var(--weight-semibold);
   letter-spacing: -0.005em;
   border-radius: var(--radius-pill);
   text-decoration: none;
+  transition: filter 120ms ease;
 }
+.site-header__cta:hover { filter: brightness(0.92); }
 
 .site-header__menu {
   display: none;

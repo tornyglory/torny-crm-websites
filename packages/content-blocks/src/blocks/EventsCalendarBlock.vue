@@ -1032,7 +1032,7 @@ function spotsTaken(e: EventEntry): number {
 
 .evd__foot { display: flex; gap: 10px; justify-content: flex-end; }
 .evd__btn { padding: 10px 18px; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; border: 0; }
-.evd__btn--primary { background: var(--color-ink); color: #fff; }
+.evd__btn--primary { background: var(--color-accent-strong, var(--color-ink)); color: #fff; }
 .evd__btn--primary:hover { background: var(--color-graphite); }
 .evd__btn--ghost { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 .evd__btn--ghost:hover { background: var(--color-surface); }

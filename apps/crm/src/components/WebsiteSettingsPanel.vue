@@ -159,8 +159,18 @@ async function onImageStyle(next: ImageStyleOption) {
   // Optimistic — surface flips immediately.
   clubStore.setBrandAssets({ imageStyle: next })
   imageStyleSaving.value = true
+  // Workaround for brief 24's "at least one of logo_url / favicon_url"
+  // validator — echo back the current URLs alongside image_style so the
+  // body satisfies the rule. Repeated-same-value is a no-op on the
+  // backend. Remove once brief 79's validator relaxation ships.
+  const currentLogo = clubStore.current?.logoUrl ?? null
+  const currentFavicon = clubStore.current?.faviconUrl ?? null
   try {
-    const res = await clubs.updateBrandAssets(clubId, { image_style: next })
+    const res = await clubs.updateBrandAssets(clubId, {
+      image_style: next,
+      logo_url: currentLogo,
+      favicon_url: currentFavicon,
+    })
     clubStore.setBrandAssets({
       logoUrl: res.logo_url,
       faviconUrl: res.favicon_url,

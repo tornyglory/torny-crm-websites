@@ -34,6 +34,14 @@ Backfill: `UPDATE clubs_data SET image_style = 'soft' WHERE image_style IS NULL`
 
 ## 2. `PATCH /clubs/{cid}/brand-assets`
 
+### ⚠️ Relax the "at least one of logo_url / favicon_url" rule
+
+Brief 24 added a guard: the PATCH body must contain at least one of `logo_url` or `favicon_url`. That rule now needs to accept `image_style` too — otherwise a style-only patch is rejected with 400 "at least one of logo_url or favicon_url is required." Update the check to:
+
+> At least one of `logo_url`, `favicon_url`, or `image_style` must be present.
+
+Until this ships, the FE sends the current `logo_url` + `favicon_url` alongside every `image_style` change as a no-op workaround. Shipping the validator change removes the workaround — see commit log on the FE.
+
 ### Request — add `image_style` as an optional field
 
 ```jsonc

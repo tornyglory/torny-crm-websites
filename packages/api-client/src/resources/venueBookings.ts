@@ -162,8 +162,9 @@ export interface VenueBookingDeleteResult {
   already_deleted?: boolean
 }
 
-/** Error codes brief 62 §1-§5. Lets the CRM switch on code and map to
- *  user-friendly toasts rather than parse raw error messages. */
+/** Error codes brief 62 §1-§5 + brief 85 §4. Lets the CRM switch on
+ *  code and map to user-friendly toasts rather than parse raw error
+ *  messages. */
 export type VenueBookingErrorCode =
   | 'bad_full_name'
   | 'bad_email'
@@ -179,6 +180,23 @@ export type VenueBookingErrorCode =
   | 'bad_status_transition'
   | 'forbidden'
   | 'not_found'
+  /** Slot is at capacity for the requested date — brief 85 §4. Fires on
+   *  both `/checkout` and the direct submit when live bookings for
+   *  `(slot_id, booking_date)` have hit the slot's `max_bookings`. The
+   *  response carries `data: SlotUnavailableData` so the FE can tell
+   *  the renter which slot + date + capacity blocked the booking. */
+  | 'slot_unavailable'
+
+/** The `data` block on a 409 `slot_unavailable`. Brief 85 §4. */
+export interface SlotUnavailableData {
+  slot_id: number
+  /** `YYYY-MM-DD` — the booking date that's full. */
+  date: string
+  /** The slot's current `max_bookings` — rendered in the "already
+   *  booked" copy so the renter understands how many simultaneous
+   *  bookings the venue allows. */
+  capacity: number
+}
 
 interface Envelope<T> {
   status: 'success'

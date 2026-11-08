@@ -50,6 +50,12 @@ export interface VenueSlot {
   default_start_time?: string | null
   is_disabled?: boolean
   display_order?: number
+  /** Simultaneous bookings per date — brief 85. Integer 1..999. Omit =
+   *  server default (1). Lower bound enforced at the handler; passing
+   *  `null` is rejected (`bad_max_bookings`). Lowering below the live
+   *  booking count on any future date fails with `below_current_count`
+   *  + the conflicts block described in `BelowCurrentCountData`. */
+  max_bookings?: number
 }
 
 /** Add-on — an optional extra attached to a slot. */
@@ -138,8 +144,9 @@ export interface ListVenuePackagesParams {
   search?: string
 }
 
-/** Error codes brief 73 §3 + §7. Lets the CRM switch on code and translate
- *  to a user-friendly toast rather than parsing the raw message. */
+/** Error codes brief 73 §3 + §7 + brief 85 §2. Lets the CRM switch on
+ *  code and translate to a user-friendly toast rather than parsing the
+ *  raw message. */
 export type VenuePackageErrorCode =
   | 'bad_name'
   | 'bad_slug'
@@ -156,6 +163,36 @@ export type VenuePackageErrorCode =
   | 'bad_deposit_percent'
   | 'bad_due_days'
   | 'platform_fee_readonly'
+  /** `max_bookings` out of range (not an integer 1..999). Brief 85 §2. */
+  | 'bad_max_bookings'
+  /** PATCH tried to lower a slot's `max_bookings` below the number of
+   *  live bookings already on it for some future date. The 400 carries
+   *  `data: BelowCurrentCountData` so the editor can surface the exact
+   *  dates that block the save. Brief 85 §2. */
+  | 'below_current_count'
+
+/** Per-slot conflict row for a `below_current_count` 400. The server
+ *  returns one of these per slot that failed the capacity lower; each
+ *  row lists every future date that already has more live bookings than
+ *  the requested `max_bookings`. Brief 85 §2. */
+export interface BelowCurrentCountConflict {
+  slot_id: number
+  requested_max: number
+  dates: Array<{
+    /** `YYYY-MM-DD`. */
+    date: string
+    booked_count: number
+  }>
+}
+
+/** The `data` block carried by a 400 `below_current_count` response.
+ *  Admins see the conflicts in a per-slot panel; `field` is always
+ *  `'max_bookings'` — stays in the shape so future field-scoped 400s
+ *  can use the same envelope. */
+export interface BelowCurrentCountData {
+  field: 'max_bookings'
+  conflicts: BelowCurrentCountConflict[]
+}
 
 // ── Public read ─────────────────────────────────────────────────
 
@@ -169,6 +206,11 @@ export interface PublicVenueSlot {
   duration_hours: number | null
   default_start_time: string | null
   display_order: number
+  /** Simultaneous bookings per date — brief 85 §5. The public venue-
+   *  booking block doesn't drive greyouts off this field (that still
+   *  flows through `/venue-availability`'s `taken[]`); it's returned
+   *  for payload completeness. */
+  max_bookings: number
 }
 
 export interface PublicVenueAddon {

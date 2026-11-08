@@ -103,38 +103,23 @@ async function persistBrandColour(field: 'brand_primary' | 'brand_accent', value
   }
   brandSaving.value = field === 'brand_primary' ? 'primary' : 'accent'
   try {
-    // Workaround for brief 24's "at least one of logo_url / favicon_url"
-    // validator until brief 81's relaxation ships — echo the current URLs
-    // alongside every brand-colour patch. Backend treats same-value as
-    // no-op. Remove once the validator accepts brand_primary / brand_accent
-    // as sufficient.
-    const res = await clubs.updateBrandAssets(clubId, {
-      [field]: value,
-      logo_url: clubStore.current?.logoUrl ?? null,
-      favicon_url: clubStore.current?.faviconUrl ?? null,
-    } as Parameters<typeof clubs.updateBrandAssets>[1])
-    // Backend may not echo brief 81 fields yet — trust the submitted value.
-    const echoedPrimary = 'brand_primary' in res ? res.brand_primary : undefined
-    const echoedAccent = 'brand_accent' in res ? res.brand_accent : undefined
-    const nextPrimary = field === 'brand_primary'
-      ? (echoedPrimary !== undefined ? echoedPrimary : value)
-      : (echoedPrimary !== undefined ? echoedPrimary : (clubStore.current?.brandPrimary ?? null))
-    const nextAccent = field === 'brand_accent'
-      ? (echoedAccent !== undefined ? echoedAccent : value)
-      : (echoedAccent !== undefined ? echoedAccent : (clubStore.current?.brandAccent ?? null))
+    // Brief 83 shipped the validator relaxation, so a colour-only PATCH
+    // passes without echoing logo/favicon URLs. The response reliably
+    // echoes both brand_primary + brand_accent, so we trust it directly.
+    const res = await clubs.updateBrandAssets(clubId, { [field]: value })
     clubStore.setBrandAssets({
       logoUrl: res.logo_url,
       faviconUrl: res.favicon_url,
       imageStyle: res.image_style,
-      brandPrimary: nextPrimary,
-      brandAccent: nextAccent,
+      brandPrimary: res.brand_primary ?? null,
+      brandAccent: res.brand_accent ?? null,
     })
     if (field === 'brand_primary') {
-      brandPrimary.value = nextPrimary ?? PALETTE_DEFAULT_PRIMARY
-      brandPrimaryOverridden.value = nextPrimary != null
+      brandPrimary.value = res.brand_primary ?? PALETTE_DEFAULT_PRIMARY
+      brandPrimaryOverridden.value = res.brand_primary != null
     } else {
-      brandAccent.value = nextAccent ?? PALETTE_DEFAULT_ACCENT
-      brandAccentOverridden.value = nextAccent != null
+      brandAccent.value = res.brand_accent ?? PALETTE_DEFAULT_ACCENT
+      brandAccentOverridden.value = res.brand_accent != null
     }
     toast.success(value === null
       ? `${field === 'brand_primary' ? 'Primary' : 'Accent'} reset to the palette default.`
@@ -218,6 +203,8 @@ async function persistBrandAsset(field: 'logo_url' | 'favicon_url', value: strin
       logoUrl: res.logo_url,
       faviconUrl: res.favicon_url,
       imageStyle: res.image_style,
+      brandPrimary: res.brand_primary ?? null,
+      brandAccent: res.brand_accent ?? null,
     })
     toast.success(value ? `${field === 'logo_url' ? 'Logo' : 'Favicon'} saved.` : `${field === 'logo_url' ? 'Logo' : 'Favicon'} removed.`)
   } catch (err) {
@@ -249,22 +236,14 @@ async function onImageStyle(next: ImageStyleOption) {
   // Optimistic — surface flips immediately.
   clubStore.setBrandAssets({ imageStyle: next })
   imageStyleSaving.value = true
-  // Workaround for brief 24's "at least one of logo_url / favicon_url"
-  // validator — echo back the current URLs alongside image_style so the
-  // body satisfies the rule. Repeated-same-value is a no-op on the
-  // backend. Remove once brief 79's validator relaxation ships.
-  const currentLogo = clubStore.current?.logoUrl ?? null
-  const currentFavicon = clubStore.current?.faviconUrl ?? null
   try {
-    const res = await clubs.updateBrandAssets(clubId, {
-      image_style: next,
-      logo_url: currentLogo,
-      favicon_url: currentFavicon,
-    })
+    const res = await clubs.updateBrandAssets(clubId, { image_style: next })
     clubStore.setBrandAssets({
       logoUrl: res.logo_url,
       faviconUrl: res.favicon_url,
       imageStyle: res.image_style ?? next,
+      brandPrimary: res.brand_primary ?? null,
+      brandAccent: res.brand_accent ?? null,
     })
     toast.success(`Image style set to ${next.charAt(0).toUpperCase()}${next.slice(1)}.`)
   } catch (err) {

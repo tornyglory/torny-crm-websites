@@ -764,8 +764,7 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
       <div class="ws-card">
         <div class="ws-card__eyebrow">Image style</div>
         <p class="ws-image-style__lede">
-          How photos look across your public site. Changes the rounded corners, tone,
-          and overlay treatment for every image at once.
+          How photos look across your public site — tone, saturation, and overlay treatment for every image at once. Corner radius comes from Site Style above.
         </p>
         <div class="ws-image-style__grid">
           <button

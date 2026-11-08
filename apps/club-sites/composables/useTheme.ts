@@ -36,6 +36,11 @@ function styleDeclarations(style: SiteStyle): string[] {
     `--radius-md: ${style.radius.md}px !important;`,
     `--radius-lg: ${style.radius.lg}px !important;`,
     `--radius-pill: ${style.radius.pill}px !important;`,
+    // Image radii shadow the general radii — Site Style now drives both,
+    // so a preset's "sharp corners" feel applies to photos too (brief 82).
+    `--image-radius-sm: ${style.radius.sm}px !important;`,
+    `--image-radius-md: ${style.radius.md}px !important;`,
+    `--image-radius-lg: ${style.radius.lg}px !important;`,
     `--card-bg: ${cardBgVar(style.cards.background)} !important;`,
     `--card-border: ${cardBorderVar(style.cards.border)} !important;`,
     `--card-shadow: ${cardShadowVar(style.cards.shadow)} !important;`,

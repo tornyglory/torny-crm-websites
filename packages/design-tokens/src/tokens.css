@@ -118,11 +118,9 @@
   --image-overlay-opacity: 0;
 }
 
-/* Studio — crisp, editorial, glossy. Tighter corners + punchier contrast. */
+/* Studio — crisp, editorial, glossy. Punchier contrast + saturation.
+   Radii now driven by Site Style only (brief 82). */
 [data-image-style='studio'] {
-  --image-radius-sm: 4px;
-  --image-radius-md: 8px;
-  --image-radius-lg: 14px;
   --image-ring: none;
   --image-filter: saturate(1.06) contrast(1.06) brightness(1.02);
   --image-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.65) 100%);
@@ -130,11 +128,9 @@
   --image-overlay-opacity: 0;
 }
 
-/* Archive — monochrome with a brand-color duotone tint for unity. */
+/* Archive — monochrome with a brand-color duotone tint for unity.
+   Radii now driven by Site Style only (brief 82). */
 [data-image-style='archive'] {
-  --image-radius-sm: 8px;
-  --image-radius-md: 12px;
-  --image-radius-lg: 20px;
   --image-ring: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
   --image-filter: grayscale(0.88) contrast(1.08);
   --image-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.60) 100%);

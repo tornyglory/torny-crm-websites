@@ -21,6 +21,8 @@ import { useToast } from '@/composables/useToast'
 import {
   venuePackages as venuePackagesApi,
   ApiError,
+  type BelowCurrentCountConflict,
+  type BelowCurrentCountData,
   type VenuePackage,
   type VenueSlot,
   type VenueAddon,
@@ -60,6 +62,10 @@ interface SlotForm {
   /** Empty / null = no default. TornyTimePicker emits `null` when cleared. */
   default_start_time: string | null
   is_disabled: boolean
+  /** Simultaneous bookings per date — brief 85. Stored as a string for
+   *  the numeric input; parsed to int on save. Default "1" for new slots
+   *  and for existing rows the server returns without the field. */
+  max_bookings: string
 }
 
 interface AddonForm {
@@ -149,6 +155,7 @@ function hydrateFromServer(pkg: VenuePackage): void {
       duration_hours: s.duration_hours != null ? String(s.duration_hours) : '',
       default_start_time: trimSeconds(s.default_start_time),
       is_disabled: s.is_disabled ?? false,
+      max_bookings: String(s.max_bookings ?? 1),
     })),
     addons: pkg.addons.map((a) => ({
       id: a.id,
@@ -178,6 +185,7 @@ function addSlot(): void {
     duration_hours: '',
     default_start_time: '',
     is_disabled: false,
+    max_bookings: '1',
   })
 }
 
@@ -216,9 +224,42 @@ function slotToWire(s: SlotForm): VenueSlot {
     duration_hours: s.duration_hours.trim() ? Number(s.duration_hours) : null,
     default_start_time: (s.default_start_time ?? '').trim() || null,
     is_disabled: s.is_disabled,
+    max_bookings: parseMaxBookings(s.max_bookings),
   }
   if (s.id != null) base.id = s.id
   return base
+}
+
+function parseMaxBookings(value: unknown): number {
+  // v-model on <input type="number"> casts to Number once the user
+  // types — accept both string and number defensively.
+  if (value === null || value === undefined) return 1
+  const s = typeof value === 'string' ? value.trim() : String(value)
+  if (s === '') return 1
+  const n = Number(s)
+  if (!Number.isFinite(n) || n < 1) return 1
+  return Math.min(999, Math.floor(n))
+}
+
+/** Per-slot capacity conflicts from the backend's 400
+ *  `below_current_count`. Keyed by `slot_id`. Cleared on every save
+ *  attempt; populated only when the server rejects the PATCH.
+ *  The editor renders each row inline below the max_bookings input so
+ *  admins see "3 bookings on 2026-12-14 — cancel first" against the
+ *  exact slot that blocked the save. */
+const slotCapacityConflicts = ref<Record<number, BelowCurrentCountConflict>>({})
+
+function conflictFor(slotId: number | undefined): BelowCurrentCountConflict | null {
+  if (slotId == null) return null
+  return slotCapacityConflicts.value[slotId] ?? null
+}
+
+function formatConflictDate(iso: string): string {
+  try {
+    return new Date(`${iso}T00:00:00`).toLocaleDateString('en-NZ', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    })
+  } catch { return iso }
 }
 
 function addonToWire(a: AddonForm): VenueAddon {
@@ -243,6 +284,8 @@ async function save(): Promise<void> {
   const cid = clubStore.current?.id
   if (typeof cid !== 'number' || !canSave.value) return
   saving.value = true
+  // Clear last attempt's capacity conflicts — the retry starts clean.
+  slotCapacityConflicts.value = {}
   try {
     const body = {
       name: form.value.name.trim(),
@@ -267,7 +310,17 @@ async function save(): Promise<void> {
       toast.success('Package saved.')
     }
   } catch (err) {
-    toast.error(err instanceof ApiError ? err.message : 'Could not save package.')
+    if (err instanceof ApiError && err.code === 'below_current_count') {
+      const data = err.body?.data as BelowCurrentCountData | undefined
+      if (data?.conflicts) {
+        const next: Record<number, BelowCurrentCountConflict> = {}
+        for (const c of data.conflicts) next[c.slot_id] = c
+        slotCapacityConflicts.value = next
+      }
+      toast.error('Cancel the clashing bookings before lowering that slot’s capacity.')
+    } else {
+      toast.error(err instanceof ApiError ? err.message : 'Could not save package.')
+    }
   } finally {
     saving.value = false
   }
@@ -402,6 +455,42 @@ async function save(): Promise<void> {
                 <TornyTimePicker v-model="slot.default_start_time" placeholder="Pick a time" />
               </label>
             </div>
+            <div class="field-row">
+              <label class="field field--narrow">
+                <span class="field__label">
+                  Simultaneous bookings per date
+                  <em class="field__optional">(default 1)</em>
+                </span>
+                <input
+                  v-model="slot.max_bookings"
+                  type="number"
+                  inputmode="numeric"
+                  min="1"
+                  max="999"
+                  step="1"
+                  placeholder="1"
+                  :aria-invalid="conflictFor(slot.id) != null"
+                />
+                <span class="field__hint">
+                  Raise this if the space can run multiple bookings in parallel on the same date.
+                </span>
+                <div
+                  v-if="conflictFor(slot.id)"
+                  class="conflict"
+                  role="alert"
+                >
+                  <strong class="conflict__title">
+                    Cancel these bookings first to lower capacity to {{ conflictFor(slot.id)!.requested_max }}:
+                  </strong>
+                  <ul class="conflict__list">
+                    <li v-for="d in conflictFor(slot.id)!.dates" :key="d.date">
+                      <strong>{{ formatConflictDate(d.date) }}</strong>
+                      — {{ d.booked_count }} booking{{ d.booked_count === 1 ? '' : 's' }}
+                    </li>
+                  </ul>
+                </div>
+              </label>
+            </div>
           </li>
         </ol>
       </section>
@@ -496,6 +585,11 @@ async function save(): Promise<void> {
 .card__empty { font-family: var(--font-body); font-size: 13px; color: var(--color-fog); margin: 0; padding: 12px; background: var(--color-surface); border-radius: 8px; }
 
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.field--narrow { max-width: 320px; }
+.conflict { margin-top: 10px; padding: 10px 12px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 10px; font-family: var(--font-body); font-size: 12px; color: #991B1B; }
+.conflict__title { display: block; font-weight: 600; margin-bottom: 4px; }
+.conflict__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.conflict__list strong { font-weight: 600; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field__label { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
 .field__optional { font-weight: 400; letter-spacing: normal; text-transform: lowercase; opacity: 0.7; }

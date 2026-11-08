@@ -189,6 +189,132 @@ test.describe('Venue packages — editor screen', () => {
     expect(second?.price_cents).toBe(90000)
   })
 
+  test('max_bookings: editor carries the capacity input through the PATCH body', async ({ page }) => {
+    let patchedBody: Record<string, unknown> | null = null
+
+    await page.route(/\/clubs\/\d+\/venue-packages\/\d+$/, async (route: Route) => {
+      const method = route.request().method()
+      if (method === 'GET') {
+        // Seed slot 101 with max_bookings=1 (default) so we can bump it.
+        await route.fulfill({
+          status: 200, contentType: 'application/json',
+          body: JSON.stringify(packageEnvelope({
+            slots: [
+              { id: 101, label: 'Morning · 9am – 1pm', sub: '4 hours · $720', price_cents: 72000, duration_hours: 4, default_start_time: '09:00', is_disabled: false, display_order: 10, max_bookings: 1 },
+              { id: 102, label: 'Evening · 6pm – 11pm', sub: '5 hours · $900', price_cents: 90000, duration_hours: 5, default_start_time: '18:00', is_disabled: false, display_order: 20, max_bookings: 1 },
+            ],
+          })),
+        })
+        return
+      }
+      if (method === 'PATCH') {
+        patchedBody = route.request().postDataJSON() as Record<string, unknown>
+        await route.fulfill({
+          status: 200, contentType: 'application/json',
+          body: JSON.stringify(packageEnvelope({
+            slots: [
+              { id: 101, label: 'Morning · 9am – 1pm', sub: null, price_cents: 72000, duration_hours: 4, default_start_time: '09:00', is_disabled: false, display_order: 10, max_bookings: 3 },
+              { id: 102, label: 'Evening · 6pm – 11pm', sub: null, price_cents: 90000, duration_hours: 5, default_start_time: '18:00', is_disabled: false, display_order: 20, max_bookings: 1 },
+            ],
+          })),
+        })
+        return
+      }
+      return route.fallback()
+    })
+
+    await page.goto(`/crm/venue-packages/${PACKAGE_ID}`)
+    await expect(page.getByLabel(/package name/i)).toHaveValue('The clubhouse')
+
+    // Bump slot 101's capacity from 1 → 3.
+    const capacityInputs = page.getByLabel(/simultaneous bookings per date/i)
+    await expect(capacityInputs.first()).toHaveValue('1')
+    await capacityInputs.first().fill('3')
+
+    await page.getByRole('button', { name: /save package|save changes/i }).click()
+
+    await expect
+      .poll(() => patchedBody, { timeout: 5_000 })
+      .not.toBeNull()
+    const body = patchedBody as unknown as {
+      slots: Array<{ id?: number; max_bookings: number }>
+    }
+    const first = body.slots.find((s) => s.id === 101)
+    expect(first?.max_bookings).toBe(3)
+    // Untouched slot keeps the default.
+    const second = body.slots.find((s) => s.id === 102)
+    expect(second?.max_bookings).toBe(1)
+  })
+
+  test('max_bookings: 400 below_current_count surfaces conflicting dates inline', async ({ page }) => {
+    let patchCount = 0
+
+    await page.route(/\/clubs\/\d+\/venue-packages\/\d+$/, async (route: Route) => {
+      const method = route.request().method()
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200, contentType: 'application/json',
+          body: JSON.stringify(packageEnvelope({
+            slots: [
+              { id: 101, label: 'Morning · 9am – 1pm', sub: null, price_cents: 72000, duration_hours: 4, default_start_time: '09:00', is_disabled: false, display_order: 10, max_bookings: 3 },
+              { id: 102, label: 'Evening · 6pm – 11pm', sub: null, price_cents: 90000, duration_hours: 5, default_start_time: '18:00', is_disabled: false, display_order: 20, max_bookings: 1 },
+            ],
+          })),
+        })
+        return
+      }
+      if (method === 'PATCH') {
+        patchCount += 1
+        // Backend rejects the lowering with the typed conflicts block.
+        await route.fulfill({
+          status: 400, contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'error',
+            code: 'below_current_count',
+            message: 'Slot 101 already has 2 bookings on 2026-12-14. Cancel or move them before lowering the capacity.',
+            data: {
+              field: 'max_bookings',
+              conflicts: [
+                {
+                  slot_id: 101,
+                  requested_max: 1,
+                  dates: [
+                    { date: '2026-12-14', booked_count: 2 },
+                    { date: '2026-12-21', booked_count: 3 },
+                  ],
+                },
+              ],
+            },
+          }),
+        })
+        return
+      }
+      return route.fallback()
+    })
+
+    await page.goto(`/crm/venue-packages/${PACKAGE_ID}`)
+    const capacityInputs = page.getByLabel(/simultaneous bookings per date/i)
+    await expect(capacityInputs.first()).toHaveValue('3')
+
+    // Try to drop slot 101's capacity to 1 — backend 400s.
+    await capacityInputs.first().fill('1')
+    await page.getByRole('button', { name: /save package|save changes/i }).click()
+
+    await expect
+      .poll(() => patchCount, { timeout: 5_000 })
+      .toBeGreaterThan(0)
+
+    // Conflict panel renders inline below slot 101's capacity input,
+    // listing both offending dates with their booking counts.
+    const conflict = page.locator('.conflict').first()
+    await expect(conflict).toBeVisible()
+    await expect(conflict).toContainText(/cancel these bookings first/i)
+    await expect(conflict).toContainText('14 Dec 2026')
+    await expect(conflict).toContainText('2 bookings')
+    await expect(conflict).toContainText('21 Dec 2026')
+    await expect(conflict).toContainText('3 bookings')
+  })
+
   test('add + remove: PATCH diff carries insert (no id) + omits the removed slot', async ({ page }) => {
     let patchedBody: Record<string, unknown> | null = null
 

@@ -103,13 +103,10 @@ onBeforeUnmount(() => {
       <span v-if="showLogo" class="site-header__logo-wrap">
         <img :src="club.logoUrl!" :alt="`${displayName} logo`" class="site-header__logo" />
       </span>
-      <!-- Initial chip fills the gap when the mode wants a logo but no
-           image is uploaded, or when the mode is name-only and we still
-           want a visual marker on narrow viewports. -->
-      <span v-else-if="resolvedDisplay !== 'logo'" class="site-header__chip">{{ initials }}</span>
       <!-- Brand text is hidden when the display mode is logo-only. The
            club name moves to the brand link's aria-label above so screen
-           readers still announce it. -->
+           readers still announce it. Name-only mode intentionally has
+           no visual mark — just the text. -->
       <span v-if="showName" class="site-header__brand-text">
         <span class="site-header__name">{{ displayName }}</span>
         <span v-if="club.strapline" class="site-header__strapline">{{ club.strapline }}</span>

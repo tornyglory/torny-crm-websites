@@ -198,25 +198,13 @@ async function onHeaderDisplay(next: HeaderDisplayOption) {
   headerDisplay.value = next
   headerDisplaySaving.value = true
   try {
-    const res = await navigationApi.updateForClub(clubId, {
-      headerDisplay: next,
-      // Keep the legacy boolean in sync so older FE builds keep working.
-      logoInHeader: next === 'logo',
-      // Brief 25's validator requires at least one of header / footer /
-      // headerSticky — echo the current sticky value so a display-only
-      // patch passes the check. Backend treats same-value as a no-op.
-      // Remove once brief 80's validator relaxation ships.
-      headerSticky: headerSticky.value,
-    })
-    // Backend may not echo the brief 80 fields yet. Trust our submitted
-    // value in that case so the picker + store stay in sync.
-    const echoedName: string | null | undefined = 'headerName' in res ? res.headerName : undefined
+    const res = await navigationApi.updateForClub(clubId, { headerDisplay: next })
     clubStore.setNavigation({
       header: res.header ?? DEFAULT_HEADER,
       footer: res.footer ?? DEFAULT_FOOTER,
       headerSticky: res.headerSticky,
       logoInHeader: res.logoInHeader,
-      headerName: echoedName !== undefined ? echoedName : (headerName.value.trim() || null),
+      headerName: res.headerName ?? null,
       headerDisplay: res.headerDisplay ?? next,
     })
     logoInHeader.value = res.logoInHeader
@@ -239,29 +227,17 @@ async function saveHeaderName() {
   }
   const trimmed = headerName.value.trim()
   const desired: string | null = trimmed.length === 0 ? null : trimmed
-  const payload: Parameters<typeof navigationApi.updateForClub>[1] = {
-    headerName: desired,
-    // Workaround for brief 25's "at least one of header / footer /
-    // headerSticky" validator — see onHeaderDisplay for the rationale.
-    headerSticky: headerSticky.value,
-  }
   headerNameSaving.value = true
   try {
-    const res = await navigationApi.updateForClub(clubId, payload)
-    // Backend may not echo the brief 80 fields yet. When `headerName` is
-    // absent from the response, trust the value we just submitted so the
-    // input + store stay in sync (hard refresh will still reset until
-    // the backend ships).
-    const echoedName: string | null | undefined = 'headerName' in res ? res.headerName : undefined
-    const persistedName: string | null = echoedName !== undefined ? echoedName : desired
-    const echoedDisplay = (res.headerDisplay ?? headerDisplay.value)
+    const res = await navigationApi.updateForClub(clubId, { headerName: desired })
+    const persistedName: string | null = res.headerName ?? null
     clubStore.setNavigation({
       header: res.header ?? DEFAULT_HEADER,
       footer: res.footer ?? DEFAULT_FOOTER,
       headerSticky: res.headerSticky,
       logoInHeader: res.logoInHeader,
       headerName: persistedName,
-      headerDisplay: echoedDisplay,
+      headerDisplay: res.headerDisplay ?? headerDisplay.value,
     })
     headerName.value = persistedName ?? ''
     headerNameInitial.value = persistedName ?? ''

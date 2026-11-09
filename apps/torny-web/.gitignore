@@ -1,0 +1,11 @@
+.nuxt
+.output
+.wrangler
+.turbo
+dist
+node_modules
+
+# Vitest / Playwright transients
+test-results/
+playwright-report/
+vitest.config.ts.timestamp-*

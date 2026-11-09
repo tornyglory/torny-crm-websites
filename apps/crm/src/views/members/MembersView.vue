@@ -1544,7 +1544,10 @@ async function submit() {
           class="btn btn--primary"
           :disabled="editSubmitting"
           @click="submitEdit"
-        >{{ editSubmitting ? 'Saving…' : 'Save changes' }}</button>
+        >
+          <CrmSpinner v-if="editSubmitting" size="sm" label="Saving" />
+          <span>{{ editSubmitting ? 'Saving…' : 'Save changes' }}</span>
+        </button>
       </template>
     </CrmModal>
 
@@ -1612,7 +1615,10 @@ async function submit() {
           class="btn btn--primary"
           :disabled="!canSubmitPayment || paymentSubmitting"
           @click="submitPayment"
-        >{{ paymentSubmitting ? 'Recording…' : (paymentForm.waived ? 'Waive fees' : 'Record payment') }}</button>
+        >
+          <CrmSpinner v-if="paymentSubmitting" size="sm" label="Processing" />
+          <span>{{ paymentSubmitting ? 'Recording…' : (paymentForm.waived ? 'Waive fees' : 'Record payment') }}</span>
+        </button>
       </template>
     </CrmModal>
 

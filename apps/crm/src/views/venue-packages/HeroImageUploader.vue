@@ -18,6 +18,7 @@
  */
 import { computed, ref } from 'vue'
 import { media as mediaApi, ApiError } from '@torny/api-client'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import { useToast } from '@/composables/useToast'
 
 const props = defineProps<{
@@ -91,7 +92,8 @@ function onAltInput(e: Event): void {
       <img :src="modelValue" :alt="alt ?? ''" class="hu__img" />
       <div class="hu__overlay">
         <button type="button" class="hu__btn" :disabled="uploadsDisabled || uploading" @click="pickFile">
-          {{ uploading ? 'Uploading…' : 'Replace' }}
+          <CrmSpinner v-if="uploading" size="sm" label="Uploading" />
+          <span>{{ uploading ? 'Uploading…' : 'Replace' }}</span>
         </button>
         <button type="button" class="hu__btn hu__btn--ghost" :disabled="uploadsDisabled || uploading" @click="removeHero">
           Remove

@@ -86,8 +86,11 @@ const routes: RouteRecordRaw[] = [
       { path: 'communications/templates/wrap', name: 'template-wrap', component: () => import('@/views/communications/WrapEditView.vue') },
       { path: 'communications/templates/:slug', name: 'template-edit', component: () => import('@/views/communications/TemplateEditView.vue') },
       { path: 'communications/:id', name: 'campaign-detail', component: () => import('@/views/communications/CampaignDetailView.vue') },
-      { path: 'settings', name: 'settings', component: () => import('@/views/settings/SettingsView.vue') },
+      // Each settings panel has its own URL so bookmarks + browser back/forward
+      // work naturally. Shell component is shared — it reads :section from params.
+      { path: 'settings/:section?', name: 'settings', component: () => import('@/views/settings/SettingsView.vue') },
       { path: 'settings/stripe/callback', name: 'stripe-callback', component: () => import('@/views/settings/StripeCallbackView.vue') },
+      { path: 'billing/success', name: 'billing-success', component: () => import('@/views/settings/BillingSuccessView.vue') },
       { path: 'account', name: 'account', component: () => import('@/views/account/AccountView.vue') },
       { path: 'site-settings', redirect: { name: 'website', params: { pageSlug: 'domain' } } },
     ],

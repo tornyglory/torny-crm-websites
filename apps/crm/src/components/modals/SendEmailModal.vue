@@ -20,6 +20,7 @@ import {
   type RosterMember,
 } from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import TornyMultiSelect from '@/components/TornyMultiSelect.vue'
 import { useClubStore } from '@/stores/club'
 import { useToast } from '@/composables/useToast'
@@ -656,11 +657,12 @@ function pickField(f: InsertField) {
         :disabled="!canSend"
         @click="send"
       >
-        {{ sending
+        <CrmSpinner v-if="sending" size="sm" label="Sending" />
+        <span>{{ sending
           ? 'Sending…'
           : isBulk
             ? `Send to ${deliverable.length}`
-            : 'Send email' }}
+            : 'Send email' }}</span>
         <svg v-if="!sending" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
           <path
             d="M2.5 7h8M7 3.5L10.5 7 7 10.5"

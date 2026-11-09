@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
 import StripeConnectCard from '@/views/settings/StripeConnectCard.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import { useToast } from '@/composables/useToast'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useClubStore } from '@/stores/club'
@@ -11,6 +13,7 @@ import { useMembershipTiersStore } from '@/stores/membershipTiers'
 import { useNotificationsStore } from '@/stores/notifications'
 import {
   ApiError,
+  billing as billingApi,
   clubs,
   enquiries as enquiriesApi,
   type EmailDigest,
@@ -18,6 +21,8 @@ import {
   type EnquiryTopic,
   type MembershipTierListItem,
   type NotificationKind,
+  type PlanState,
+  type SubscriptionStatus,
 } from '@torny/api-client'
 
 const toast = useToast()
@@ -72,7 +77,36 @@ const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
   { key: 'danger', label: 'Danger zone', hint: 'Archive or transfer the club.' },
 ]
 
-const active = ref<SectionKey>('club')
+// Each panel lives at its own URL — /crm/settings/:section — so
+// browser back/forward, bookmarks, and Stripe redirects all deep-link
+// to the right panel. `active` is a reactive view of the URL.
+const route = useRoute()
+const router = useRouter()
+const VALID_SECTIONS: SectionKey[] = ['club', 'membership', 'hours', 'billing', 'team', 'security', 'notifications', 'enquiries', 'integrations', 'danger']
+const active = computed<SectionKey>(() => {
+  const s = route.params.section
+  if (typeof s === 'string' && (VALID_SECTIONS as string[]).includes(s)) return s as SectionKey
+  return 'club'
+})
+
+function goToSection(key: SectionKey) {
+  if (key === active.value) return
+  void router.push({ name: 'settings', params: { section: key } })
+}
+
+// Back-compat: old deep-links used ?tab=X. Redirect them to the new path
+// shape so bookmarks keep working. Also normalise the base path to its
+// canonical /crm/settings/club form so the URL always reflects state.
+onMounted(() => {
+  const legacyTab = route.query.tab
+  if (typeof legacyTab === 'string' && (VALID_SECTIONS as string[]).includes(legacyTab)) {
+    void router.replace({ name: 'settings', params: { section: legacyTab }, query: { ...route.query, tab: undefined } })
+    return
+  }
+  if (!route.params.section) {
+    void router.replace({ name: 'settings', params: { section: 'club' } })
+  }
+})
 
 // ── Membership tiers (brief 36 — real CRUD, no onboarding blob) ─────
 // Reads / writes via useMembershipTiersStore. Field edits (tier name /
@@ -623,17 +657,222 @@ const fullAddress = computed({
   set: (v: string) => { onboarding.data.address = v },
 })
 
-const billing = ref({
-  plan: 'Standard',
-  seats: 8,
-  amount: '$79 / month',
-  nextInvoice: '01 Sep 2026',
-  paymentMethod: 'Visa ending 4242',
-  invoices: [
-    { id: 'inv-24', date: '01 Aug 2026', amount: '$79.00', status: 'paid' as 'paid' | 'due' },
-    { id: 'inv-23', date: '01 Jul 2026', amount: '$79.00', status: 'paid' as 'paid' | 'due' },
-    { id: 'inv-22', date: '01 Jun 2026', amount: '$79.00', status: 'paid' as 'paid' | 'due' },
-  ],
+// ── Billing — live backend state (briefs 86 + 87 + 88) ─────────────
+// Fetched from GET /clubs/:cid/plan on mount + re-fetched after a
+// Stripe round-trip. No more hardcoded invoices — Stripe's Customer
+// Portal owns that surface.
+const billingState = ref<PlanState | null>(null)
+const billingLoading = ref(false)
+const billingError = ref<string | null>(null)
+const billingBusy = ref<'checkout' | 'portal' | null>(null)
+
+async function loadBilling() {
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') return
+  billingLoading.value = true
+  billingError.value = null
+  try {
+    billingState.value = await billingApi.get(clubId)
+  } catch (err) {
+    billingError.value = err instanceof ApiError ? err.message : 'Could not load billing.'
+  } finally {
+    billingLoading.value = false
+  }
+}
+
+watch(
+  () => [clubStore.current?.id, active.value] as const,
+  ([cid, panel]) => {
+    if (panel === 'billing' && typeof cid === 'number' && billingState.value?.plan == null) {
+      void loadBilling()
+    }
+  },
+  { immediate: true },
+)
+
+const billingPriceText = computed(() => {
+  const s = billingState.value
+  if (!s) return ''
+  return `$${(s.monthly_price_cents / 100).toFixed(0)} / month · NZD`
+})
+
+const billingStatusLabel = computed<{ label: string; tone: 'ok' | 'trial' | 'warn' | 'bad' | 'muted' }>(() => {
+  const s = billingState.value
+  if (!s) return { label: 'Loading…', tone: 'muted' }
+  switch (s.subscription_status) {
+    case 'trialing':  return { label: 'Trial active', tone: 'trial' }
+    case 'active':    return { label: 'Active', tone: 'ok' }
+    case 'past_due':  return { label: 'Payment past due', tone: 'warn' }
+    case 'unpaid':    return { label: 'Unpaid — features limited', tone: 'bad' }
+    case 'canceled':  return { label: 'Ends at period end', tone: 'warn' }
+    case 'paused':    return { label: 'Paused', tone: 'muted' }
+    case 'incomplete': return { label: 'Checkout incomplete', tone: 'warn' }
+    case 'incomplete_expired': return { label: 'Checkout expired', tone: 'bad' }
+    case 'none':      return { label: 'Not subscribed', tone: 'muted' }
+  }
+  return { label: s.subscription_status, tone: 'muted' }
+})
+
+function fmtBillingDate(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+const billingNextChargeText = computed<string | null>(() => {
+  const s = billingState.value
+  if (!s) return null
+  if (s.subscription_status === 'trialing' && s.trial_ends_at) {
+    return `Trial ends ${fmtBillingDate(s.trial_ends_at)} · first charge same day`
+  }
+  if (s.subscription_status === 'active' && s.current_period_end) {
+    return `Next charge ${fmtBillingDate(s.current_period_end)}`
+  }
+  if (s.subscription_status === 'canceled' && s.current_period_end) {
+    return `Pro ends ${fmtBillingDate(s.current_period_end)}, then Starter`
+  }
+  if (s.subscription_status === 'past_due') {
+    return `We couldn't collect your last payment — update your card to keep Pro features`
+  }
+  return null
+})
+
+// Primary + secondary actions depend on subscription state:
+// - Never subscribed (none) → "Upgrade to Pro" calls /billing/checkout
+// - Trialing / active / past_due → "Manage subscription" opens Stripe Portal
+// - Canceled / unpaid → "Resubscribe" calls /billing/checkout
+const billingPrimary = computed<{ label: string; action: 'checkout' | 'portal' } | null>(() => {
+  const s = billingState.value
+  if (!s) return null
+  if (s.has_stripe_customer && (s.subscription_status === 'trialing' || s.subscription_status === 'active' || s.subscription_status === 'past_due')) {
+    return { label: 'Manage subscription', action: 'portal' }
+  }
+  if (s.plan === 'starter' && s.subscription_status === 'none') {
+    return { label: 'Upgrade to Pro', action: 'checkout' }
+  }
+  // canceled / unpaid / incomplete — invite them to resubscribe
+  return { label: 'Resubscribe to Pro', action: 'checkout' }
+})
+
+async function doBillingCheckout() {
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') return
+  billingBusy.value = 'checkout'
+  try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const res = await billingApi.checkout(clubId, {
+      plan: 'pro',
+      success_url: `${origin}/crm/billing/success`,
+      cancel_url: `${origin}/crm/settings/billing?result=cancel`,
+    })
+    if (typeof window !== 'undefined') window.location.href = res.checkout_url
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Could not open checkout.'
+    toast.error(msg)
+    billingBusy.value = null
+  }
+}
+
+async function doBillingPortal() {
+  const clubId = clubStore.current?.id
+  if (typeof clubId !== 'number') return
+  billingBusy.value = 'portal'
+  try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const res = await billingApi.portal(clubId, { return_url: `${origin}/crm/settings/billing` })
+    if (typeof window !== 'undefined') window.location.href = res.portal_url
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : 'Could not open billing portal.'
+    toast.error(msg)
+    billingBusy.value = null
+  }
+}
+
+function runBillingPrimary() {
+  const p = billingPrimary.value
+  if (!p) return
+  if (p.action === 'checkout') void doBillingCheckout()
+  else void doBillingPortal()
+}
+
+// Plan comparison catalog — mirrors the signup wizard
+// (apps/torny-web/pages/signup/index.vue). Features copy is product
+// marketing, kept in-sync by hand across the two surfaces until there's
+// a shared /plans endpoint worth having.
+interface PlanCatalogEntry {
+  key: 'starter' | 'pro'
+  label: string
+  priceDollars: number
+  blurb: string
+  included: string[]
+  excluded: string[]
+}
+
+const planCatalog: PlanCatalogEntry[] = [
+  {
+    key: 'starter',
+    label: 'Starter',
+    priceDollars: 39,
+    blurb: 'The essentials — memberships, comms, events, payments, public website.',
+    included: [
+      'Public website + domain',
+      'Memberships, applications, payments',
+      'Event calendar + RSVPs',
+      'Email campaigns + templates',
+      'Public enquiries inbox',
+    ],
+    excluded: [
+      'Venue bookings · Pro only',
+      'Tournaments + team selections · Pro',
+      'Honour boards · Pro',
+    ],
+  },
+  {
+    key: 'pro',
+    label: 'Pro',
+    priceDollars: 79,
+    blurb: 'Everything in Starter, plus the pieces a venue or sports club needs.',
+    included: [
+      'Everything in Starter',
+      'Venue bookings + packages + capacity',
+      'Tournaments (draw, roster, payments)',
+      'Team selections + announcements',
+      'Honour boards + history',
+      'Stripe Connect for deposits + entries',
+      'Priority support',
+    ],
+    excluded: [],
+  },
+]
+
+function planSwitchLabel(target: 'starter' | 'pro'): string {
+  const current = billingState.value?.plan
+  if (target === current) return 'Current plan'
+  if (target === 'pro') return 'Upgrade to Pro'
+  return 'Switch to Starter'
+}
+
+// When the org already has a Stripe customer, plan changes go through
+// the Billing Portal (Stripe owns the proration UX). First-time
+// purchases go through Checkout.
+async function switchPlan(target: 'starter' | 'pro') {
+  const s = billingState.value
+  if (!s || target === s.plan) return
+  if (s.has_stripe_customer) {
+    await doBillingPortal()
+  } else {
+    if (target === 'starter') {
+      toast.info('Starter is your current plan while trialing. Pick Pro to upgrade.')
+      return
+    }
+    await doBillingCheckout()
+  }
+}
+
+// Stripe success routes through /crm/billing/success which handles its
+// own toast + state refresh. Here we only need the cancel path.
+onMounted(() => {
+  const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+  if (params.get('result') === 'cancel') toast.info('Checkout cancelled.')
 })
 
 const team = ref([
@@ -675,10 +914,6 @@ function toggleIntegration(id: string) {
     i.status = 'connected'
     toast.success(`${i.label} connected.`)
   }
-}
-function goManage(kind: 'plan' | 'seats' | 'card') {
-  const labels: Record<typeof kind, string> = { plan: 'plan', seats: 'seats', card: 'payment method' }
-  toast.info(`Managing ${labels[kind]} in a new tab…`)
 }
 function manageTeamRow(name: string) {
   toast.info(`Managing ${name}'s role — role picker opens next session.`)
@@ -731,7 +966,7 @@ function sendInvite() {
             :key="s.key"
             class="nav__item"
             :class="{ 'is-active': active === s.key, 'is-danger': s.key === 'danger' }"
-            @click="active = s.key"
+            @click="goToSection(s.key)"
           >
             <div class="nav__label">{{ s.label }}</div>
             <div class="nav__hint">{{ s.hint }}</div>
@@ -855,44 +1090,133 @@ function sendInvite() {
 
         </template>
 
-        <!-- Billing -->
+        <!-- Billing (live — briefs 86/87/88) -->
         <template v-else-if="active === 'billing'">
-          <div class="card">
-            <div class="card__head">
-              <div>
-                <div class="card__eyebrow">Plan</div>
-                <h2 class="card__title">{{ billing.plan }}</h2>
-                <p class="card__body">{{ billing.amount }} · {{ billing.seats }} CRM seats · next invoice {{ billing.nextInvoice }}</p>
-              </div>
-              <div class="card__actions">
-                <button class="btn btn--outline" @click="goManage('plan')">Change plan</button>
-                <button class="btn btn--outline" @click="goManage('seats')">Manage seats</button>
-              </div>
+          <div v-if="billingLoading && !billingState" class="card">
+            <p class="card__body billing-loading">
+              <CrmSpinner size="sm" label="Loading plan" />
+              <span>Loading plan…</span>
+            </p>
+          </div>
+
+          <div v-else-if="billingError" class="card card--warn">
+            <div class="card__eyebrow">Couldn't load billing</div>
+            <p class="card__body">{{ billingError }}</p>
+            <div class="card__actions">
+              <button class="btn btn--outline" @click="loadBilling()">Try again</button>
             </div>
           </div>
 
-          <div class="card">
-            <div class="card__head">
-              <div>
-                <div class="card__eyebrow">Payment method</div>
-                <h2 class="card__title">{{ billing.paymentMethod }}</h2>
+          <template v-else-if="billingState">
+            <div class="card">
+              <div class="card__head">
+                <div>
+                  <div class="card__eyebrow">Plan</div>
+                  <h2 class="card__title">
+                    {{ billingState.plan === 'pro' ? 'Pro' : 'Starter' }}
+                    <span
+                      class="billing-pill"
+                      :class="`billing-pill--${billingStatusLabel.tone}`"
+                    >{{ billingStatusLabel.label }}</span>
+                  </h2>
+                  <p class="card__body">{{ billingPriceText }}</p>
+                  <p v-if="billingNextChargeText" class="card__body card__body--muted">
+                    {{ billingNextChargeText }}
+                  </p>
+                </div>
+                <div v-if="billingPrimary" class="card__actions">
+                  <button
+                    class="btn btn--primary btn--busy"
+                    :disabled="billingBusy !== null"
+                    @click="runBillingPrimary"
+                  >
+                    <CrmSpinner v-if="billingBusy === billingPrimary.action" size="sm" label="Opening" />
+                    <span v-else>{{ billingPrimary.label }}</span>
+                  </button>
+                  <button
+                    v-if="billingState.has_stripe_customer && billingPrimary.action === 'checkout'"
+                    class="btn btn--outline btn--busy"
+                    :disabled="billingBusy !== null"
+                    @click="doBillingPortal()"
+                  >
+                    <CrmSpinner v-if="billingBusy === 'portal'" size="sm" label="Opening" />
+                    <span v-else>Manage billing</span>
+                  </button>
+                </div>
               </div>
-              <button class="btn btn--outline" @click="goManage('card')">Update card</button>
             </div>
-          </div>
 
-          <div class="card">
-            <div class="card__eyebrow">Recent invoices</div>
-            <ul class="rows">
-              <li v-for="i in billing.invoices" :key="i.id" class="frow">
-                <div class="frow__id">{{ i.id.toUpperCase() }}</div>
-                <div class="frow__date">{{ i.date }}</div>
-                <div class="frow__amount">{{ i.amount }}</div>
-                <div class="frow__status" :class="`frow__status--${i.status}`">{{ i.status }}</div>
-                <button class="link" @click="toast.info(`Downloading ${i.id.toUpperCase()}…`)">Download</button>
-              </li>
-            </ul>
-          </div>
+            <!-- Plan comparison — always renders, highlights current plan -->
+            <div class="card">
+              <div class="card__eyebrow">What's included</div>
+              <h2 class="card__title plan-compare__title">Starter vs Pro</h2>
+              <div class="plan-compare">
+                <div
+                  v-for="p in planCatalog"
+                  :key="p.key"
+                  class="plan-compare__col"
+                  :class="{
+                    'plan-compare__col--current': billingState.plan === p.key,
+                    'plan-compare__col--pro': p.key === 'pro',
+                  }"
+                >
+                  <div class="plan-compare__badge-row">
+                    <div class="plan-compare__eyebrow">{{ p.label.toUpperCase() }}</div>
+                    <span v-if="billingState.plan === p.key" class="plan-compare__tag">Your plan</span>
+                    <span v-else-if="p.key === 'pro'" class="plan-compare__tag plan-compare__tag--reco">Recommended</span>
+                  </div>
+                  <div class="plan-compare__price">
+                    <span class="plan-compare__amount">${{ p.priceDollars }}</span>
+                    <span class="plan-compare__period">/ month · NZD</span>
+                  </div>
+                  <p class="plan-compare__blurb">{{ p.blurb }}</p>
+                  <ul class="plan-compare__list">
+                    <li v-for="f in p.included" :key="f">
+                      <span class="plan-compare__check" aria-hidden="true">✓</span>{{ f }}
+                    </li>
+                    <li v-for="f in p.excluded" :key="`x-${f}`" class="plan-compare__list-muted">
+                      <span class="plan-compare__check plan-compare__check--mute" aria-hidden="true">—</span>{{ f }}
+                    </li>
+                  </ul>
+                  <div class="plan-compare__cta-row">
+                    <button
+                      v-if="billingState.plan === p.key"
+                      class="btn btn--outline"
+                      disabled
+                    >Current plan</button>
+                    <button
+                      v-else
+                      class="btn btn--busy"
+                      :class="p.key === 'pro' ? 'btn--primary' : 'btn--outline'"
+                      :disabled="billingBusy !== null"
+                      @click="switchPlan(p.key)"
+                    >
+                      <CrmSpinner v-if="billingBusy !== null" size="sm" label="Opening" />
+                      <span v-else>{{ planSwitchLabel(p.key) }}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="billingState.has_stripe_customer" class="card">
+              <div class="card__head">
+                <div>
+                  <div class="card__eyebrow">Payment method &amp; invoices</div>
+                  <h2 class="card__title">Managed in Stripe</h2>
+                  <p class="card__body">Update your card, download invoices, or cancel from the Stripe billing portal.</p>
+                </div>
+                <button
+                  class="btn btn--outline btn--busy"
+                  :disabled="billingBusy !== null"
+                  @click="doBillingPortal()"
+                >
+                  <CrmSpinner v-if="billingBusy === 'portal'" size="sm" label="Opening" />
+                  <span v-else>Open billing portal</span>
+                </button>
+              </div>
+            </div>
+          </template>
         </template>
 
         <!-- Membership types -->
@@ -916,7 +1240,10 @@ function sendInvite() {
                   class="primary-btn"
                   :disabled="!isMembershipDirty || membershipSaving"
                   @click="saveMembershipChanges"
-                >{{ membershipSaving ? 'Saving…' : 'Save changes' }}</button>
+                >
+                  <CrmSpinner v-if="membershipSaving" size="sm" label="Saving" />
+                  <span>{{ membershipSaving ? 'Saving…' : 'Save changes' }}</span>
+                </button>
               </div>
             </div>
             <p class="card__sub">Tiers your members pay to join. Prices show on the public /membership page and drive the application flow.</p>
@@ -1116,7 +1443,10 @@ function sendInvite() {
                   class="primary-btn"
                   :disabled="!isNotificationsDirty || notificationSaving"
                   @click="saveNotificationSettings"
-                >{{ notificationSaving ? 'Saving…' : 'Save changes' }}</button>
+                >
+                  <CrmSpinner v-if="notificationSaving" size="sm" label="Saving" />
+                  <span>{{ notificationSaving ? 'Saving…' : 'Save changes' }}</span>
+                </button>
               </div>
             </div>
             <p class="card__sub">Preferences are per-user — they follow you across clubs. In-app pings show in the bell dropdown; email pings send a transactional email as soon as the event fires.</p>
@@ -1185,7 +1515,10 @@ function sendInvite() {
                   class="primary-btn"
                   :disabled="!isEnquiryDirty || enquirySettingsSaving"
                   @click="saveEnquirySettings"
-                >{{ enquirySettingsSaving ? 'Saving…' : 'Save changes' }}</button>
+                >
+                  <CrmSpinner v-if="enquirySettingsSaving" size="sm" label="Saving" />
+                  <span>{{ enquirySettingsSaving ? 'Saving…' : 'Save changes' }}</span>
+                </button>
               </div>
             </div>
             <p class="card__sub">Controls the public /contact form on your site and where new enquiries land.</p>
@@ -1552,6 +1885,158 @@ function sendInvite() {
 .field__hint { font-family: var(--font-body); font-size: 11px; color: var(--color-mute); }
 .tagline { padding: 12px 14px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-display); font-size: 16px; color: var(--color-ink); font-weight: 500; }
 .tagline:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
+
+/* Billing — plan card status pill + feature list */
+.card--warn { border-color: var(--color-warn, #d97706); background: var(--color-warn-soft, #fff7ed); }
+.card__body--muted { color: var(--color-mute); font-size: 13px; margin-top: 4px; }
+.billing-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  margin-left: 8px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+  letter-spacing: 0.02em;
+}
+.billing-pill--ok    { background: #ecfdf5; color: #047857; }
+.billing-pill--trial { background: #eff6ff; color: #1d4ed8; }
+.billing-pill--warn  { background: #fff7ed; color: #b45309; }
+.billing-pill--bad   { background: #fef2f2; color: #b91c1c; }
+.billing-pill--muted { background: #f3f4f6; color: #4b5563; }
+.billing-feature-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-ink);
+}
+
+/* Plan comparison — side-by-side Starter vs Pro */
+.plan-compare__title { margin-bottom: 14px; }
+.plan-compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+.plan-compare__col {
+  padding: 18px 18px 16px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 14px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.plan-compare__col--pro {
+  border-color: var(--color-accent, #4f46e5);
+  box-shadow: 0 0 0 1px var(--color-accent, #4f46e5) inset;
+}
+.plan-compare__col--current {
+  background: var(--color-accent-soft, #eef2ff);
+}
+.plan-compare__badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.plan-compare__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--color-mute);
+}
+.plan-compare__tag {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.plan-compare__tag--reco {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.plan-compare__price {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+.plan-compare__amount {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--color-ink);
+  line-height: 1;
+}
+.plan-compare__period {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-mute);
+}
+.plan-compare__blurb {
+  margin: 0 0 12px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-ink);
+}
+.plan-compare__list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+  display: grid;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-ink);
+  flex: 1;
+}
+.plan-compare__list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.plan-compare__list-muted { color: var(--color-mute); }
+.plan-compare__check {
+  display: inline-flex;
+  width: 16px;
+  min-width: 16px;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--color-accent, #4f46e5);
+  line-height: 1.4;
+}
+.plan-compare__check--mute { color: var(--color-mute); font-weight: 500; }
+.plan-compare__cta-row {
+  display: flex;
+  margin-top: auto;
+}
+.plan-compare__cta-row .btn { width: 100%; justify-content: center; }
+
+/* Busy state — keep the button height stable when label swaps to a spinner */
+.btn--busy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 96px;
+}
+.btn--busy[disabled] { cursor: progress; opacity: 0.9; }
+
+/* Loading state for the initial plan fetch — spinner + label inline */
+.billing-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-mute);
+}
 
 @media (max-width: 900px) {
   .settings__grid { grid-template-columns: 1fr; }

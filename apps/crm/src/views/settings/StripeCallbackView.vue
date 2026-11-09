@@ -93,7 +93,7 @@ onMounted(() => {
   if (variant.value === 'error') return
   const tick = () => {
     if (countdown.value <= 1) {
-      router.replace('/crm/settings')
+      router.replace('/crm/settings/integrations')
       return
     }
     countdown.value -= 1
@@ -155,7 +155,7 @@ onBeforeUnmount(() => {
       </template>
 
       <div class="sc__actions">
-        <router-link to="/crm/settings" class="btn btn--ink">
+        <router-link to="/crm/settings/integrations" class="btn btn--ink">
           {{ variant === 'error' ? 'Back to settings' : countdown > 0 ? `Open settings (${countdown}s)` : 'Open settings' }}
         </router-link>
       </div>

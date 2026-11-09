@@ -422,7 +422,9 @@ const ORG_TYPES: Array<{ value: OrgType; label: string; sub: string }> = [
             <li><strong>Switch Pro ↔ Starter</strong> any time. We'll prorate the next bill.</li>
           </ul>
           <button class="wiz__primary wiz__pay-cta" type="button" :disabled="submitting" @click="submitSignup">
-            <template v-if="submitting">Taking you to Stripe…</template>
+            <template v-if="submitting">
+              <span class="wiz__spinner" aria-hidden="true" /> Taking you to Stripe…
+            </template>
             <template v-else>Save card · Start trial <span class="wiz__pay-chip">$0.00 TODAY</span></template>
           </button>
           <p v-if="submitError" class="wiz__error">{{ submitError }}</p>
@@ -577,6 +579,20 @@ const ORG_TYPES: Array<{ value: OrgType; label: string; sub: string }> = [
 
 .wiz__foot { margin: 48px auto 0; text-align: center; font-size: 12px; color: rgba(255,255,255,0.4); max-width: 720px; }
 .wiz__foot a { color: rgba(255,255,255,0.7); text-decoration: underline; }
+
+/* Inline spinner for the "Taking you to Stripe…" state */
+.wiz__spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: currentColor;
+  animation: wiz-spin 0.8s linear infinite;
+  vertical-align: -2px;
+  margin-right: 8px;
+}
+@keyframes wiz-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 768px) {
   .wiz { padding: 24px 20px; }

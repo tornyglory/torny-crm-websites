@@ -28,6 +28,7 @@ import {
   type VenueAddon,
 } from '@torny/api-client'
 import HeroImageUploader from './HeroImageUploader.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import TornyTimePicker from '@/components/TornyTimePicker.vue'
 
 /** Normalise a SQL TIME value (HH:MM:SS) to the HH:MM shape that
@@ -557,7 +558,8 @@ async function save(): Promise<void> {
       <div class="pe__actions">
         <RouterLink to="/crm/venue-packages" class="btn btn--ghost">Cancel</RouterLink>
         <button type="submit" class="btn btn--ink" :disabled="!canSave">
-          {{ saving ? 'Saving…' : isCreateMode ? 'Create package' : 'Save package' }}
+          <CrmSpinner v-if="saving" size="sm" :label="isCreateMode ? 'Creating' : 'Saving'" />
+          <span>{{ saving ? 'Saving…' : isCreateMode ? 'Create package' : 'Save package' }}</span>
         </button>
       </div>
     </form>

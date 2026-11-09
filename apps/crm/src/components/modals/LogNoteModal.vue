@@ -14,6 +14,7 @@ import {
   type NoteType,
 } from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import { useToast } from '@/composables/useToast'
 
 const props = defineProps<{
@@ -179,7 +180,8 @@ function onCmdEnter(e: KeyboardEvent) {
         :disabled="saving || state.body.trim().length === 0"
         @click="save"
       >
-        {{ saving ? 'Saving…' : 'Save note' }}
+        <CrmSpinner v-if="saving" size="sm" label="Saving" />
+        <span>{{ saving ? 'Saving…' : 'Save note' }}</span>
       </button>
     </template>
   </CrmModal>

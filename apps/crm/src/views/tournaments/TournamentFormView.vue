@@ -28,6 +28,7 @@ import {
 } from '@torny/api-client'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import TornyDatePicker from '@/components/TornyDatePicker.vue'
 
 const GALLERY_MAX = 8
@@ -574,8 +575,9 @@ const descLen = computed(() => form.description.length)
               :disabled="uploadingGallery || form.gallery_urls.length >= GALLERY_MAX"
               @click="galleryInput?.click()"
             >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1V9M1 5H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              {{ uploadingGallery ? 'Uploading…' : 'Add more' }}
+              <CrmSpinner v-if="uploadingGallery" size="sm" label="Uploading" />
+              <svg v-else width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1V9M1 5H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <span>{{ uploadingGallery ? 'Uploading…' : 'Add more' }}</span>
             </button>
           </div>
           <div class="gallery-grid">

@@ -12,6 +12,7 @@
  */
 import { computed, reactive, ref, watch } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import FontPicker from '@/components/FontPicker.vue'
 import StylePicker from '@/components/StylePicker.vue'
 import ColorSchemePicker from '@/components/ColorSchemePicker.vue'
@@ -652,7 +653,8 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
               :disabled="!headerNameDirty || headerNameSaving"
               @click="saveHeaderName"
             >
-              {{ headerNameSaving ? 'Saving…' : 'Save' }}
+              <CrmSpinner v-if="headerNameSaving" size="sm" label="Saving" />
+              <span>{{ headerNameSaving ? 'Saving…' : 'Save' }}</span>
             </button>
           </div>
           <div class="ws-header-name__hint">
@@ -822,7 +824,10 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
             class="ws-btn"
             :disabled="!navDirty || navSaving"
             @click="saveNavigation"
-          >{{ navSaving ? 'Saving…' : 'Save navigation' }}</button>
+          >
+            <CrmSpinner v-if="navSaving" size="sm" label="Saving" />
+            <span>{{ navSaving ? 'Saving…' : 'Save navigation' }}</span>
+          </button>
         </div>
       </div>
 

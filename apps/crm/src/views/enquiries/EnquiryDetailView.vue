@@ -22,6 +22,7 @@ import {
 } from '@torny/api-client'
 import SendEmailModal, { type EmailRecipient, type SendEmailPayload } from '@/components/modals/SendEmailModal.vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -508,7 +509,8 @@ async function toggleArchive() {
               <textarea v-model="replyBody" rows="6" placeholder="Write your reply…" required></textarea>
             </label>
             <button type="submit" class="rail-btn rail-btn--approve" :disabled="!replyBody.trim() || replyOverLimit || replying">
-              {{ replying ? 'Sending…' : 'Send reply' }}
+              <CrmSpinner v-if="replying" size="sm" label="Sending" />
+              <span>{{ replying ? 'Sending…' : 'Send reply' }}</span>
             </button>
           </form>
         </div>

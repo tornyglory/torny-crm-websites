@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { auth as authApi, AuthError } from '@torny/api-client'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 
 const email = ref('')
 const submitting = ref(false)
@@ -83,7 +84,8 @@ function tryAnother() {
 
         <button type="submit" class="auth-btn" :disabled="submitting || !canSubmit">
           <span>{{ submitting ? 'Sending…' : 'Send reset link' }}</span>
-          <svg v-if="!submitting" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <CrmSpinner v-if="submitting" size="sm" label="Sending reset link" />
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5 12h14" />
             <path d="m12 5 7 7-7 7" />
           </svg>
@@ -115,7 +117,8 @@ function tryAnother() {
 
         <button type="button" class="auth-btn auth-btn--ghost" :disabled="resending" @click="resend">
           <span>{{ resending ? 'Resending…' : 'Resend link' }}</span>
-          <svg v-if="!resending" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <CrmSpinner v-if="resending" size="sm" label="Resending" />
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5 12h14" />
             <path d="m12 5 7 7-7 7" />
           </svg>

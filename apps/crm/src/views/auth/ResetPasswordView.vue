@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { auth as authApi, AuthError } from '@torny/api-client'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -197,7 +198,8 @@ async function submit(e: Event) {
 
       <button type="submit" class="auth-btn" :disabled="submitting || !canSubmit">
         <span>{{ submitting ? 'Saving…' : 'Save & sign in' }}</span>
-        <svg v-if="!submitting" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <CrmSpinner v-if="submitting" size="sm" label="Saving" />
+        <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M5 12h14" />
           <path d="m12 5 7 7-7 7" />
         </svg>

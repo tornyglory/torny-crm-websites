@@ -25,6 +25,7 @@ import {
 } from '@torny/api-client'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -302,7 +303,8 @@ function teamLabel(entry: TournamentResultEntry): string {
             :disabled="saving"
             @click="save"
           >
-            {{ saving ? 'Saving…' : 'Save results' }}
+            <CrmSpinner v-if="saving" size="sm" label="Saving" />
+            <span>{{ saving ? 'Saving…' : 'Save results' }}</span>
           </button>
         </div>
       </footer>

@@ -13,6 +13,7 @@ import {
   type MembershipSnapshot,
 } from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import { useToast } from '@/composables/useToast'
 
@@ -232,7 +233,8 @@ function onCmdEnter(e: KeyboardEvent) {
         :disabled="saving || !state.amount"
         @click="save"
       >
-        {{ saving ? 'Recording…' : 'Record payment' }}
+        <CrmSpinner v-if="saving" size="sm" label="Recording payment" />
+        <span>{{ saving ? 'Recording…' : 'Record payment' }}</span>
       </button>
     </template>
   </CrmModal>

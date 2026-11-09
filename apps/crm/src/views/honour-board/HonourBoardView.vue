@@ -22,6 +22,7 @@ import {
   ApiError,
 } from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import Skeleton from '@/components/Skeleton.vue'
 import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import { useClubStore } from '@/stores/club'
@@ -896,7 +897,8 @@ watch(activeCategoryId, () => {
       <template #footer>
         <button type="button" class="modal-btn modal-btn--outline" @click="closeEntryEditor">Cancel</button>
         <button type="button" class="modal-btn modal-btn--primary" :disabled="!canSubmitEntry || entrySubmitting" @click="submitEntry">
-          {{ entrySubmitting ? 'Saving…' : editingEntry ? 'Save changes' : 'Add entry' }}
+          <CrmSpinner v-if="entrySubmitting" size="sm" label="Saving" />
+          <span>{{ entrySubmitting ? 'Saving…' : editingEntry ? 'Save changes' : 'Add entry' }}</span>
         </button>
       </template>
     </CrmModal>

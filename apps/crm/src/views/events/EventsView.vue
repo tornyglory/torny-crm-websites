@@ -23,6 +23,7 @@ import {
   ApiError,
 } from '@torny/api-client'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import { useClubStore } from '@/stores/club'
 import { useToast } from '@/composables/useToast'
@@ -941,7 +942,8 @@ onBeforeUnmount(() => {
           :disabled="!canSubmit || submitting"
           @click="submitEditor"
         >
-          {{ submitting ? 'Saving…' : editing ? 'Save changes' : 'Create event' }}
+          <CrmSpinner v-if="submitting" size="sm" :label="editing ? 'Saving' : 'Creating'" />
+          <span>{{ submitting ? 'Saving…' : editing ? 'Save changes' : 'Create event' }}</span>
         </button>
       </template>
     </CrmModal>

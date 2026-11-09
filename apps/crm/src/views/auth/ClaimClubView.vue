@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { directory, claims as claimsApi, ApiError, type DirectoryClub, type MyClaim } from '@torny/api-client'
 import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -425,7 +426,8 @@ onUnmounted(() => {
           <button type="button" class="foot__ghost" @click="goBackToSearch">Back</button>
           <button type="submit" class="foot__cta" :disabled="submitting || !canSubmitEvidence">
             <span>{{ submitting ? 'Submitting…' : 'Submit claim for review' }}</span>
-            <svg v-if="!submitting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
+            <CrmSpinner v-if="submitting" size="sm" label="Submitting claim" />
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
           </button>
         </div>
       </form>

@@ -13,6 +13,7 @@ import { auth as authApi, media as mediaApi, ApiError } from '@torny/api-client'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -371,7 +372,8 @@ function fmtExpires(iso: string | null): string {
       <template #footer>
         <button type="button" class="pill-btn pill-btn--ghost" :disabled="saving" @click="nameModalOpen = false">Cancel</button>
         <button type="button" class="pill-btn pill-btn--ink" :disabled="saving" @click="saveName">
-          {{ saving ? 'Saving…' : 'Save' }}
+          <CrmSpinner v-if="saving" size="sm" label="Saving" />
+          <span>{{ saving ? 'Saving…' : 'Save' }}</span>
         </button>
       </template>
     </CrmModal>
@@ -396,7 +398,8 @@ function fmtExpires(iso: string | null): string {
       <template #footer>
         <button type="button" class="pill-btn pill-btn--ghost" :disabled="saving" @click="emailModalOpen = false">Cancel</button>
         <button type="button" class="pill-btn pill-btn--ink" :disabled="saving" @click="requestEmailChange">
-          {{ saving ? 'Sending…' : 'Send confirmation link' }}
+          <CrmSpinner v-if="saving" size="sm" label="Sending" />
+          <span>{{ saving ? 'Sending…' : 'Send confirmation link' }}</span>
         </button>
       </template>
     </CrmModal>

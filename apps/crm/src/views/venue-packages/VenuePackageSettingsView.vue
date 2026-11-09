@@ -16,6 +16,7 @@ import {
   ApiError,
   type VenueSettings,
 } from '@torny/api-client'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 
 const clubStore = useClubStore()
 const toast = useToast()
@@ -159,7 +160,8 @@ async function save(): Promise<void> {
       <div class="form__actions">
         <RouterLink to="/crm/venue-packages" class="btn btn--ghost">Cancel</RouterLink>
         <button type="submit" class="btn btn--ink" :disabled="saving">
-          {{ saving ? 'Saving…' : 'Save settings' }}
+          <CrmSpinner v-if="saving" size="sm" label="Saving" />
+          <span>{{ saving ? 'Saving…' : 'Save settings' }}</span>
         </button>
       </div>
     </form>

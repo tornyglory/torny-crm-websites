@@ -35,6 +35,7 @@ import { useClubStore } from '@/stores/club'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import CrmModal from '@/components/modals/CrmModal.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import LogNoteModal from '@/components/modals/LogNoteModal.vue'
 import SendEmailModal from '@/components/modals/SendEmailModal.vue'
 import EmailDetailModal from '@/components/modals/EmailDetailModal.vue'
@@ -1760,7 +1761,8 @@ async function submitEdit() {
                       <div class="notes-row__edit-actions">
                         <button type="button" class="btn btn--outline btn--sm" :disabled="editNoteSaving" @click="cancelEditNote">Cancel</button>
                         <button type="button" class="btn btn--primary btn--sm" :disabled="editNoteSaving" @click="saveEditNote(c)">
-                          {{ editNoteSaving ? 'Saving…' : 'Save' }}
+                          <CrmSpinner v-if="editNoteSaving" size="sm" label="Saving" />
+                          <span>{{ editNoteSaving ? 'Saving…' : 'Save' }}</span>
                         </button>
                       </div>
                     </template>
@@ -2038,7 +2040,8 @@ async function submitEdit() {
         </button>
         <button type="button" class="btn btn--outline" :disabled="editSaving" @click="closeEdit">Cancel</button>
         <button type="button" class="btn btn--primary" :disabled="editSaving" @click="submitEdit">
-          {{ editSaving ? 'Saving…' : 'Save changes' }}
+          <CrmSpinner v-if="editSaving" size="sm" label="Saving" />
+          <span>{{ editSaving ? 'Saving…' : 'Save changes' }}</span>
         </button>
       </template>
     </CrmModal>

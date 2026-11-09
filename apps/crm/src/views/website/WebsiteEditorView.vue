@@ -27,6 +27,7 @@ import { useClubStore } from '@/stores/club'
 import { useOnboardingStore } from '@/stores/onboarding'
 import ImagePicker from '@/components/ImagePicker.vue'
 import VideoPicker from '@/components/VideoPicker.vue'
+import CrmSpinner from '@/components/CrmSpinner.vue'
 import Skeleton from '@/components/Skeleton.vue'
 import BlockPaletteDialog from '@/components/BlockPaletteDialog.vue'
 import WebsiteSettingsPanel, { type WebsiteSettingsSection } from '@/components/WebsiteSettingsPanel.vue'
@@ -1482,7 +1483,8 @@ const lastSavedLabel = computed(() => {
           :disabled="!hasUnpublishedChanges || publishing || loading"
           @click="publish"
         >
-          {{ publishing ? 'Publishing…' : hasUnpublishedChanges ? 'Publish changes' : 'Published' }}
+          <CrmSpinner v-if="publishing" size="sm" label="Publishing" />
+          <span>{{ publishing ? 'Publishing…' : hasUnpublishedChanges ? 'Publish changes' : 'Published' }}</span>
         </button>
       </div>
     </header>
@@ -3547,7 +3549,8 @@ const lastSavedLabel = computed(() => {
         <footer class="page-modal__foot">
           <button type="button" class="btn btn--outline" :disabled="newPageSubmitting" @click="newPageOpen = false">Cancel</button>
           <button type="button" class="btn btn--primary" :disabled="!newPageCanSubmit || newPageSubmitting" @click="submitNewPage">
-            {{ newPageSubmitting ? 'Creating…' : 'Create page' }}
+            <CrmSpinner v-if="newPageSubmitting" size="sm" label="Creating" />
+            <span>{{ newPageSubmitting ? 'Creating…' : 'Create page' }}</span>
           </button>
         </footer>
       </div>
@@ -3597,7 +3600,8 @@ const lastSavedLabel = computed(() => {
         <footer class="page-modal__foot">
           <button type="button" class="btn btn--outline" :disabled="renameSubmitting" @click="renameOpen = false">Cancel</button>
           <button type="button" class="btn btn--primary" :disabled="!renameCanSubmit || renameSubmitting" @click="submitRename">
-            {{ renameSubmitting ? 'Saving…' : 'Save changes' }}
+            <CrmSpinner v-if="renameSubmitting" size="sm" label="Saving" />
+            <span>{{ renameSubmitting ? 'Saving…' : 'Save changes' }}</span>
           </button>
         </footer>
       </div>
@@ -3634,7 +3638,8 @@ const lastSavedLabel = computed(() => {
         <footer class="page-modal__foot">
           <button type="button" class="btn btn--outline" :disabled="deleteSubmitting" @click="deleteOpen = false">Cancel</button>
           <button type="button" class="btn btn--danger" :disabled="!deleteCanSubmit || deleteSubmitting" @click="submitDelete">
-            {{ deleteSubmitting ? 'Deleting…' : 'Delete page' }}
+            <CrmSpinner v-if="deleteSubmitting" size="sm" label="Deleting" />
+            <span>{{ deleteSubmitting ? 'Deleting…' : 'Delete page' }}</span>
           </button>
         </footer>
       </div>

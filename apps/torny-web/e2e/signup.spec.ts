@@ -250,6 +250,177 @@ test.describe('Signup wizard — Chromium walkthrough', () => {
     await expect(continueBtn).toBeDisabled()
   })
 
+  // ── Step 1 validation gates ───────────────────────────────────
+
+  test('step 1: Continue stays disabled until all three fields are valid', async ({ page }) => {
+    await mockBackend(page)
+    await page.goto('/signup')
+    await waitForHydration(page)
+
+    const nameInput = page.getByPlaceholder('Sarah Whittaker')
+    const emailInput = page.getByPlaceholder('sarah@yourclub.co.nz')
+    const passwordInput = page.getByPlaceholder('At least 12 characters')
+    const continueBtn = page.getByRole('button', { name: /Continue · Step 2 of 4/ })
+
+    // Fresh load — all empty.
+    await expect(continueBtn).toBeDisabled()
+
+    // Name only → still disabled.
+    await nameInput.pressSequentially('Sarah', { delay: 5 })
+    await expect(continueBtn).toBeDisabled()
+
+    // + email only → still disabled.
+    await emailInput.pressSequentially('sarah@test.co.nz', { delay: 5 })
+    await expect(continueBtn).toBeDisabled()
+
+    // + short password → still disabled.
+    await passwordInput.pressSequentially('short', { delay: 5 })
+    await expect(continueBtn).toBeDisabled()
+
+    // Finish the password (needs 12 chars total).
+    await passwordInput.pressSequentially('-password', { delay: 5 })
+    await passwordInput.press('Tab')
+    await expect(continueBtn).toBeEnabled()
+  })
+
+  test('step 1: invalid email format keeps Continue disabled', async ({ page }) => {
+    await mockBackend(page)
+    await page.goto('/signup')
+    await waitForHydration(page)
+
+    await page.getByPlaceholder('Sarah Whittaker').pressSequentially('Sarah Whittaker', { delay: 5 })
+    await page.getByPlaceholder('At least 12 characters').pressSequentially('a-long-good-password', { delay: 5 })
+    const emailInput = page.getByPlaceholder('sarah@yourclub.co.nz')
+    const continueBtn = page.getByRole('button', { name: /Continue · Step 2 of 4/ })
+
+    // No @.
+    await emailInput.pressSequentially('notanemail', { delay: 5 })
+    await expect(continueBtn).toBeDisabled()
+
+    // Has @ but no TLD.
+    await emailInput.fill('')
+    await emailInput.pressSequentially('sarah@local', { delay: 5 })
+    await expect(continueBtn).toBeDisabled()
+
+    // Trailing space / spaces are fine — the wizard trims.
+    await emailInput.fill('')
+    await emailInput.pressSequentially('sarah@test.co.nz', { delay: 5 })
+    await emailInput.press('Tab')
+    await expect(continueBtn).toBeEnabled()
+  })
+
+  test('step 1: password shorter than 12 chars keeps Continue disabled', async ({ page }) => {
+    await mockBackend(page)
+    await page.goto('/signup')
+    await waitForHydration(page)
+
+    await page.getByPlaceholder('Sarah Whittaker').pressSequentially('Sarah Whittaker', { delay: 5 })
+    await page.getByPlaceholder('sarah@yourclub.co.nz').pressSequentially('sarah@test.co.nz', { delay: 5 })
+    const passwordInput = page.getByPlaceholder('At least 12 characters')
+    const continueBtn = page.getByRole('button', { name: /Continue · Step 2 of 4/ })
+
+    // 11 chars — one under.
+    await passwordInput.pressSequentially('elevenchars', { delay: 5 })
+    await expect(continueBtn).toBeDisabled()
+
+    // 12 chars — right on the edge.
+    await passwordInput.pressSequentially('X', { delay: 5 })
+    await passwordInput.press('Tab')
+    await expect(continueBtn).toBeEnabled()
+  })
+
+  // ── Step 2 validation gates ───────────────────────────────────
+
+  test('step 2: Continue stays disabled without an org name', async ({ page }) => {
+    await mockBackend(page)
+    await page.goto('/signup')
+    await fillStep1(page)
+
+    // Step 2 loaded with no org name typed.
+    const continueBtn = page.getByRole('button', { name: /Continue · Step 3 of 4/ })
+    await expect(continueBtn).toBeDisabled()
+
+    // Picking a category alone doesn't help — still need an available slug.
+    await page.getByRole('button', { name: /Sports & recreation/ }).click()
+    await expect(continueBtn).toBeDisabled()
+  })
+
+  test('step 2: Continue stays disabled without a category picked', async ({ page }) => {
+    await mockBackend(page)
+    await page.goto('/signup')
+    await fillStep1(page)
+
+    const orgInput = page.getByPlaceholder('Thorndon Bowling Club')
+    await orgInput.pressSequentially('Thorndon Bowling Club', { delay: 5 })
+    await orgInput.press('Tab')
+    await expect(page.getByText('✓ Available')).toBeVisible({ timeout: 10_000 })
+
+    // Slug is available, name is filled, but no category — still disabled.
+    const continueBtn = page.getByRole('button', { name: /Continue · Step 3 of 4/ })
+    await expect(continueBtn).toBeDisabled()
+
+    await page.getByRole('button', { name: /Sports & recreation/ }).click()
+    await expect(continueBtn).toBeEnabled()
+  })
+
+  test('step 2: slug marked Reserved blocks Continue', async ({ page }) => {
+    // Mock the slug check to return `reason: 'reserved'` for any value.
+    await page.route(`${CRM}/subdomains/check**`, async (route) => {
+      const url = new URL(route.request().url())
+      const value = url.searchParams.get('value') ?? ''
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'success',
+          data: { available: false, reason: 'reserved', value },
+        }),
+      })
+    })
+
+    await page.goto('/signup')
+    await fillStep1(page)
+
+    const orgInput = page.getByPlaceholder('Thorndon Bowling Club')
+    await orgInput.pressSequentially('Admin Panel', { delay: 5 })
+    await orgInput.press('Tab')
+
+    await expect(page.getByText('Reserved')).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('button', { name: /Sports & recreation/ }).click()
+    await expect(page.getByRole('button', { name: /Continue · Step 3 of 4/ })).toBeDisabled()
+  })
+
+  test('step 2: slug marked Invalid (bad chars / too short) blocks Continue', async ({ page }) => {
+    // Mock the slug check to return `reason: 'invalid'` for any value.
+    await page.route(`${CRM}/subdomains/check**`, async (route) => {
+      const url = new URL(route.request().url())
+      const value = url.searchParams.get('value') ?? ''
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'success',
+          data: { available: false, reason: 'invalid', value },
+        }),
+      })
+    })
+
+    await page.goto('/signup')
+    await fillStep1(page)
+
+    const orgInput = page.getByPlaceholder('Thorndon Bowling Club')
+    // Needs to be long enough to trigger the server call (≥3 chars),
+    // the mock always returns reason: 'invalid'.
+    await orgInput.pressSequentially('Odd Name', { delay: 5 })
+    await orgInput.press('Tab')
+
+    await expect(page.getByText(/Invalid/)).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('button', { name: /Sports & recreation/ }).click()
+    await expect(page.getByRole('button', { name: /Continue · Step 3 of 4/ })).toBeDisabled()
+  })
+
+  // ── Server-side error path (already-registered email) ─────────
+
   test('email already registered surfaces a friendly message', async ({ page }) => {
     await mockBackend(page, {
       signupStatus: 409,

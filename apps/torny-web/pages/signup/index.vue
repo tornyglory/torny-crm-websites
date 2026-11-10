@@ -24,7 +24,7 @@ const router = useRouter()
 const form = useSignupWizard()
 
 useSeoMeta({
-  title: 'Start your free trial — Torny OS',
+  title: 'Start Your Free Trial — Torny OS',
   description: '30-day free trial. No setup fee. Cancel any time.',
 })
 

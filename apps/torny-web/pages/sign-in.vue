@@ -33,12 +33,12 @@ const skin = computed<ClubSkin | null>(() => skinWrap.value?.value ?? null)
 // via `?club=slug`; falls back to the generic surface.
 useSeoMeta({
   title: computed(() =>
-    skin.value?.name ? `Sign in to ${skin.value.name} — Torny` : 'Sign in — Torny',
+    skin.value?.name ? `Sign In to ${skin.value.name} — Torny` : 'Sign In — Torny',
   ),
   description:
-    'Sign in to Torny to pick up where your committee left off — members, events, team selections, and communications.',
-  ogTitle: 'Sign in — Torny',
-  ogDescription: 'Sign in to run your bowls club with Torny.',
+    'Sign in to Torny to pick up where your committee left off — members, events, communications, and your club website.',
+  ogTitle: 'Sign In — Torny',
+  ogDescription: 'Sign In to Run Your Club With Torny.',
 })
 
 // ── Brand-driven CSS custom properties ─────────────────────────

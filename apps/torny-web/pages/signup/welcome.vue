@@ -23,7 +23,7 @@ const publicSite = computed<string | null>(() =>
 const CRM_ORIGIN = 'https://app.torny.co'  // adjust when the CRM is on a different host
 
 useSeoMeta({
-  title: `You're in — Torny OS`,
+  title: `You're In — Torny OS`,
   description: 'Welcome aboard. Your site is live. 30 days of Pro, on us.',
 })
 

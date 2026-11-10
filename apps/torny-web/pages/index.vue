@@ -3,7 +3,7 @@
 // dashboard both land here in future — for now, an inviting entry that
 // points at sign-in.
 useSeoMeta({
-  title: 'Torny — the bowls club network',
+  title: 'Torny — The Club Network',
   description: 'One login for every club you\'re a part of.',
 })
 </script>

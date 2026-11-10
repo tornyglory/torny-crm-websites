@@ -22,7 +22,6 @@ import {
   type MembershipTierListItem,
   type NotificationKind,
   type PlanState,
-  type SubscriptionStatus,
 } from '@torny/api-client'
 
 const toast = useToast()

@@ -22,7 +22,6 @@ import {
   matchPreset,
   type ClubInvite,
   type CreateInviteErrorCode,
-  type PermissionPreset,
   type RosterMember,
   type SectionToggleMap,
   type SettingsSectionDef,

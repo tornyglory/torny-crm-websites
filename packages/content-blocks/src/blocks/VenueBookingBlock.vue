@@ -586,10 +586,6 @@ function goStep(step: 1 | 2 | 3) {
   currentStep.value = step
 }
 
-const confirmationCopy = computed(() =>
-  (props.confirmationSubtitle ?? '').replace('{host}', props.hostName || 'our host'),
-)
-
 function initialsForHost(): string {
   if (props.hostInitials) return props.hostInitials.toUpperCase()
   const parts = (props.hostName ?? '').trim().split(/\s+/)

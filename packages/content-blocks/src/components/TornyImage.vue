@@ -31,7 +31,7 @@ interface Props {
   rounded?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   size: 'md',
   fit: 'cover',
   aspect: 'auto',

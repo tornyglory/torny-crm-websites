@@ -116,7 +116,7 @@ function highlightTokens(input: string): Array<{ id: number; kind: 'text' | 'tok
     parts.push({ id: id++, kind: 'token', text: m[0] })
     last = re.lastIndex
   }
-  if (last < input.length) parts.push({ id: id++, kind: 'text', text: input.slice(last) })
+  if (last < input.length) parts.push({ id, kind: 'text', text: input.slice(last) })
   return parts
 }
 </script>

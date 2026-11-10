@@ -117,6 +117,7 @@ const emptyMessage = computed(() => {
     case 'declined':  return { title: 'No declines', hint: 'Declined bookings stay here for audit.' }
     case 'cancelled': return { title: 'No cancellations', hint: 'Cancelled bookings live here.' }
     case 'completed': return { title: 'No completed bookings', hint: 'Completed bookings arrive after the booking date passes.' }
+    default:          return { title: 'No bookings', hint: '' }
   }
 })
 

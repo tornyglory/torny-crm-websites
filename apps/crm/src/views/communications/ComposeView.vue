@@ -329,10 +329,6 @@ function insertToken(token: string) {
     if ('setSelectionRange' in target) target.setSelectionRange(caret, caret)
   })
 }
-function copyToken(token: string) {
-  navigator.clipboard?.writeText(token)
-  toast.success(`Copied ${token}`)
-}
 
 // ── Send ──────────────────────────────────────────────────────────
 

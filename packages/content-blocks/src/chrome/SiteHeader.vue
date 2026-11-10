@@ -7,16 +7,6 @@ const emit = defineEmits<{
   (e: 'toggle-drawer'): void
 }>()
 
-const initials = computed(() => {
-  if (props.club.initials) return props.club.initials
-  return props.club.name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 3)
-    .map((word) => word[0]?.toUpperCase() ?? '')
-    .join('')
-})
-
 /** What to actually render in the header (brief 80).
  *  - `headerDisplay` is the authoritative source when present.
  *  - Falls back to the legacy `logoOnly` boolean when the new prop is undefined.

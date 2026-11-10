@@ -159,38 +159,6 @@ watch(
   },
 )
 
-// Toggle persists immediately via the shared navigation PATCH — simpler
-// than batching into the main Save Navigation flow, matches the
-// instant-save pattern of brandLogoUrl / brandFaviconUrl.
-async function toggleLogoInHeader() {
-  const clubId = clubStore.current?.id
-  if (typeof clubId !== 'number') {
-    toast.error('No active club — refresh and try again.')
-    return
-  }
-  if (logoInHeaderSaving.value) return
-  const next = !logoInHeader.value
-  logoInHeader.value = next
-  logoInHeaderSaving.value = true
-  try {
-    const res = await navigationApi.updateForClub(clubId, { logoInHeader: next })
-    clubStore.setNavigation({
-      header: res.header ?? DEFAULT_HEADER,
-      footer: res.footer ?? DEFAULT_FOOTER,
-      headerSticky: res.headerSticky,
-      logoInHeader: res.logoInHeader,
-    })
-    toast.success(next ? 'Using logo in the header.' : 'Showing the club name in the header.')
-  } catch (err) {
-    // Revert optimistic flip on failure.
-    logoInHeader.value = !next
-    const msg = err instanceof ApiError ? err.message : 'Could not update header.'
-    toast.error(msg)
-  } finally {
-    logoInHeaderSaving.value = false
-  }
-}
-
 async function persistBrandAsset(field: 'logo_url' | 'favicon_url', value: string) {
   const clubId = clubStore.current?.id
   if (typeof clubId !== 'number') {
@@ -351,7 +319,6 @@ const headerSticky = ref<boolean>(Boolean(clubStore.current?.navigation?.headerS
  *  as headerSticky (brief 62). Saved immediately on toggle, no "Save"
  *  button required, so admins get instant feedback. */
 const logoInHeader = ref<boolean>(Boolean(clubStore.current?.navigation?.logoInHeader))
-const logoInHeaderSaving = ref(false)
 
 // ── Brief 80 — header display mode + custom name ────────────────
 // Three-state display (logo / name / both) supersedes the old boolean.

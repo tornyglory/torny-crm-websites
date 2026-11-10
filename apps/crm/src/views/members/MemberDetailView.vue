@@ -884,15 +884,6 @@ const totalCollected = computed(() => {
     .filter((r) => r.status === 'paid' || r.status === 'partial' || r.status === 'waived')
     .reduce((sum, r) => sum + r.amount, 0)
 })
-const totalOwing = computed(() => {
-  if (paymentsListLoaded.value && paymentsOutstanding.value) {
-    return paymentsOutstanding.value.balance
-  }
-  return paymentHistory.value
-    .filter((r) => r.status === 'due' || r.status === 'overdue')
-    .reduce((sum, r) => sum + r.amount, 0)
-})
-
 /** Group payments by season — preserves server ordering (newest first). */
 interface PaymentSeason {
   key: string

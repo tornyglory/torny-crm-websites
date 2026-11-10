@@ -128,14 +128,21 @@ const planTag = computed(() => {
           >{{ link.label }}</a>
         </template>
       </div>
-      <div v-if="poweredBy" class="site-footer__powered">
+      <a
+        v-if="poweredBy"
+        class="site-footer__powered"
+        href="https://torny.club"
+        target="_blank"
+        rel="noopener"
+        aria-label="Built with Torny — visit torny.club"
+      >
         <span class="site-footer__powered-label">Powered by</span>
         <span class="site-footer__powered-mark">
           <span class="site-footer__powered-dot" />
           <span class="site-footer__powered-wordmark">Torny</span>
           <span class="site-footer__powered-tag">{{ planTag }}</span>
         </span>
-      </div>
+      </a>
     </div>
   </footer>
 </template>
@@ -338,6 +345,15 @@ const planTag = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: opacity 120ms ease;
+}
+.site-footer__powered:hover { opacity: 0.85; }
+.site-footer__powered:focus-visible {
+  outline: 2px solid var(--color-ground);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 .site-footer__powered-label {
   font-family: var(--font-mono);

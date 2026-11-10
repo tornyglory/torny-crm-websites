@@ -29,6 +29,18 @@ const { data: skinWrap } = await useAsyncData(
 )
 const skin = computed<ClubSkin | null>(() => skinWrap.value?.value ?? null)
 
+// Title re-skins with the club name when arriving from `[slug].torny.co`
+// via `?club=slug`; falls back to the generic surface.
+useSeoMeta({
+  title: computed(() =>
+    skin.value?.name ? `Sign in to ${skin.value.name} — Torny` : 'Sign in — Torny',
+  ),
+  description:
+    'Sign in to Torny to pick up where your committee left off — members, events, team selections, and communications.',
+  ogTitle: 'Sign in — Torny',
+  ogDescription: 'Sign in to run your bowls club with Torny.',
+})
+
 // ── Brand-driven CSS custom properties ─────────────────────────
 // Defaults reflect Torny's generic surface; overridden by the club skin
 // when a valid ?club= slug is present.

@@ -936,4 +936,9 @@ export interface SiteFooterProps {
    *  to `club.name` when null/undefined. Keeps the footer in sync with
    *  whatever the admin set in Settings → Brand → Display name. */
   headerName?: string | null
+  /** Club's plan tier — renders as the tag next to the "Powered by Torny"
+   *  wordmark ("Starter" or "Pro"). When omitted the badge falls back to
+   *  the generic "OS" tag. Brief 93 — plan hydrates on the public site
+   *  payload the same way it does on `/me`. */
+  plan?: 'starter' | 'pro'
 }

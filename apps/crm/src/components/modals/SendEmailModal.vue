@@ -125,7 +125,7 @@ const STATUS_OPTIONS: Array<{ value: MemberStatus; label: string }> = [
 const ROLE_OPTIONS: Array<{ value: MemberRole; label: string }> = [
   { value: 'owner',     label: 'Owner' },
   { value: 'admin',     label: 'Admin' },
-  { value: 'committee', label: 'Committee' },
+  { value: 'member', label: 'Team member' },
   { value: 'player',    label: 'Player' },
 ]
 const DUES_OPTIONS: Array<{ value: DuesStatus; label: string }> = [

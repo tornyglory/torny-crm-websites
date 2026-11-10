@@ -16,6 +16,10 @@ import {
   type CampaignsMetricsResponse,
 } from '@torny/api-client'
 import { useClubStore } from '@/stores/club'
+import { usePermissions } from '@/composables/usePermissions'
+
+const { can: _canComms } = usePermissions()
+const canSendComms = computed(() => _canComms('communications:send'))
 
 const router = useRouter()
 const clubStore = useClubStore()
@@ -243,11 +247,11 @@ function iconTone(c: CampaignRow): { bg: string; stroke: string } {
         <p>Every email you've sent to members, with open and click rates. New broadcasts live here too.</p>
       </div>
       <div class="comms__actions">
-        <button type="button" class="btn btn--ghost" @click="openTemplates">
+        <button v-if="canSendComms" type="button" class="btn btn--ghost" @click="openTemplates">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2.5 3h9v8h-9z M2.5 5.5h9 M5 3v8" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
           Templates
         </button>
-        <button type="button" class="btn btn--ink" @click="compose">
+        <button v-if="canSendComms" type="button" class="btn btn--ink" @click="compose">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           New campaign
         </button>

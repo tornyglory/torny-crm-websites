@@ -27,6 +27,7 @@ import CrmSpinner from '@/components/CrmSpinner.vue'
 import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import { useClubStore } from '@/stores/club'
 import { useToast } from '@/composables/useToast'
+import { usePermissions } from '@/composables/usePermissions'
 import { sitePreviewUrl } from '@/composables/sitePreviewUrl'
 
 // ── Stores + helpers ──────────────────────────────────────────
@@ -36,6 +37,10 @@ const toast = useToast()
 const router = useRouter()
 const route = useRoute()
 const clubId = computed(() => clubStore.current?.id ?? null)
+
+const { can: _canEvents } = usePermissions()
+const canWriteEvents = computed(() => _canEvents('events:write'))
+const canWriteTournaments = computed(() => _canEvents('tournaments:edit'))
 
 type Tab = 'upcoming' | 'past'
 
@@ -649,11 +654,11 @@ onBeforeUnmount(() => {
       <div class="events__actions">
         <button class="btn btn--ghost" @click="openPublicCalendar">View calendar</button>
         <RouterLink
-          v-if="typeFilter === 'tournament'"
+          v-if="typeFilter === 'tournament' && canWriteTournaments"
           :to="{ name: 'tournament-new' }"
           class="btn btn--primary"
         >+ New tournament</RouterLink>
-        <button v-else class="btn btn--primary" @click="openCreate">+ New event</button>
+        <button v-else-if="typeFilter !== 'tournament' && canWriteEvents" class="btn btn--primary" @click="openCreate">+ New event</button>
       </div>
     </header>
 

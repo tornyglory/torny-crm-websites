@@ -38,12 +38,12 @@ const router = useRouter()
 
 interface AudienceFilter {
   status?: 'all' | 'active' | 'pending' | 'lapsed'
-  role?: 'owner' | 'admin' | 'committee' | 'player'
+  role?: 'owner' | 'admin' | 'member' | 'player'
   search?: string
 }
 
 interface AudiencePreset {
-  key: 'all' | 'active_players' | 'committee' | 'admins' | 'specific'
+  key: 'all' | 'active_players' | 'team_members' | 'admins' | 'specific'
   label: string
   hint: string
   filter?: AudienceFilter
@@ -52,7 +52,7 @@ interface AudiencePreset {
 const PRESETS: AudiencePreset[] = [
   { key: 'all', label: 'All members', hint: 'Everyone with an email', filter: { status: 'active' } },
   { key: 'active_players', label: 'Active players', hint: 'Active playing members', filter: { status: 'active', role: 'player' } },
-  { key: 'committee', label: 'Committee', hint: 'Elected committee only', filter: { status: 'active', role: 'committee' } },
+  { key: 'team_members', label: 'Team members', hint: 'People with CRM access', filter: { status: 'active', role: 'member' } },
   { key: 'admins', label: 'Admins', hint: 'CRM admins + owners', filter: { status: 'active', role: 'admin' } },
 ]
 

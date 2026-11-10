@@ -528,5 +528,45 @@ export type {
   TeamSelectionErrorCode,
 } from './resources/teamSelections'
 
+export * as invites from './resources/invites'
+export type {
+  InviteStatus,
+  InviteRole,
+  InviteInvitedBy,
+  ClubInvite,
+  CreateInviteInput,
+  CreateInviteResult,
+  CreateInviteErrorCode,
+  RevokeInviteErrorCode,
+  AcceptInviteInput,
+  AcceptInviteResult,
+  AcceptInviteErrorCode,
+} from './resources/invites'
+
+export * as permissions from './permissions'
+export type {
+  Permission,
+  ProPermission,
+  SectionKey,
+  SectionDef,
+  SettingsSectionDef,
+  SectionToggleState,
+  SectionToggleMap,
+  PermissionPreset,
+} from './permissions'
+export {
+  ALL_PERMISSIONS,
+  HARD_CODED_PERMISSIONS,
+  PRO_PERMISSIONS,
+  SECTIONS,
+  SECTION_PII_PERMISSION,
+  SETTINGS_PERMISSIONS,
+  PRESETS,
+  isProPermission,
+  toggleStateToPermissions,
+  permissionsToToggleState,
+  matchPreset,
+} from './permissions'
+
 export { SAM_BASE, CRM_BASE, MEDIA_BASE, BULK_EMAIL_BASE, VENUE_BASE } from './config'
 export { ApiError, authedFetch, publicFetch, TOKEN_STORAGE_KEY } from './http'

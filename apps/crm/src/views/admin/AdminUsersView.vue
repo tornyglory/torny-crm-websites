@@ -149,7 +149,7 @@ const modalConfig = computed(() => {
         <option value="platform">Platform</option>
         <option value="owner">Owner</option>
         <option value="admin">Admin</option>
-        <option value="committee">Committee</option>
+        <option value="member">Team member</option>
         <option value="player">Player</option>
       </select>
       <select v-model="sportFilter" class="select">

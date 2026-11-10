@@ -27,7 +27,7 @@ export interface BulkEmailRecipientsFilter {
   mode: 'filter'
   filter: {
     status?: 'all' | 'active' | 'pending' | 'lapsed'
-    role?: 'owner' | 'admin' | 'committee' | 'player'
+    role?: 'owner' | 'admin' | 'member' | 'player'
     search?: string
   }
 }

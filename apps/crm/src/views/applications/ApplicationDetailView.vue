@@ -10,6 +10,10 @@ import { useRoute, useRouter } from 'vue-router'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import TornySelect from '@/components/TornySelect.vue'
 import { useToast } from '@/composables/useToast'
+import { usePermissions } from '@/composables/usePermissions'
+
+const { can: _canApps } = usePermissions()
+const canReview = computed(() => _canApps('applications:review'))
 import { useClubStore } from '@/stores/club'
 import {
   applications as applicationsApi,
@@ -455,7 +459,7 @@ async function submitReject() {
           <div v-else class="rail__status-meta">Awaiting decision</div>
         </div>
 
-        <div v-if="detail.status === 'pending'" class="rail__actions">
+        <div v-if="detail.status === 'pending' && canReview" class="rail__actions">
           <button type="button" class="rail-btn rail-btn--approve" @click="openApprove">Approve</button>
           <button type="button" class="rail-btn rail-btn--reject" @click="openReject">Reject</button>
         </div>

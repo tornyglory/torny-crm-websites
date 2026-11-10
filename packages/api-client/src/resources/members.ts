@@ -45,7 +45,7 @@ export type MemberSource =
   | 'application'
   | 'import'
   | 'tournament_entry'
-export type MemberRole = 'owner' | 'admin' | 'committee' | 'player'
+export type MemberRole = 'owner' | 'admin' | 'member' | 'player'
 export type MembershipCadence = 'annual' | 'monthly' | 'season'
 export type MembershipTone = 'accent' | 'mint' | 'tangerine' | 'violet'
 export type MembershipStatus =
@@ -461,7 +461,7 @@ export interface AddMemberInput {
   phone?: string
   /** `YYYY-MM-DD` only. Malformed values → 400 `invalid_dob`. Omitted leaves it null. */
   dob?: string
-  role?: 'committee' | 'player'
+  role?: 'member' | 'player'
   title?: string
   membership_type_id?: number
   membership_type?: string
@@ -876,6 +876,17 @@ export interface UpdateMemberPatch {
   joined_date?: string | null
   /** `YYYY-MM-DD` — end of the current period; null clears. */
   payment_due_date?: string | null
+
+  // ── Permissions (→ club_members.permissions JSON) ─────────────────
+  /** Brief 94 — full-replace permission bundle. Only valid on role='member'
+   *  rows; owner/admin/player → 422 `permissions_only_on_member`. Must be a
+   *  subset of the allowlist (see `packages/api-client/src/permissions.ts`)
+   *  minus the three hard-coded owner/admin-only strings. */
+  permissions?: string[]
+  /** Brief 94 §PATCH — optional concurrency guard. When present must match
+   *  the row's current `updated_at`; mismatch → 409 `stale_state` with the
+   *  current value in the body so the FE can reload and retry. */
+  expected_updated_at?: string
 }
 
 export interface UpdateMemberResponse {
@@ -926,6 +937,13 @@ export type UpdateMemberErrorCode =
   | 'owner_via_transfer'
   // Conflict
   | 'email_in_use'
+  // Permission bundle (brief 94)
+  | 'permissions_only_on_member'
+  | 'invalid_permission'
+  | 'permission_not_grantable'
+  | 'permission_requires_plan'
+  | 'stale_state'
+  | 'forbidden_permission'
 
 /** PATCH /clubs/:clubId/members/:userId — partial update. */
 export async function patchMember(

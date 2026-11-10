@@ -54,8 +54,8 @@ export const useClubStore = defineStore('club', () => {
     }
     const stillValid = current.value && clubs.some((c) => c.id === current.value?.id)
     if (stillValid) return
-    // Prefer the highest-tier membership first (owner > admin > committee).
-    const order = { owner: 0, admin: 1, committee: 2 } as const
+    // Prefer the highest-tier membership first (owner > admin > member).
+    const order = { owner: 0, admin: 1, member: 2 } as const
     const sorted = [...clubs].sort((a, b) => (order[a.role] ?? 99) - (order[b.role] ?? 99))
     const pick = sorted[0]!
     setCurrent({

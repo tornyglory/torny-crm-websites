@@ -172,7 +172,7 @@ export interface Member {
   email: string
   phone: string | null
   status: 'active' | 'pending' | 'lapsed' | 'life'
-  role: 'player' | 'committee' | 'admin' | 'owner'
+  role: 'player' | 'member' | 'admin' | 'owner'
   membershipTypeId: ID | null
   joinedAt: string
 }

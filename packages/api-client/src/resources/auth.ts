@@ -4,7 +4,7 @@
 // before we have an auth token. Once signed in, other resources use useApi() /
 // createTornyClient() which attaches the token from the auth store.
 
-export type Role = 'platform' | 'owner' | 'admin' | 'committee' | 'player'
+export type Role = 'platform' | 'owner' | 'admin' | 'member' | 'player'
 
 export interface UserClub {
   /** Integer club id (per brief 08 §Timezones + IDs). */
@@ -14,6 +14,13 @@ export interface UserClub {
   role: Exclude<Role, 'platform' | 'player'>
   /** Optional freeform title (e.g. "Secretary"). */
   title?: string | null
+  /** Billing plan — brief 93. Starter hides Pro-only sections even when the
+   *  permission string is present (downgrade case). */
+  plan?: PlanKey
+  /** Granted permissions for this club — brief 94. `['*']` for owners,
+   *  explicit full bundle for admins, stored JSON (or committee default) for
+   *  members, `['dashboard:view']` for players. Missing on legacy payloads. */
+  permissions?: string[]
 }
 
 export interface AuthUser {

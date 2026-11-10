@@ -12,6 +12,7 @@ import NewSeasonModal from './NewSeasonModal.vue'
 import MemberSummaryStats from './MemberSummaryStats.vue'
 import { useToast } from '@/composables/useToast'
 import { useMemberSearch } from '@/composables/useMemberSearch'
+import { usePermissions } from '@/composables/usePermissions'
 import { useClubStore } from '@/stores/club'
 import { useAuthStore } from '@/stores/auth'
 import { members as membersApi, seasons as seasonsApi, ApiError, type PaymentMethod, type PositionGroup, type RosterMember, type MembersSummary, type MembershipTierListItem, type Season } from '@torny/api-client'
@@ -51,7 +52,7 @@ interface Member {
   membershipTypeId?: number | null
   /** Raw API role — the UI's `role` collapses owner/admin into Committee for
    *  visual grouping; this preserves the actual value for PATCH round-trips. */
-  apiRole?: 'owner' | 'admin' | 'committee' | 'player'
+  apiRole?: 'owner' | 'admin' | 'member' | 'player'
   title?: string | null
   /** What the member should pay per cadence — from `membership.fee` (or the legacy
    *  `annual_fee` alias). Null when no tier is assigned. */
@@ -172,9 +173,9 @@ function formatJoinedAt(iso: string | null | undefined): string {
 function rosterToView(r: RosterMember): Member {
   const roleMap: Record<string, MemberRole> = {
     player: 'Player',
-    committee: 'Committee',
-    admin: 'Committee',
-    owner: 'Committee',
+    member: 'Player',
+    admin: 'Player',
+    owner: 'Player',
   }
   const statusMap: Record<string, MemberStatus> = {
     active: 'Active',
@@ -712,6 +713,11 @@ function openDetail(m: Member) {
   router.push({ name: 'member-detail', params: { id: m.id } })
 }
 
+// ── Permission gates ───────────────────────────────────────────
+const { can: perm } = usePermissions()
+const canWriteMembers = computed(() => perm('members:write'))
+const canImportMembers = computed(() => perm('members:write'))
+
 // ── Edit member modal ──────────────────────────────────────────
 // Owner-only can promote to admin. Everyone else picks from committee/player.
 const callerIsOwner = computed(() => {
@@ -749,7 +755,7 @@ const editOpen = ref(false)
 const editSubmitting = ref(false)
 const editError = ref<string | null>(null)
 const editForm = reactive({
-  role: 'player' as 'admin' | 'committee' | 'player',
+  role: 'player' as 'admin' | 'member' | 'player',
   title: '' as string,
   typeId: null as number | null,
   positionGroup: 'member' as PositionGroup,
@@ -790,11 +796,11 @@ const addTierOptions = computed<Array<{ value: string; label: string }>>(() =>
 )
 
 /** Role options for the Edit modal. Admin is owner-only — the computed
- *  reactively hides it from committee members. */
-const editRoleOptions = computed<Array<{ value: 'player' | 'committee' | 'admin'; label: string }>>(() => {
-  const opts: Array<{ value: 'player' | 'committee' | 'admin'; label: string }> = [
+ *  reactively hides it from team members. */
+const editRoleOptions = computed<Array<{ value: 'player' | 'member' | 'admin'; label: string }>>(() => {
+  const opts: Array<{ value: 'player' | 'member' | 'admin'; label: string }> = [
     { value: 'player', label: 'Player' },
-    { value: 'committee', label: 'Committee' },
+    { value: 'member', label: 'Team member' },
   ]
   if (callerIsOwner.value) opts.push({ value: 'admin', label: 'Admin' })
   return opts
@@ -819,7 +825,7 @@ function _openEditMember() {
     toast.info("The club owner can't be edited here — use ownership transfer.")
     return
   }
-  editForm.role = (m.apiRole === 'admin' || m.apiRole === 'committee' || m.apiRole === 'player') ? m.apiRole : 'player'
+  editForm.role = (m.apiRole === 'admin' || m.apiRole === 'member' || m.apiRole === 'player') ? m.apiRole : 'player'
   editForm.title = m.title ?? ''
   editForm.typeId = m.membershipTypeId ?? null
   editForm.positionGroup = m.positionGroup ?? 'member'
@@ -1059,11 +1065,11 @@ const canSubmit = computed(
   () => form.firstName.trim().length > 0 && form.lastName.trim().length > 0 && /.+@.+\..+/.test(form.email.trim()),
 )
 
-// Map the UI role picker (Player / Committee / Coach / Junior / Volunteer)
-// to the API's smaller role vocabulary. Coach / Junior / Volunteer are
-// player-tier for permissions; use `title` to preserve the flavour.
-function toApiRole(role: MemberRole): 'committee' | 'player' {
-  return role === 'Committee' ? 'committee' : 'player'
+// The member-type picker (Player / Committee / Coach / Junior / Volunteer)
+// records *what kind of member* someone is — it never grants CRM access.
+// CRM access is granted separately via Settings → Team access.
+function toApiRole(_role: MemberRole): 'player' {
+  return 'player'
 }
 
 // Resolve tier name → id via the dedicated /membership-tiers endpoint.
@@ -1173,11 +1179,11 @@ async function submit() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
-        <RouterLink to="/crm/members/import" class="members__btn members__btn--outline">
+        <RouterLink v-if="canImportMembers" to="/crm/members/import" class="members__btn members__btn--outline">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           Import CSV
         </RouterLink>
-        <button class="members__btn" @click="openAdd">+ Add member</button>
+        <button v-if="canWriteMembers" class="members__btn" @click="openAdd">+ Add member</button>
       </div>
     </header>
 
@@ -1474,7 +1480,7 @@ async function submit() {
       </li>
     </ul>
 
-    <button class="fab" @click="openAdd">+ Add member</button>
+    <button v-if="canWriteMembers" class="fab" @click="openAdd">+ Add member</button>
 
     <!-- Detail modal replaced by MemberDetailView (design 33). -->
 

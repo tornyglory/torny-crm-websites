@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import CrmModal from '@/components/modals/CrmModal.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
 import StripeConnectCard from '@/views/settings/StripeConnectCard.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
+import TeamAccessCard from '@/views/settings/TeamAccessCard.vue'
 import { useToast } from '@/composables/useToast'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useClubStore } from '@/stores/club'
@@ -778,7 +778,7 @@ async function doBillingPortal() {
   billingBusy.value = 'portal'
   try {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    const res = await billingApi.portal(clubId, { return_url: `${origin}/crm/settings/billing` })
+    const res = await billingApi.portal(clubId, { return_url: `${origin}/crm/settings/billing?result=updated` })
     if (typeof window !== 'undefined') window.location.href = res.portal_url
   } catch (err) {
     const msg = err instanceof ApiError ? err.message : 'Could not open billing portal.'
@@ -868,18 +868,48 @@ async function switchPlan(target: 'starter' | 'pro') {
   }
 }
 
-// Stripe success routes through /crm/billing/success which handles its
-// own toast + state refresh. Here we only need the cancel path.
-onMounted(() => {
+// Stripe Checkout success routes through /crm/billing/success — that
+// view handles its own toast + state refresh. Here we only need the
+// cancel path and the Billing Portal's `?result=updated` return.
+//
+// Why poll on `updated`: Stripe's `customer.subscription.updated`
+// webhook ping to the backend is async. The admin can land back on
+// this page before the backend has applied the plan/status change.
+// We re-fetch billing state immediately, then poll every 2s for up
+// to 20s or until something changed. Once the new state is in, we
+// drop the `?result=updated` query so a browser refresh doesn't
+// re-trigger the poll.
+async function pollBillingAfterReturn() {
+  const before = billingState.value
+  const snapshot = before
+    ? `${before.plan}|${before.subscription_status}|${before.current_period_end ?? ''}`
+    : ''
+  for (let attempt = 0; attempt < 10; attempt++) {
+    await loadBilling()
+    const after = billingState.value
+    const afterKey = after
+      ? `${after.plan}|${after.subscription_status}|${after.current_period_end ?? ''}`
+      : ''
+    if (afterKey && afterKey !== snapshot) break
+    await new Promise((r) => setTimeout(r, 2000))
+  }
+}
+
+onMounted(async () => {
   const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
-  if (params.get('result') === 'cancel') toast.info('Checkout cancelled.')
+  const result = params.get('result')
+  if (result === 'cancel') {
+    toast.info('Checkout cancelled.')
+    return
+  }
+  if (result === 'updated') {
+    toast.success('Subscription updated.')
+    // Drop the query param so a refresh doesn't re-poll.
+    void router.replace({ name: 'settings', params: { section: 'billing' } })
+    await pollBillingAfterReturn()
+  }
 })
 
-const team = ref([
-  { id: 'u1', name: 'Marcus Tuilagi', email: 'marcus@example.com', role: 'Owner', lastActive: '2h ago' },
-  { id: 'u2', name: 'Denise Peters', email: 'denise@example.com', role: 'Admin', lastActive: '3d ago' },
-  { id: 'u3', name: 'Sione Vagana', email: 'sione@example.com', role: 'Committee', lastActive: '1w ago' },
-])
 
 const security = ref({
   twoFactor: false,
@@ -914,37 +944,6 @@ function toggleIntegration(id: string) {
     i.status = 'connected'
     toast.success(`${i.label} connected.`)
   }
-}
-function manageTeamRow(name: string) {
-  toast.info(`Managing ${name}'s role — role picker opens next session.`)
-}
-
-// ── Invite teammate modal ──────────────────────────────────────
-const inviteOpen = ref(false)
-const inviteForm = reactive({
-  email: '',
-  role: 'Committee' as 'Admin' | 'Committee',
-  message: '',
-})
-function openInvite() {
-  inviteForm.email = ''
-  inviteForm.role = 'Committee'
-  inviteForm.message = ''
-  inviteOpen.value = true
-}
-function closeInvite() { inviteOpen.value = false }
-const canInvite = computed(() => /.+@.+\..+/.test(inviteForm.email.trim()))
-function sendInvite() {
-  if (!canInvite.value) return
-  team.value.push({
-    id: `u${Date.now()}`,
-    name: inviteForm.email.split('@')[0] ?? inviteForm.email,
-    email: inviteForm.email.trim(),
-    role: inviteForm.role,
-    lastActive: '—',
-  })
-  inviteOpen.value = false
-  toast.success(`Invite sent to ${inviteForm.email.trim()}.`)
 }
 </script>
 
@@ -1360,28 +1359,7 @@ function sendInvite() {
 
         <!-- Team access -->
         <template v-else-if="active === 'team'">
-          <div class="card">
-            <div class="card__head">
-              <div>
-                <div class="card__eyebrow">CRM access</div>
-                <h2 class="card__title">Team members</h2>
-                <p class="card__body">People who can sign in and manage this club’s CRM.</p>
-              </div>
-              <button class="btn btn--primary" @click="openInvite">+ Invite</button>
-            </div>
-            <ul class="rows">
-              <li v-for="u in team" :key="u.id" class="frow">
-                <div class="frow__avatar">{{ u.name.split(' ').map((s) => s[0]).slice(0,2).join('') }}</div>
-                <div>
-                  <div class="frow__name">{{ u.name }}</div>
-                  <div class="frow__meta">{{ u.email }}</div>
-                </div>
-                <div class="badge" :class="`badge--${u.role.toLowerCase()}`">{{ u.role }}</div>
-                <div class="frow__time">Last active {{ u.lastActive }}</div>
-                <button class="link" @click="manageTeamRow(u.name)">Manage</button>
-              </li>
-            </ul>
-          </div>
+          <TeamAccessCard />
         </template>
 
         <!-- Security -->
@@ -1622,37 +1600,6 @@ function sendInvite() {
         </template>
       </section>
     </div>
-
-    <CrmModal
-      :open="inviteOpen"
-      eyebrow="Team access"
-      title="Invite a teammate"
-      width="md"
-      @close="closeInvite"
-    >
-      <p class="invite__body">They'll get an email invite. Once accepted, they can sign in to the CRM with the role you pick.</p>
-      <form class="form" @submit.prevent="sendInvite">
-        <label class="field">
-          <span class="field__label">Email address</span>
-          <input v-model="inviteForm.email" type="email" placeholder="teammate@club.co.nz" autofocus />
-        </label>
-        <label class="field">
-          <span class="field__label">Role</span>
-          <select v-model="inviteForm.role">
-            <option value="Admin">Admin — same rights as you</option>
-            <option value="Committee">Committee — read-only + reply to enquiries</option>
-          </select>
-        </label>
-        <label class="field">
-          <span class="field__label">Personal message (optional)</span>
-          <textarea v-model="inviteForm.message" rows="3" placeholder="Kia ora — you'll now have CRM access…" />
-        </label>
-      </form>
-      <template #footer>
-        <button type="button" class="modal-btn modal-btn--outline" @click="closeInvite">Cancel</button>
-        <button type="button" class="modal-btn modal-btn--primary" :disabled="!canInvite" @click="sendInvite">Send invite</button>
-      </template>
-    </CrmModal>
   </div>
 </template>
 
@@ -1763,7 +1710,6 @@ function sendInvite() {
 .danger-row p { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin: 0; max-width: 480px; line-height: 1.5; }
 
 /* Invite modal */
-.invite__body { font-family: var(--font-body); font-size: 13px; color: var(--color-graphite); line-height: 1.5; margin: 0 0 16px; }
 .form { display: flex; flex-direction: column; gap: 14px; }
 .form .field { display: flex; flex-direction: column; gap: 6px; }
 .form .field input, .form .field select, .form .field textarea { padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 8px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); background: #fff; resize: vertical; }

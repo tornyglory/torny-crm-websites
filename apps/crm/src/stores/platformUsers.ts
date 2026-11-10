@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import type { SportCode } from './sports'
 
 export type UserStatus = 'active' | 'suspended' | 'banned' | 'pending'
-export type UserPlatformRole = 'platform' | 'owner' | 'admin' | 'committee' | 'player'
+export type UserPlatformRole = 'platform' | 'owner' | 'admin' | 'member' | 'player'
 
 export interface ClubMembership {
   clubName: string
@@ -166,7 +166,7 @@ const seed: PlatformUser[] = [
     firstName: 'Tania',
     lastName: 'Field',
     email: 'tania@whangareibowls.org.nz',
-    role: 'committee',
+    role: 'member',
     status: 'active',
     joinedAt: '2026-06-01T00:00:00Z',
     lastActiveAt: '2026-08-19T22:11:00Z',

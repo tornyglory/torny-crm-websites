@@ -10,6 +10,10 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
+import { usePermissions } from '@/composables/usePermissions'
+
+const { can: _canEnq } = usePermissions()
+const canRespond = computed(() => _canEnq('enquiries:respond'))
 import { useClubStore } from '@/stores/club'
 import {
   enquiries as enquiriesApi,
@@ -488,7 +492,7 @@ async function toggleArchive() {
         </div>
 
         <!-- Reply form -->
-        <div v-if="detail.status !== 'archived'" class="rail__section">
+        <div v-if="detail.status !== 'archived' && canRespond" class="rail__section">
           <div class="rail__section-head">
             <h3 class="rail__section-title">Reply</h3>
           </div>
@@ -517,6 +521,7 @@ async function toggleArchive() {
 
         <!-- Archive / unarchive -->
         <button
+          v-if="canRespond"
           type="button"
           class="rail-btn"
           :class="detail.status === 'archived' ? 'rail-btn--outline' : 'rail-btn--reject'"

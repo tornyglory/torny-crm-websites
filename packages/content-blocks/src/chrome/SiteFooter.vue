@@ -24,6 +24,16 @@ const initials = computed(() => {
 })
 
 const year = new Date().getFullYear()
+
+/** Badge next to the "Powered by Torny" wordmark. Reads the club's plan
+ *  tier when the site payload carries it; falls back to the generic "OS"
+ *  tag for backwards-compat with payloads from before brief 93 hydrated
+ *  plan on the public site. */
+const planTag = computed(() => {
+  if (props.plan === 'pro') return 'Pro'
+  if (props.plan === 'starter') return 'Starter'
+  return 'OS'
+})
 </script>
 
 <template>
@@ -123,7 +133,7 @@ const year = new Date().getFullYear()
         <span class="site-footer__powered-mark">
           <span class="site-footer__powered-dot" />
           <span class="site-footer__powered-wordmark">Torny</span>
-          <span class="site-footer__powered-tag">OS</span>
+          <span class="site-footer__powered-tag">{{ planTag }}</span>
         </span>
       </div>
     </div>

@@ -24,7 +24,7 @@ function landingFor(user: ReturnType<typeof fromApiUser>): string {
   switch (user.role) {
     case 'owner':
     case 'admin':
-    case 'committee':
+    case 'member':
       return '/crm/dashboard'
     case 'player':
     default:

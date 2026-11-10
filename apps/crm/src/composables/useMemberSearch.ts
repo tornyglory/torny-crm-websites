@@ -19,7 +19,7 @@ export interface UseMemberSearchOptions {
   /** Filter to a specific lifecycle bucket. Default: `all`. */
   status?: 'all' | 'active' | 'pending' | 'lapsed'
   /** Filter to a CRM role. */
-  role?: 'owner' | 'admin' | 'committee' | 'player'
+  role?: 'owner' | 'admin' | 'member' | 'player'
   /** Max results per request. Default: 10 for typeahead, raise for full-page. */
   limit?: number
   /** Debounce window in ms. Default: 300. */

@@ -1,159 +1,186 @@
-# Scoped CRM Roles
+# Scoped CRM access — per-member permission bundles
 
-**Feature:** replace the current three-role model (`owner` / `admin` / `committee`) with an eight-role model so clubs can grant scoped access — a Selector only sees Team selections, a Content editor never sees member PII, a Treasurer only handles payments, etc.
+**Feature:** replace the current three-role model (`owner` / `admin` / `committee`) with per-member permission bundles so an admin can invite someone and tick which sections of the CRM they can access (Members, Applications, Enquiries, Events, Team selections, Tournaments, Honour board, Venue bookings, Venue packages, Website, Communications). Optional presets (Membership officer, Content editor, Treasurer, Selector, Coach, Committee) pre-fill the toggles; admin can tweak before sending the invite.
 
-**Status:** designed 2026-08-26. Awaiting backend implementation. Frontend gating comes in a follow-up brief once permissions[] ships on `/me`.
+**Status:** designed 2026-11-09, supersedes the fixed-eight-roles design previously in this brief (never built). Awaiting backend implementation.
+
+**Why the change from v1 of this brief:** the original design locked clubs into eight canned roles with no per-user tweaking, which doesn't fit real clubs — a common pattern is "Jane does communications + venue bookings only" or "Dave does website + honour board but nothing else," and no preset covers that. Moving to per-member bundles with optional presets gives us both the convenience of canned roles (admin picks "Content editor" and it fills in) and the flexibility clubs actually want.
 
 **Related briefs:**
-- brief 29 (roster + add/patch member) — extends the `role` enum + adds a permission-check pass before every write.
-- brief 30 (post-onboarding fixes) — `/me` gains `permissions[]`.
-- brief 35 (members + player profile) — the public directory position_group is orthogonal to CRM role.
-- brief 38 (applications) — Membership officer + Owner + Admin can approve/reject; nobody else.
+- brief 02 (team access) — invite/revoke/list endpoints already designed; this brief extends them with a `permissions[]` field on invite and change-role operations.
+- brief 29 (members CRUD) — all member writes get gated behind `members:write`.
+- brief 93 (plan on session hydrate) — same pattern: additive field on `/me`, no behaviour change to existing endpoints.
+- brief 86 (plan tiers) — Pro-only sections (team selections, tournaments, honour board, venue bookings, venue packages) still gate by plan FIRST. Permissions gate AFTER. A Starter-plan club can't grant `team_selections:edit` to anyone because the plan hides the whole section.
 
 ---
 
-## 1. The eight roles
+## 1. The ask
 
-Ordered by seniority. Higher rows can do everything lower rows can, except where noted.
+Two immutable roles, plus a flexible "member" bundle for everyone else:
 
-| Slug | Label | One-line purpose |
-|---|---|---|
-| `owner` | Owner | Founder / president. Full control including billing, ownership transfer, danger zone. One per club. |
-| `admin` | Admin | GM or trusted deputy. Same as owner minus billing / danger zone / role management of admins+. |
-| `membership_officer` | Membership officer | Members + Applications + Enquiries + Communications. No website, honour board, or settings. |
-| `content_editor` | Content editor | Website + Events + Honour board + Communications. **No member PII at all.** |
-| `treasurer` | Treasurer | Members read + record payments, Applications read, Settings → billing only. |
-| `selector` | Selector | Team selections (full) + Events (read) + Members (read, no PII beyond name + position). |
-| `coach` | Coach | Team selections (read) + Events (create for training) + Members (read) + Communications (send). |
-| `committee` | Committee | Read-only across almost everything. Can add internal notes on members. AGM visibility, no operational power. |
+- **Owner** — one per club, full access everything, can only change via ownership transfer. Unchanged from today.
+- **Admin** — full access except billing / danger zone / owner promotion. Can invite and manage team members (except other admins and the owner). Unchanged from today.
+- **Member** (new catch-all role, replaces today's `committee`) — carries a `permissions[]` array that controls which sections they can access and whether they can edit vs. view. Admin picks a preset (or "Custom") when inviting; the preset pre-fills the toggles; admin can tweak before sending.
 
-**Legacy:** existing rows keep `owner` / `admin` / `committee`. `player` is unchanged and stays as the "regular playing member with no CRM access" marker.
+Today's `committee` rows migrate to `member` with a read-only permission bundle (see §9).
 
 ---
 
-## 2. Permission model
+## 2. The permission model
 
-Resource × action strings, namespaced with a colon. The backend evaluates permissions server-side on every write — the frontend hides UI to prevent surprises but never trusts the client-side check.
+Backend stores a `permissions[]` text array on `club_members`. Values are `resource:action` strings. The admin UI never shows these strings — it shows section checkboxes with optional "can edit" sub-toggles. The mapping from UI toggle → canonical permission strings lives in the frontend (see §7).
 
 ### 2.1 The permission strings
 
 ```
-dashboard:view
-members:read              — see the roster
-members:read_pii          — see DOB, address, email, phone, notes
-members:write             — add + edit
-members:remove            — revoke membership
-members:note              — add internal notes on a member row
-payments:record           — log a payment against a member
-payments:read             — see payment history / totals
+dashboard:view                   always granted to any team member
+
+members:read                     see the roster (name + avatar + position)
+members:read_pii                 see email, phone, DOB, address, notes, member_number
+members:write                    add / edit members
+members:remove                   revoke membership
+members:note                     add internal notes on a member
+payments:read                    see payment history + totals
+payments:record                  log a payment
+
 applications:read
-applications:review       — approve / reject / add notes
+applications:review              approve / reject / add notes
+
 enquiries:read
 enquiries:respond
-website:view              — see the Website section (read-only preview)
-website:edit              — save + publish pages, edit navigation/brand
+
 events:read
-events:write              — create / edit / delete
+events:write                     create / edit / delete events
+
 team_selections:read
 team_selections:edit
+
+tournaments:read
+tournaments:edit
+
 honour_board:read
 honour_board:edit
-communications:read
-communications:send
-settings:brand            — logo, palette, fonts, style preset
-settings:membership       — cadence, first-year discount, tiers (brief 36)
-settings:hours            — opening hours
-settings:integrations     — Stripe, GCal, mail
-settings:billing          — Torny plan + invoices
-settings:danger           — archive / delete / ownership transfer
-settings:manage_team      — invite + change CRM roles for other users
+
+venue_bookings:read
+venue_bookings:manage            confirm / reschedule / cancel
+venue_packages:read
+venue_packages:edit
+
+website:view                     preview pages in the editor
+website:edit                     save + publish + edit nav/brand
+
+communications:read              see campaign history + metrics
+communications:send              compose + send
+
+settings:brand                   logo, palette, fonts, style preset
+settings:membership              tiers, cadence, first-year discount
+settings:hours                   opening hours
+settings:enquiries               enquiries config
+settings:integrations            Stripe, GCal, mail
+settings:billing                 Torny plan + invoices           — Owner only (hard-coded)
+settings:danger                  archive / delete / transfer     — Owner only (hard-coded)
+settings:manage_team             invite + change permissions     — Owner + Admin only (hard-coded)
 ```
 
-### 2.2 Role → permission matrix
+**Hard-coded rules — not grantable via the member permissions[] array:**
+- `settings:billing` — Owner only. Even an Admin can't see billing.
+- `settings:danger` — Owner only.
+- `settings:manage_team` — Owner + Admin only. An Admin cannot grant `manage_team` to a Member. (Admin itself is a role, not a permission.)
+- Promoting a Member to Admin, or demoting/removing an Admin, is Owner-only (unchanged from brief 02 §3).
 
-`✓` = granted. `✓*` = granted with a scope constraint (see notes). `—` = not granted.
+### 2.2 Section → permission mapping (frontend contract)
 
-| Permission | Owner | Admin | Memb. officer | Content editor | Treasurer | Selector | Coach | Committee |
-|---|---|---|---|---|---|---|---|---|
-| dashboard:view                | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| members:read                  | ✓ | ✓ | ✓ | — | ✓ | ✓* | ✓ | ✓ |
-| members:read_pii              | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
-| members:write                 | ✓ | ✓ | ✓ | — | — | — | — | — |
-| members:remove                | ✓ | ✓ | ✓ | — | — | — | — | — |
-| members:note                  | ✓ | ✓ | ✓ | — | — | — | — | ✓ |
-| payments:record               | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
-| payments:read                 | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
-| applications:read             | ✓ | ✓ | ✓ | — | ✓ | — | — | ✓ |
-| applications:review           | ✓ | ✓ | ✓ | — | — | — | — | — |
-| enquiries:read                | ✓ | ✓ | ✓ | ✓ | — | — | — | ✓ |
-| enquiries:respond             | ✓ | ✓ | ✓ | ✓ | — | — | — | — |
-| website:view                  | ✓ | ✓ | — | ✓ | — | — | — | ✓ |
-| website:edit                  | ✓ | ✓ | — | ✓ | — | — | — | — |
-| events:read                   | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ |
-| events:write                  | ✓ | ✓ | — | ✓ | — | — | ✓* | — |
-| team_selections:read          | ✓ | ✓ | — | — | — | ✓ | ✓ | ✓ |
-| team_selections:edit          | ✓ | ✓ | — | — | — | ✓ | — | — |
-| honour_board:read             | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| honour_board:edit             | ✓ | ✓ | — | ✓ | — | — | — | — |
-| communications:read           | ✓ | ✓ | ✓ | ✓ | — | — | ✓ | ✓ |
-| communications:send           | ✓ | ✓ | ✓ | ✓ | — | — | ✓ | — |
-| settings:brand                | ✓ | ✓ | — | ✓ | — | — | — | — |
-| settings:membership           | ✓ | ✓ | ✓ | — | — | — | — | — |
-| settings:hours                | ✓ | ✓ | — | ✓ | — | — | — | — |
-| settings:integrations         | ✓ | ✓ | — | — | — | — | — | — |
-| settings:billing              | ✓ | — | — | — | ✓ | — | — | — |
-| settings:danger               | ✓ | — | — | — | — | — | — | — |
-| settings:manage_team          | ✓ | ✓* | — | — | — | — | — | — |
+The admin-facing UI shows one row per nav section with a "can access" toggle and (where meaningful) a "can edit" sub-toggle. When the admin ticks a box, the UI sends the corresponding permission strings to the backend. This mapping is the single source of truth — if a backend check rejects a permission string, the UI's toggle labelling is wrong, not the backend.
 
-**Scope constraints:**
-- `members:read` for Selector — the roster query strips `email`, `phone`, `dob`, `address`, `notes`, `member_number`, `last_active_at`. Only name / avatar / position_group / display_name / trophies_count come back.
-- `events:write` for Coach — can create/edit events where `event_type='training'`. All other event types are 403.
-- `settings:manage_team` for Admin — can invite / edit / remove any role **except** `owner` and other `admin` rows. Only Owner can promote to Admin or remove another Admin.
+| Section (UI label)   | "Can access" grants              | "Can edit" also grants                |
+|---|---|---|
+| Members              | `members:read`, `members:read_pii`, `payments:read` | `members:write`, `members:remove`, `members:note`, `payments:record` |
+| Applications         | `applications:read`              | `applications:review`                 |
+| Enquiries            | `enquiries:read`                 | `enquiries:respond`                   |
+| Events               | `events:read`                    | `events:write`                        |
+| Team selections      | `team_selections:read`           | `team_selections:edit`                |
+| Tournaments          | `tournaments:read`               | `tournaments:edit`                    |
+| Honour board         | `honour_board:read`              | `honour_board:edit`                   |
+| Venue bookings       | `venue_bookings:read`            | `venue_bookings:manage`               |
+| Venue packages       | `venue_packages:read`            | `venue_packages:edit`                 |
+| Website              | `website:view`                   | `website:edit`                        |
+| Communications       | `communications:read`            | `communications:send`                 |
+
+**Members section — extra sub-toggle:** "Can see member PII (email, phone, DOB, address, notes)." If unticked, we drop `members:read_pii` from the bundle even when "Can access" is on. Reason: Selectors and Coaches typically shouldn't see contact details.
+
+**Settings section — handled separately from the toggles.** Settings sub-sections grant individually:
+- Settings → Club & brand → `settings:brand`
+- Settings → Membership types → `settings:membership`
+- Settings → Opening hours → `settings:hours`
+- Settings → Enquiries → `settings:enquiries`
+- Settings → Integrations → `settings:integrations`
+
+Admin UI shows these as a second block ("Settings access") with one checkbox per sub-section. Billing, Team access, Danger zone are not in this list — they're hard-coded (see §2.1).
+
+### 2.3 Presets (convenience, not enforcement)
+
+When inviting, the admin picks a preset from a dropdown. This pre-fills the toggles — admin can then tick/untick before hitting Send. Backend does not store the preset slug; only the final `permissions[]`.
+
+| Preset slug | Label | Sections pre-ticked (edit level) | PII |
+|---|---|---|---|
+| `custom` | Custom (start empty) | — | — |
+| `membership_officer` | Membership officer | Members (edit), Applications (edit), Enquiries (edit), Communications (edit); Settings → Membership types | Yes |
+| `content_editor` | Content editor | Website (edit), Events (edit), Honour board (edit), Communications (edit), Enquiries (edit); Settings → Brand, Opening hours | No |
+| `treasurer` | Treasurer | Members (read + payments only, no edit of member record), Applications (read) | Yes |
+| `selector` | Selector | Members (read, no PII), Events (read), Team selections (edit) | No |
+| `coach` | Coach | Members (read, no PII), Events (read), Team selections (read), Communications (send) | No |
+| `committee` | Committee | Read-only across every section; can add internal notes on members | No |
+
+The preset list is presentational; backend doesn't validate against it. If we add/remove a preset later it's a frontend-only change.
 
 ---
 
 ## 3. Database
 
-### 3.1 Migration 102 — extend the enum
+### 3.1 Migration — add permissions column
 
 ```sql
 ALTER TABLE club_members
-  MODIFY COLUMN role ENUM(
-    'owner','admin','membership_officer','content_editor',
-    'treasurer','selector','coach','committee','player'
-  ) NOT NULL;
+  ADD COLUMN permissions JSON NULL;
 ```
 
-Existing rows keep their current value. No data migration needed — none of the new slugs collide with legacy values.
+`permissions` is an array of strings. NULL means "use role default" (Owner = everything, Admin = everything-except-hard-coded). A Member row with NULL `permissions` behaves like legacy committee: read-only across every section (matches the brief 02 committee semantics — no surprise behaviour change on existing data).
 
-### 3.2 No separate permissions table
+### 3.2 Role enum — simplify back to three values
 
-Permissions are derived from `role` at request time via a fixed map in code (`utils/role-permissions.js`). Same pattern as brief 22 (font pairs) and brief 37 (colour schemes): the curated list lives in a JS module. Adding a permission is a code change + deploy — same effective outcome as a table with no live editing, less moving parts.
+```sql
+ALTER TABLE club_members
+  MODIFY COLUMN role ENUM('owner','admin','member','player') NOT NULL;
 
-If we ever add per-user custom overrides ("Denise is a Content editor but also gets communications:send") we'll move to a `club_member_permissions` overrides table then. Not scope for v1.
+UPDATE club_members SET role = 'member' WHERE role = 'committee';
+```
+
+Legacy `committee` rows map to `member` with `permissions = NULL` (read-only default). The `committee` label stays in the admin UI as a preset name, but it's no longer a database role.
+
+`player` is unchanged — still the "regular playing member with no CRM access" marker, no `club_members` CRM row.
+
+### 3.3 Why a JSON array not a join table
+
+Permission bundles are small (max ~30 strings), read on every authenticated request (via `/me` + per-request guard), and churn rarely. A join table adds a hop for zero benefit. Same pattern as brief 25 nav items. If we ever need per-row scoping (e.g. "Selector for the men's pennant only") we'll denormalise then.
 
 ---
 
 ## 4. `/me` payload — add `permissions[]`
 
-Every `/me` response gains a `permissions` array per club membership. Same shape as before, extended:
+Every `/me`, `/login`, `/register` response gains a `permissions` array per club membership (mirrors brief 93's pattern — additive, no behaviour change to existing fields).
 
 ```jsonc
 {
   "status": "success",
   "data": {
-    "user": {
-      "user_id": 4177,
-      "email": "denise@example.com",
-      "…": "existing user fields"
-    },
+    "user": { "user_id": 4177, "email": "denise@example.com", "...": "..." },
     "clubs": [
       {
         "id": 5,
         "name": "Kelburn Bowling Club",
         "slug": "kelburn",
-        "role": "content_editor",
-        "role_label": "Content editor",
+        "role": "member",
+        "plan": "pro",
         "permissions": [
           "dashboard:view",
           "website:view", "website:edit",
@@ -163,19 +190,30 @@ Every `/me` response gains a `permissions` array per club membership. Same shape
           "enquiries:read", "enquiries:respond",
           "settings:brand", "settings:hours"
         ]
+      },
+      {
+        "id": 8,
+        "name": "Naenae Bowling Club",
+        "role": "owner",
+        "plan": "starter",
+        "permissions": ["*"]
       }
     ]
   }
 }
 ```
 
-The frontend reads `permissions` to render the sidebar + gate route entry. Reading `role` still works for display-only ("You're logged in as Content editor").
+**Owner shortcut:** Owner rows return `permissions: ["*"]` — the frontend treats `*` as "everything granted." Saves sending 30+ strings on every hydrate.
+
+**Admin shortcut:** Admin rows return the full admin bundle explicitly (every permission except `settings:billing`, `settings:danger`, and `settings:manage_team` which is implicit on role=admin). Explicit so the frontend doesn't need a separate "is admin" branch — same `permissions.includes(...)` check works for both Admin and Member.
 
 ---
 
 ## 5. Endpoint impact
 
-Every write endpoint runs `requirePermission(clubId, 'resource:action')` after `requireAuth`. If missing, respond:
+### 5.1 Write guards
+
+Every write endpoint runs `requirePermission(clubId, 'resource:action')` after `requireAuth`. On failure:
 
 ```jsonc
 {
@@ -188,111 +226,178 @@ Every write endpoint runs `requirePermission(clubId, 'resource:action')` after `
 
 HTTP status: **403**.
 
-### Additional guards
+### 5.2 Scoped reads
 
-- **Members roster (`GET /clubs/:id/members`)** — the response strips PII fields when the caller lacks `members:read_pii`. `phone`, `email`, `dob`, `address`, `notes`, `member_number`, `last_active_at` become `null`. This keeps the same endpoint working for Selectors without a separate route.
-- **Events (`POST/PATCH/DELETE /clubs/:id/events`)** — Coach role: reject with `403 forbidden_scope` if the request body's `event_type !== 'training'` (or the existing row's event_type is not training on PATCH/DELETE).
-- **Role changes (`PATCH /clubs/:id/members/:userId` role field)** — matrix of allowed transitions:
+- **`GET /clubs/:id/members`** — response strips `email`, `phone`, `dob`, `address`, `notes`, `member_number`, `last_active_at` to `null` when the caller lacks `members:read_pii`. Single endpoint, different payload shape by permission — saves us a separate route.
+- **`GET /clubs/:id/members/:memberId/payments`** — 403 unless caller has `payments:read`.
 
-| Caller role | Can set target to | Cannot set target to |
-|---|---|---|
-| Owner | Any role including `admin` | `owner` (use ownership transfer instead) |
-| Admin | Any role **except** `admin`, `owner` | `admin`, `owner` |
-| Everyone else | — | anything |
+### 5.3 Invite endpoint — extend brief 02
 
-Attempts return `403 forbidden_role_transition` with a `required` hint.
+`POST /clubs/:clubId/invites` (brief 02 §4.2) adds a `permissions` field:
 
-- **Ownership transfer** stays a separate flow (`POST /clubs/:id/transfer`) — Owner only, requires the target's email + confirmation.
+```jsonc
+POST /clubs/:clubId/invites
+{
+  "email": "new-teammate@club.co.nz",
+  "role": "member",                      // "admin" | "member" — NEVER "owner"
+  "permissions": [                        // required when role === "member"; ignored when role === "admin"
+    "dashboard:view",
+    "members:read", "members:read_pii", "members:write", "members:note", "members:remove",
+    "payments:read", "payments:record",
+    "applications:read", "applications:review",
+    "enquiries:read", "enquiries:respond",
+    "communications:read", "communications:send",
+    "settings:membership"
+  ],
+  "message": "Kia ora — you'll now have CRM access for membership stuff…"
+}
+```
+
+- `role: "admin"` — Owner-only (per brief 02 §3). `permissions` field ignored (backend assigns the full admin bundle on accept).
+- `role: "member"` — Owner + Admin. Backend validates every string in `permissions[]` against the allowlist in §2.1. Unknown strings → 422 `invalid_permission`. Attempting to grant a hard-coded permission (`settings:billing`, `settings:danger`, `settings:manage_team`) → 422 `permission_not_grantable`.
+- An empty `permissions: []` is valid — the invitee gets `dashboard:view` only and sees an empty shell. Odd but not an error.
+
+### 5.4 Change permissions on an existing member
+
+New endpoint (extends brief 02 §4.6, which currently only handles role changes):
+
+```jsonc
+PATCH /clubs/:clubId/members/:memberId
+Authorization: Bearer <owner-or-admin-with-manage_team>
+{
+  "permissions": [ "dashboard:view", "events:read", "events:write", ... ]
+}
+
+200 { "id": "cmb_...", "permissions": [...], "updated_at": "..." }
+```
+
+- Caller must have `settings:manage_team` (Owner + Admin).
+- Target row must be role=member. Editing an Admin's permissions is not allowed (Admin bundle is fixed — to change their access, demote to Member first or promote them higher via role change).
+- Owner's permissions are immutable (Owner always = `["*"]`).
+- `permissions` field uses full-replace semantics (not merge) — frontend sends the complete new array.
+- Fires `team.permissions_changed` email to the affected member with a one-line summary ("Your access to Members was removed by Marcus. Reply to this email if that's a mistake.").
+
+### 5.5 Role change endpoint (unchanged from brief 02, with clarification)
+
+`PATCH /clubs/:clubId/members/:memberId` with `role` field:
+- Owner → Admin or Member: Owner-only.
+- Admin → Member or vice versa: Owner-only.
+- Nothing → Owner: use the ownership transfer endpoint (brief 02 §6).
+- When role changes member → admin, server resets `permissions` to the admin bundle (or NULL — equivalent). When role changes admin → member, server sets `permissions` to the Committee preset (read-only across everything) as a safe default; admin can then edit.
 
 ---
 
-## 6. Invite flow (brief 29 + new)
-
-`POST /clubs/:id/members/invite` gets a validated `role` field accepting any of the eight CRM roles (not `player` — that's the join-form path).
-
-- Owner-only for `admin` invites.
-- Owner + Admin for the other six CRM roles.
-- 403 otherwise with `forbidden_permission` + `required: "settings:manage_team"`.
-
-The invite email says which role they'll receive so recipients aren't surprised.
-
----
-
-## 7. Error codes (new + reused)
+## 6. Error codes
 
 | code | HTTP | Cause |
 |---|---|---|
-| `forbidden_permission` | 403 | Caller's role lacks the required permission for this action |
-| `forbidden_role_transition` | 403 | Caller can't set the target user's role to the requested value |
-| `forbidden_scope` | 403 | Caller has the permission but the specific record is outside their scope (e.g. Coach editing a non-training event) |
-| `owner_immutable` | 409 | Existing (brief 29) — can't edit the owner via this endpoint |
-| `owner_via_transfer` | 409 | Existing (brief 29) — use ownership transfer instead |
+| `forbidden_permission` | 403 | Caller's permissions[] lacks the required string |
+| `forbidden_role` | 403 | Action requires role=owner or role=admin (billing, team mgmt, etc.) |
+| `invalid_permission` | 422 | Request body contains a permission string not in the §2.1 allowlist |
+| `permission_not_grantable` | 422 | Request body tries to grant a hard-coded permission (billing / danger / manage_team) |
+| `owner_immutable` | 409 | Can't edit the owner's row (existing, brief 02) |
 
-All errors ship a machine-readable `required` field where relevant so the frontend can show a targeted "you need X" hint.
+All errors include `required` (the missing permission string) or `field` (the offending permission in the request) so the frontend can show a targeted message.
 
 ---
 
-## 8. Client contract summary
+## 7. Frontend contract summary
 
 **What the frontend does:**
-- Reads `permissions[]` off `/me`'s `clubs[]` for the active club and renders sidebar items conditionally.
-- Route guards check the same array before letting the router mount a view. Any bypass hits the 403 backstop.
-- `members:read_pii === false` → the roster columns for phone/email/dob/etc. render `—` instead of the value (the API already sends null, but this saves a paint).
-- Coach event editor hides the event-type dropdown and pre-fills `training`.
-- Admin role dropdown in the "Edit member" modal only shows roles the caller can grant.
+- Reads `permissions[]` off `/me`'s active club. Treats `*` as "all granted."
+- `usePermissions()` composable exposes `can('members:write')` and `canAny('website:view', 'website:edit')`.
+- Sidebar nav filters items by permission:
+  - Members visible if `can('members:read')`
+  - Applications visible if `can('applications:read')`
+  - … etc. per §2.2 mapping
+- Route guards check the same before mounting a view. Any bypass hits the 403 backstop.
+- `members:read_pii === false` → roster columns for phone/email/dob/etc. render `—` instead of the value (backend already sends null; this saves a paint).
+- Settings nav sub-items filter by `settings:*` permissions. Billing / Danger zone / Team access hidden unless role matches hard-coded rules.
+- The invite modal:
+  - Preset dropdown (§2.3 list)
+  - Section checkboxes with "can access" + "can edit" toggles (§2.2)
+  - "Settings access" block with sub-section checkboxes
+  - On Send, UI composes the final `permissions[]` from the toggles and POSTs.
+- The Team access card in Settings:
+  - Lists members with a "Permissions" summary ("Members, Communications, Events + 2 more" or "Full access" for Admin / Owner).
+  - Click → opens a drawer showing the same toggles as the invite modal, prefilled with current permissions, with a Save button.
 
 **What the frontend does NOT do:**
-- Trust its own permission check. Every write endpoint is guarded server-side. The check exists so the UI doesn't offer buttons that would 403.
+- Trust its own permission check for security. Every write endpoint is guarded server-side. The check exists so the UI doesn't offer buttons that would 403.
+- Store the preset slug anywhere — presets are presentational only. If a user's current permissions happen to match the Treasurer preset, we show "Treasurer" as the label; if they've customised, we show "Custom."
+
+---
+
+## 8. Plan-tier interaction
+
+Pro-only sections (team selections, tournaments, honour board, venue bookings, venue packages — per brief 86) gate by **plan first**, permission second.
+
+- Starter-plan club: the backend refuses to grant any Pro-only permission (e.g. `team_selections:edit`) even if requested. Returns 422 `permission_requires_plan` with `required_plan: "pro"`.
+- When a club downgrades Pro → Starter: existing member rows that had Pro-only permissions keep them in the JSON array (no destructive migration), but the write guards reject with `forbidden_plan`. If they re-upgrade, access resumes immediately without a re-grant.
+- The invite modal frontend hides the Pro-only section checkboxes entirely on Starter plan (greyed with "Upgrade to Pro to grant access to this section") — reads `/me`'s `plan` field (brief 93).
 
 ---
 
 ## 9. Migration for existing installs
 
-- No behavioural change for existing owner / admin / committee rows.
-- `/me` starts returning `permissions[]` for every membership as soon as this ships — front-ends that ignore the field keep working (they still read `role`).
-- Frontend gating rolls out per-section behind a `PERMISSIONS_V2` feature flag so we can compare against the legacy role-string checks during the transition. Once every check has moved to `permissions.includes(...)`, drop the flag.
+- Existing `owner` rows: unchanged. `/me` starts returning `permissions: ["*"]` immediately.
+- Existing `admin` rows: unchanged. `/me` returns the explicit admin bundle.
+- Existing `committee` rows: role column rewritten to `member`, `permissions` left NULL. Frontend treats NULL as the Committee preset (read-only across every section) — identical observable behaviour to today's `committee` role.
+- No forced re-invite, no email blast. Admins see the new per-section UI the next time they open a team member row; their current access is already correct.
 
 ---
 
 ## 10. Verification (implement + attach test outputs)
 
-- ✓ `PATCH /clubs/:id/members/:userId` from an Admin trying to set another user to `admin` → 403 `forbidden_role_transition`
-- ✓ Same request from Owner → 200
-- ✓ Selector calling `GET /clubs/:id/members` → 200, response rows have `null` phone / email / dob / notes
-- ✓ Selector calling `PATCH /clubs/:id/members/:userId` → 403 `forbidden_permission`, `required: 'members:write'`
-- ✓ Coach `POST /clubs/:id/events` with `event_type='tournament'` → 403 `forbidden_scope`
-- ✓ Coach `POST /clubs/:id/events` with `event_type='training'` → 200
-- ✓ Content editor calling `GET /clubs/:id/members` → 403 `forbidden_permission`, `required: 'members:read'`
-- ✓ Treasurer `PATCH /clubs/:id/settings` for `brand.accent_colour` → 403 (they only have `settings:billing`)
-- ✓ Treasurer `POST /clubs/:id/members/:userId/payments` → 200
-- ✓ Membership officer approving an application → 200
-- ✓ Committee member on a member row: `PATCH /clubs/:id/members/:userId` with `notes` field only → 200 (`members:note`); with any other field → 403
-- ✓ `/me` for an eight-role membership returns the exact permission list from §2.2
-- ✓ Invite with `role='selector'` from an Admin → 200; from a Coach → 403
+- ✓ `/me` for an Owner returns `permissions: ["*"]`
+- ✓ `/me` for an Admin returns the full admin bundle (every string in §2.1 except `settings:billing`, `settings:danger`)
+- ✓ `/me` for a legacy committee row returns the Committee preset bundle
+- ✓ `POST /clubs/:id/invites` with `role: "member", permissions: ["members:read", "members:read_pii", "members:write"]` from an Owner → 201
+- ✓ Same from an Admin → 201
+- ✓ Same from a Member with `settings:manage_team` in their bundle → 403 (permission is hard-coded to role, not grantable via bundle)
+- ✓ `POST /clubs/:id/invites` with `permissions: ["settings:billing"]` → 422 `permission_not_grantable`
+- ✓ `POST /clubs/:id/invites` with `permissions: ["events:fly"]` → 422 `invalid_permission`
+- ✓ `POST /clubs/:id/invites` with `role: "member", permissions: ["team_selections:edit"]` on a Starter-plan club → 422 `permission_requires_plan`
+- ✓ `PATCH /clubs/:id/members/:memberId` with `permissions` field from Owner on a Member row → 200
+- ✓ Same from Admin on a Member row → 200
+- ✓ Same from Admin on another Admin row → 403 `forbidden_role` (admins can't edit each other)
+- ✓ Same from Owner on the Owner's own row → 409 `owner_immutable`
+- ✓ `GET /clubs/:id/members` from a Selector (no `members:read_pii`) → 200, PII fields null
+- ✓ `POST /clubs/:id/members/:memberId/payments` from a Treasurer → 200
+- ✓ Same from a Selector → 403 `forbidden_permission`, `required: "payments:record"`
+- ✓ `PATCH /clubs/:id/pages/:slug` (website edit) from a Member without `website:edit` → 403
+- ✓ `POST /clubs/:id/transfer-ownership` from Admin → 403 (owner-only)
+- ✓ `team.permissions_changed` email fires on PATCH with permissions change
 
 ---
 
 ## 11. Non-goals
 
-- Per-user permission overrides (Denise gets one extra permission on top of her role). Add via a follow-up brief if we hit real demand.
-- Multi-club roles (a single user having different roles across clubs) — already supported by `club_members`; nothing to change.
-- Fine-grained scoping like "Selector for the men's pennant only, not women's" — v1 grants at the resource level, not the row level.
-- Custom role definitions per club — the eight roles are fixed. If a club wants "Bar Manager sees only opening hours" we build them a new role globally, we don't let each club define their own.
+- **Custom role templates per club** — "Bar Manager sees only opening hours." The preset list in §2.3 is fixed and ships in the frontend bundle. If a club wants a new preset, they use Custom.
+- **Row-level scoping** — "Selector for the men's pennant only." v1 grants at the resource level, not per-row.
+- **Multi-club permissions sync** — a user can have different bundles across clubs; already supported by `club_members`.
+- **Delegation** — "Admin can grant a Member the ability to invite others." Team management stays Owner + Admin, period.
+- **Permission audit log UI** — the backend writes audit entries on every permissions change (per brief 02 §8), but surfacing them in the admin UI is a future ask.
+- **Bulk permission edits** — change permissions one member at a time. If a club needs to re-bucket 10 people after a committee restructure, they do 10 clicks. Not worth the UI for an annual event.
 
 ---
 
-## 12. Frontend follow-up brief (out of scope here)
+## 12. Suggested build order
 
-Once this ships, the CRM will need:
-- `usePermissions()` composable reading the active club's `permissions[]` from the auth store.
-- Sidebar + route guards.
-- Edit-member modal role dropdown filtered by caller.
-- Empty-state copy for each blocked section ("Your role doesn't include Website — ask the owner if you need this.").
+1. Migration: add `permissions` JSON column; rename `committee` → `member` enum value.
+2. `/me` + `/login` + `/register` return `permissions[]` on each club (admin/owner get fixed bundles; member reads from the column).
+3. `POST /clubs/:id/invites` accepts `permissions[]` on `role: "member"`; validates against allowlist.
+4. `PATCH /clubs/:id/members/:memberId` accepts `permissions` field.
+5. Per-endpoint write guards: start with Members + Payments (biggest blast radius for a wrong grant), then Website + Communications, then the rest.
+6. PII filtering on `GET /clubs/:id/members`.
+7. Plan-tier cross-check in invite + patch endpoints.
+8. `team.permissions_changed` email.
+9. Frontend swaps the mocked Team access card for live API + new invite/edit drawer.
 
-That work lives in a separate CRM-side ticket. This brief is the backend contract only.
+Frontend work starts once step 2 ships — with `permissions[]` on `/me` the sidebar gating can land behind a feature flag, decoupled from the invite UX.
 
 ---
 
 ## 13. Contact
 
-Same as prior briefs. Ping if the permission matrix needs a row I've missed — better to add a permission string now than to retrofit it after clients depend on the shape.
+Nev on Slack (`#torny-eng`). Ping if a permission string needs splitting or a new section lands in the CRM that this brief doesn't cover.

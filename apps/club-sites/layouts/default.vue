@@ -69,6 +69,17 @@ const chromeClub = computed<SiteChromeClub>(() => ({
   logoUrl: club.value?.logo_url ?? null,
 }))
 
+/** Club's plan tier for the footer badge next to the "Powered by Torny"
+ *  wordmark. Reads from the public site payload — the backend started
+ *  carrying it on `/me` in brief 93 and can hydrate it on `/site` too.
+ *  When absent the SiteFooter falls back to the generic "OS" tag. */
+const clubPlan = computed<'starter' | 'pro' | undefined>(() => {
+  const raw = (site.value?.club as Record<string, unknown> | undefined)?.plan
+    ?? (club.value as Record<string, unknown> | undefined)?.plan
+  if (raw === 'starter' || raw === 'pro') return raw
+  return undefined
+})
+
 const primaryCta = { label: 'Join the club', href: '/membership' }
 
 // Footer content. Same structure per tenant — the CMS will surface a
@@ -150,6 +161,7 @@ const legalLinks: NavLink[] = [
       :contact="footerContact"
       :legal-links="legalLinks"
       :header-name="headerName"
+      :plan="clubPlan"
     />
   </div>
 </template>

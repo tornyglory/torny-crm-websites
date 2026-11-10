@@ -4,7 +4,9 @@ import { RouterView, RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
 import { useClickOutside } from '@/composables/useClickOutside'
+import { usePermissions } from '@/composables/usePermissions'
 import { useClubSettingsStore } from '@/stores/clubSettings'
+import { useToast } from '@/composables/useToast'
 import {
   members as membersApi,
   applications as applicationsApi,
@@ -24,8 +26,14 @@ import CrmToast from '@/components/CrmToast.vue'
 const auth = useAuthStore()
 const club = useClubStore()
 const settingsStore = useClubSettingsStore()
+const { can, canAny, isPro, canManageTeam, plan } = usePermissions()
+/** Badge next to the Torny wordmark — shows the active club's plan tier.
+ *  Capitalised for the badge style. Falls back to the plan computed's default
+ *  ('starter') if no club is active, so the badge never flashes empty. */
+const planBadge = computed(() => (plan.value === 'pro' ? 'Pro' : 'Starter'))
 const route = useRoute()
 const router = useRouter()
+const toast = useToast()
 
 /** Fetch the club settings payload once on mount + when the active club
  *  changes. This is how the shell surfaces the persisted logo without
@@ -38,6 +46,50 @@ async function loadSettings() {
 }
 onMounted(loadSettings)
 watch(() => club.current?.id, loadSettings)
+
+/**
+ * Re-hydrate the auth user on every CRM mount + watch for plan transitions.
+ *
+ * Without the refresh, a user who upgrades their plan or has their
+ * permissions changed in another tab would be stuck on the cached
+ * localStorage copy until they sign out + back in — their sidebar (which
+ * gates by `plan` + `permissions[]`) would silently ignore the change.
+ *
+ * The plan-transition toast catches the webhook race: Stripe sends the user
+ * back to /crm/settings/billing?result=updated before Stripe's webhook has
+ * flipped `clubs_data.plan` — so SettingsView's existing "Subscription
+ * updated" toast fires first, then the plan quietly promotes later. Here we
+ * snapshot the plan before the refresh and toast specifically when it
+ * transitions, so the admin gets confirmation when the Pro features
+ * *actually* unlock on their session.
+ */
+onMounted(async () => {
+  const activeClubId = club.current?.id
+  const planBefore = activeClubId != null
+    ? auth.user?.clubs.find((c) => c.id === activeClubId)?.plan ?? null
+    : null
+
+  await auth.refresh()
+
+  // Propagate the fresh clubs[] to the club store — if the current club's
+  // plan or permissions changed, downstream computeds re-evaluate on their
+  // own, but any club-list drift (e.g. a membership removed in another tab)
+  // should pick a new current club here.
+  club.syncFromUserClubs(auth.user?.clubs)
+
+  // Detect plan transition on the active club. Only toast when we have a
+  // known previous value (so the initial login after sign-in doesn't fire).
+  if (planBefore && activeClubId != null) {
+    const planAfter = auth.user?.clubs.find((c) => c.id === activeClubId)?.plan ?? null
+    if (planAfter && planAfter !== planBefore) {
+      if (planAfter === 'pro' && planBefore === 'starter') {
+        toast.success("You're on Pro — tournaments, venue hire, team selections and honour boards are unlocked.")
+      } else if (planAfter === 'starter' && planBefore === 'pro') {
+        toast.info('Your plan is now Starter. Pro-only sections are hidden.')
+      }
+    }
+  }
+})
 
 /** Logo URL with fallback chain — settings payload wins, club store
  *  covers the pre-fetch moment (from a previous session's localStorage). */
@@ -163,6 +215,18 @@ interface NavItem {
   count?: number | string
   /** `accent` = draw-attention pill (unhandled items); `neutral` = informational. */
   countTone?: 'accent' | 'neutral'
+  /** Hidden when the active club's `permissions[]` doesn't include this string.
+   *  Owners have `*`, admins have an explicit full bundle, members have the
+   *  stored bundle. Brief 94 §2.2. Omit for always-visible items. */
+  permission?: string
+  /** When true, also requires the active club to be on the Pro plan. Starter
+   *  clubs hide the item entirely even if the permission is granted (brief 94
+   *  §8 — plan gating comes first). */
+  requiresPro?: boolean
+  /** When true, visibility is owner+admin only (hard-coded, not permission-
+   *  gated). Used for the Settings entry which contains sub-sections like
+   *  Billing / Danger / Team access that are role-gated. */
+  requiresTeamManager?: boolean
 }
 // Live counts pulled once per active club. Falls back to '—' while loading
 // so the sidebar never flashes stale numbers when the user switches clubs.
@@ -433,11 +497,12 @@ const sidebarGroups = computed<NavGroup[]>(() => [
     label: 'People',
     skipMobileMore: true,
     items: [
-      { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? '—', countTone: 'neutral' },
+      { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? '—', countTone: 'neutral', permission: 'members:read' },
       {
         to: '/crm/applications',
         label: 'Applications',
         icon: 'applications',
+        permission: 'applications:read',
         ...(applicationsPendingCount.value != null
           ? { count: applicationsPendingCount.value, countTone: applicationsPendingCount.value > 0 ? 'accent' as const : 'neutral' as const }
           : {}),
@@ -446,6 +511,7 @@ const sidebarGroups = computed<NavGroup[]>(() => [
         to: '/crm/enquiries',
         label: 'Enquiries',
         icon: 'enquiries',
+        permission: 'enquiries:read',
         ...(enquiriesNewCount.value != null
           ? { count: enquiriesNewCount.value, countTone: enquiriesNewCount.value > 0 ? 'accent' as const : 'neutral' as const }
           : {}),
@@ -459,6 +525,7 @@ const sidebarGroups = computed<NavGroup[]>(() => [
         to: '/crm/events',
         label: 'Events',
         icon: 'events',
+        permission: 'events:read',
         ...(eventsUpcomingCount.value != null
           ? { count: eventsUpcomingCount.value, countTone: 'neutral' as const }
           : {}),
@@ -467,6 +534,8 @@ const sidebarGroups = computed<NavGroup[]>(() => [
         to: '/crm/teams',
         label: 'Team selections',
         icon: 'teams',
+        permission: 'team_selections:read',
+        requiresPro: true,
         ...(teamSelectionsUpcomingCount.value != null
           ? { count: teamSelectionsUpcomingCount.value, countTone: 'neutral' as const }
           : {}),
@@ -475,6 +544,8 @@ const sidebarGroups = computed<NavGroup[]>(() => [
         to: '/crm/tournaments',
         label: 'Tournaments',
         icon: 'tournaments',
+        permission: 'tournaments:read',
+        requiresPro: true,
         ...(tournamentsActiveCount.value != null
           ? { count: tournamentsActiveCount.value, countTone: tournamentsActiveCount.value > 0 ? 'accent' as const : 'neutral' as const }
           : {}),
@@ -483,6 +554,8 @@ const sidebarGroups = computed<NavGroup[]>(() => [
         to: '/crm/honour-board',
         label: 'Honour board',
         icon: 'honour',
+        permission: 'honour_board:read',
+        requiresPro: true,
         ...(honourCategoriesStore.loadedClubId != null
           ? { count: honourCategoriesStore.count, countTone: 'neutral' as const }
           : {}),
@@ -496,32 +569,65 @@ const sidebarGroups = computed<NavGroup[]>(() => [
         to: '/crm/venue-bookings',
         label: 'Venue bookings',
         icon: 'venue-bookings',
+        permission: 'venue_bookings:read',
+        requiresPro: true,
         ...(venueBookingsNewCount.value != null
           ? { count: venueBookingsNewCount.value, countTone: venueBookingsNewCount.value > 0 ? 'accent' as const : 'neutral' as const }
           : {}),
       },
-      { to: '/crm/venue-packages', label: 'Venue packages', icon: 'venue-packages' },
+      { to: '/crm/venue-packages', label: 'Venue packages', icon: 'venue-packages', permission: 'venue_packages:read', requiresPro: true },
     ],
   },
   {
     label: 'Reach',
     items: [
-      { to: '/crm/website', label: 'Website', icon: 'website' },
-      { to: '/crm/communications', label: 'Communications', icon: 'communications' },
+      { to: '/crm/website', label: 'Website', icon: 'website', permission: 'website:view' },
+      { to: '/crm/communications', label: 'Communications', icon: 'communications', permission: 'communications:read' },
     ],
   },
   {
     label: 'Settings',
     items: [
+      // Settings top-level is visible if the user can reach ANY sub-section.
+      // Billing / Danger / Team access are role-gated (owner/admin) and aren't
+      // in the permissions[] allowlist, so we also pass if canManageTeam is true.
       { to: '/crm/settings', label: 'Settings', icon: 'settings' },
     ],
   },
 ])
 
+const SETTINGS_SUBSECTION_PERMS = [
+  'settings:brand',
+  'settings:membership',
+  'settings:hours',
+  'settings:enquiries',
+  'settings:integrations',
+]
+
+/** Filter sidebar items by the active club's permission bundle + plan. Empty
+ *  groups collapse out so the user doesn't see orphan section headers. */
+const visibleSidebarGroups = computed<NavGroup[]>(() =>
+  sidebarGroups.value
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((item) => {
+        // Settings top-level: visible when caller can reach any sub-section OR
+        // is owner/admin (billing/danger/team access are role-gated).
+        if (item.to === '/crm/settings') {
+          return canManageTeam.value || canAny(...SETTINGS_SUBSECTION_PERMS)
+        }
+        if (item.requiresPro && !isPro.value) return false
+        if (item.permission && !can(item.permission)) return false
+        return true
+      }),
+    }))
+    .filter((g) => g.items.length > 0),
+)
+
 /** Mobile "More" sheet excludes groups already reachable from the
  *  bottom tabbar (Overview, People). */
 const mobileMoreGroups = computed<NavGroup[]>(() =>
-  sidebarGroups.value.filter((g) => !g.skipMobileMore),
+  visibleSidebarGroups.value.filter((g) => !g.skipMobileMore),
 )
 
 async function signOut() {
@@ -531,13 +637,16 @@ async function signOut() {
   await router.push({ name: 'sign-in' })
 }
 
-interface TabItem { to: string; label: string; count?: number; icon: 'home' | 'members' | 'apps' | 'enquiries' | 'more' }
-const bottomTabs = computed<TabItem[]>(() => [
-  { to: '/crm/dashboard', label: 'Home', icon: 'home' },
-  { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? undefined },
-  { to: '/crm/applications', label: 'Apps', count: applicationsPendingCount.value ?? undefined, icon: 'apps' },
-  { to: '/crm/enquiries', label: 'Enquiries', count: enquiriesNewCount.value ?? undefined, icon: 'enquiries' },
-])
+interface TabItem { to: string; label: string; count?: number; icon: 'home' | 'members' | 'apps' | 'enquiries' | 'more'; permission?: string }
+const bottomTabs = computed<TabItem[]>(() => {
+  const all: TabItem[] = [
+    { to: '/crm/dashboard', label: 'Home', icon: 'home' },
+    { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? undefined, permission: 'members:read' },
+    { to: '/crm/applications', label: 'Apps', count: applicationsPendingCount.value ?? undefined, icon: 'apps', permission: 'applications:read' },
+    { to: '/crm/enquiries', label: 'Enquiries', count: enquiriesNewCount.value ?? undefined, icon: 'enquiries', permission: 'enquiries:read' },
+  ]
+  return all.filter((t) => !t.permission || can(t.permission))
+})
 </script>
 
 <template>
@@ -557,7 +666,7 @@ const bottomTabs = computed<TabItem[]>(() => [
         <span class="sidebar__brand-inner">
           <span class="sidebar__dot" />
           <span class="sidebar__wordmark">Torny</span>
-          <span class="sidebar__tag">OS</span>
+          <span class="sidebar__tag">{{ planBadge }}</span>
         </span>
         <button
           class="sidebar__close"
@@ -628,7 +737,7 @@ const bottomTabs = computed<TabItem[]>(() => [
       </div>
 
       <nav class="sidebar__nav">
-        <template v-for="group in sidebarGroups" :key="group.label">
+        <template v-for="group in visibleSidebarGroups" :key="group.label">
           <div class="sidebar__section-label">{{ group.label }}</div>
           <RouterLink
             v-for="item in group.items"
@@ -693,7 +802,7 @@ const bottomTabs = computed<TabItem[]>(() => [
         <div class="mobile-top__brand">
           <span class="mobile-top__dot" aria-hidden="true"></span>
           <span class="mobile-top__wordmark">Torny</span>
-          <span class="mobile-top__tag">OS</span>
+          <span class="mobile-top__tag">{{ planBadge }}</span>
         </div>
         <div class="mobile-top__actions">
           <button
@@ -728,7 +837,7 @@ const bottomTabs = computed<TabItem[]>(() => [
         <div class="topbar__brand">
           <span class="topbar__brand-dot" aria-hidden="true"></span>
           <span class="topbar__brand-wordmark">Torny</span>
-          <span class="topbar__brand-tag">OS</span>
+          <span class="topbar__brand-tag">{{ planBadge }}</span>
         </div>
         <div class="topbar__crumbs">
           <span class="topbar__crumb-muted">{{ club.current?.name ?? '' }}</span>

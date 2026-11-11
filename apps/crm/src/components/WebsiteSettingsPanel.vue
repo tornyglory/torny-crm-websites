@@ -626,9 +626,8 @@ const forms = ref([
 ])
 
 const analytics = ref({
-  provider: 'plausible' as 'none' | 'ga4' | 'plausible',
   gaId: '',
-  plausibleDomain: 'kelburnbowls.co.nz',
+  gtmId: '',
   cookieBanner: false,
 })
 
@@ -1403,36 +1402,32 @@ function dnsCheckKind(key: string): string {
       </div>
     </template>
 
-    <!-- Analytics -->
+    <!-- Analytics — GA4 and/or Google Tag Manager. Leave both IDs blank
+         to skip. Cookie banner surfaces when either is configured. -->
     <template v-else-if="props.section === 'analytics'">
       <div class="ws-card">
-        <div class="ws-card__eyebrow">Analytics provider</div>
-        <div class="ws-provider-grid">
-          <button class="ws-provider" :class="{ 'is-active': analytics.provider === 'none' }" @click="analytics.provider = 'none'">
-            <div class="ws-provider__label">None</div>
-            <div class="ws-provider__hint">Skip analytics.</div>
-          </button>
-          <button class="ws-provider" :class="{ 'is-active': analytics.provider === 'plausible' }" @click="analytics.provider = 'plausible'">
-            <div class="ws-provider__label">Plausible</div>
-            <div class="ws-provider__hint">Cookie-free, GDPR-safe by default.</div>
-          </button>
-          <button class="ws-provider" :class="{ 'is-active': analytics.provider === 'ga4' }" @click="analytics.provider = 'ga4'">
-            <div class="ws-provider__label">Google Analytics 4</div>
-            <div class="ws-provider__hint">More power, requires cookie banner.</div>
-          </button>
-        </div>
-        <div v-if="analytics.provider === 'plausible'" class="ws-field">
-          <label>Plausible domain</label>
-          <input v-model="analytics.plausibleDomain" />
-        </div>
-        <div v-if="analytics.provider === 'ga4'" class="ws-field">
+        <div class="ws-card__eyebrow">Google Analytics 4</div>
+        <p class="ws-card__body">Paste your Measurement ID to turn on GA4 tracking across the public site.</p>
+        <div class="ws-field">
           <label>GA4 Measurement ID</label>
           <input v-model="analytics.gaId" placeholder="G-XXXXXXXXXX" />
         </div>
-        <div v-if="analytics.provider === 'ga4'" class="ws-row-switch">
+      </div>
+
+      <div class="ws-card">
+        <div class="ws-card__eyebrow">Google Tag Manager</div>
+        <p class="ws-card__body">Paste your GTM container ID to load Tag Manager — use this if you manage conversion pixels, ads, or additional tracking through GTM.</p>
+        <div class="ws-field">
+          <label>GTM Container ID</label>
+          <input v-model="analytics.gtmId" placeholder="GTM-XXXXXXX" />
+        </div>
+      </div>
+
+      <div v-if="analytics.gaId || analytics.gtmId" class="ws-card">
+        <div class="ws-row-switch">
           <div>
             <h3>Show cookie banner</h3>
-            <p>Torny will inject a compliant consent banner before GA4 fires.</p>
+            <p>Torny injects a consent banner before any GA4 / GTM tags fire.</p>
           </div>
           <button class="ws-switch" :class="{ 'is-on': analytics.cookieBanner }" @click="analytics.cookieBanner = !analytics.cookieBanner">
             <span class="ws-switch__knob" />

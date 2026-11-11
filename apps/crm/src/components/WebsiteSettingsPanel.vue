@@ -54,7 +54,7 @@ const domain = ref({
   custom: 'kelburnbowls.co.nz',
   status: 'live' as 'live' | 'pending' | 'unset',
   ssl: 'issued' as 'issued' | 'issuing' | 'error',
-  fallback: 'kelburn.torny.co',
+  fallback: 'kelburn.torny.club',
   redirectWww: true,
   dnsRecords: [
     { type: 'CNAME', host: 'kelburnbowls.co.nz', value: 'proxy.torny.pages.dev', status: 'ok' as 'ok' | 'missing' | 'wrong' },

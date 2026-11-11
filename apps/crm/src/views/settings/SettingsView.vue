@@ -72,7 +72,7 @@ const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
   { key: 'security', label: 'Security', hint: 'Sign-in, sessions, 2FA.' },
   { key: 'notifications', label: 'Notifications', hint: 'Which kinds ping you in-app + by email.' },
   { key: 'enquiries', label: 'Enquiries', hint: 'Contact-form intake, notify email, auto-reply.' },
-  { key: 'integrations', label: 'Integrations', hint: 'Stripe, Google Calendar, mail.' },
+  { key: 'integrations', label: 'Integrations', hint: 'Stripe, mail, accounting.' },
   { key: 'danger', label: 'Danger zone', hint: 'Archive or transfer the club.' },
 ]
 
@@ -922,7 +922,6 @@ const security = ref({
 
 const integrations = ref([
   { id: 'stripe', label: 'Stripe', description: 'Take card payments for dues and events.', status: 'connected' },
-  { id: 'gcal', label: 'Google Calendar', description: 'Two-way sync for events.', status: 'connected' },
   { id: 'ses', label: 'AWS SES', description: 'Send email campaigns from your own domain.', status: 'available' },
   { id: 'xero', label: 'Xero', description: 'Export invoices to your ledger.', status: 'available' },
 ])

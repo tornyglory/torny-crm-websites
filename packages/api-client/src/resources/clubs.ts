@@ -65,3 +65,40 @@ export async function updateBrandAssets(
   )
   return res.data
 }
+
+// ── Change subdomain (brief 98) ──────────────────────────────────
+
+export type ChangeSubdomainErrorCode =
+  | 'subdomain_required'
+  | 'subdomain_invalid'
+  | 'subdomain_reserved'
+  | 'subdomain_taken'
+  | 'provision_failed'
+  | 'forbidden'
+  | 'not_found'
+
+export interface ChangeSubdomainResult {
+  club_id: number
+  subdomain: string
+  primary_host: string
+  public_url: string
+}
+
+/** PATCH /clubs/{clubId}/subdomain — owner-only. Flips the Torny-hosted
+ *  subdomain; backend writes the new KV entry before the DB cutover, then
+ *  best-effort deletes the old one. Brief 98. */
+export async function changeSubdomain(
+  clubId: number,
+  subdomain: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<ChangeSubdomainResult> {
+  const res = await authedFetch<Envelope<ChangeSubdomainResult>>(
+    `${CRM_BASE}/clubs/${clubId}/subdomain`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ subdomain }),
+      signal: opts.signal,
+    },
+  )
+  return res.data
+}

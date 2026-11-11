@@ -17,9 +17,18 @@ import FontPicker from '@/components/FontPicker.vue'
 import StylePicker from '@/components/StylePicker.vue'
 import ColorSchemePicker from '@/components/ColorSchemePicker.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
-import { ApiError, clubs, navigation as navigationApi, type NavItem } from '@torny/api-client'
+import {
+  ApiError,
+  clubs,
+  clubOnboarding,
+  navigation as navigationApi,
+  type ChangeSubdomainErrorCode,
+  type NavItem,
+  type SubdomainCheckResult,
+} from '@torny/api-client'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
+import { usePermissions } from '@/composables/usePermissions'
 
 export type WebsiteSettingsSection =
   | 'navigation'
@@ -484,6 +493,156 @@ function saveDomain() {
   toast.success('Domain updated — DNS check re-runs in the background.')
 }
 
+// ── Torny-hosted subdomain editor (brief 98) ─────────────────
+// The "Fallback" card lets the owner change the club's <slug>.torny.club
+// subdomain. Debounced availability check on each keystroke; explicit
+// save behind a confirm modal that spells out the breakage.
+
+const { isOwner } = usePermissions()
+
+/** Current slug from the club store. Preview / sitePreviewUrl uses this
+ *  same value, so updating the store after a successful PATCH keeps the
+ *  Preview button in sync without a page refresh. */
+const currentSubdomain = computed<string>(() => clubStore.current?.slug ?? '')
+const currentHost = computed<string>(() =>
+  currentSubdomain.value ? `${currentSubdomain.value}.torny.club` : '',
+)
+
+const editingSubdomain = ref(false)
+const subdomainDraft = ref('')
+const subdomainSaving = ref(false)
+const subdomainConfirmOpen = ref(false)
+const subdomainError = ref<string | null>(null)
+
+type CheckState =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'available' }
+  | { kind: 'invalid' }
+  | { kind: 'reserved' }
+  | { kind: 'taken' }
+  | { kind: 'transport-error' }
+const subdomainCheck = ref<CheckState>({ kind: 'idle' })
+
+let checkDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let checkController: AbortController | null = null
+
+function openSubdomainEditor() {
+  if (!isOwner.value) return
+  subdomainDraft.value = currentSubdomain.value
+  subdomainError.value = null
+  subdomainCheck.value = { kind: 'idle' }
+  editingSubdomain.value = true
+}
+
+function cancelSubdomainEditor() {
+  editingSubdomain.value = false
+  if (checkDebounceTimer) clearTimeout(checkDebounceTimer)
+  checkController?.abort()
+}
+
+function onSubdomainInput(e: Event) {
+  const raw = (e.target as HTMLInputElement).value
+  // Normalise as the user types — matches the backend validator's charset
+  // so the live check reflects what would be sent.
+  const normalised = raw.toLowerCase().replace(/[^a-z0-9-]/g, '')
+  subdomainDraft.value = normalised
+  subdomainError.value = null
+
+  // Same value as the current → nothing to check, Save stays disabled.
+  if (normalised === currentSubdomain.value) {
+    subdomainCheck.value = { kind: 'idle' }
+    return
+  }
+
+  // Cheap local short-circuit on obvious invalids so the UI doesn't flash
+  // "checking…" on a one-character draft.
+  if (normalised.length < 3 || normalised.length > 30 || normalised.startsWith('-') || normalised.endsWith('-')) {
+    subdomainCheck.value = { kind: 'invalid' }
+    return
+  }
+
+  subdomainCheck.value = { kind: 'checking' }
+  if (checkDebounceTimer) clearTimeout(checkDebounceTimer)
+  checkDebounceTimer = setTimeout(() => {
+    void runAvailabilityCheck(normalised)
+  }, 300)
+}
+
+async function runAvailabilityCheck(value: string) {
+  checkController?.abort()
+  checkController = new AbortController()
+  try {
+    const res: SubdomainCheckResult = await clubOnboarding.checkSubdomain(value, { signal: checkController.signal })
+    // Draft moved on while we were waiting — ignore this response.
+    if (value !== subdomainDraft.value) return
+    if (res.available) {
+      subdomainCheck.value = { kind: 'available' }
+    } else {
+      subdomainCheck.value = { kind: res.reason }
+    }
+  } catch (err) {
+    if ((err as { name?: string }).name === 'AbortError') return
+    subdomainCheck.value = { kind: 'transport-error' }
+  }
+}
+
+const subdomainCanSave = computed(() =>
+  subdomainCheck.value.kind === 'available'
+  && subdomainDraft.value !== currentSubdomain.value
+  && !subdomainSaving.value,
+)
+
+/** Message rendered under the input alongside a status dot. */
+const subdomainStatusText = computed(() => {
+  switch (subdomainCheck.value.kind) {
+    case 'checking': return 'Checking…'
+    case 'available': return 'Available'
+    case 'invalid': return 'Must be 3–30 chars, lowercase letters, numbers, hyphens'
+    case 'reserved': return 'That subdomain is reserved'
+    case 'taken': return 'Already in use'
+    case 'transport-error': return "Couldn't reach Torny — try again"
+    default: return ''
+  }
+})
+
+function openSubdomainConfirm() {
+  if (!subdomainCanSave.value) return
+  subdomainError.value = null
+  subdomainConfirmOpen.value = true
+}
+
+async function commitSubdomainChange() {
+  const clubId = clubStore.current?.id
+  if (clubId == null || !subdomainCanSave.value) return
+  subdomainSaving.value = true
+  subdomainError.value = null
+  const next = subdomainDraft.value
+  try {
+    const res = await clubs.changeSubdomain(clubId, next)
+    // Keep the store's `slug` in sync so sitePreviewUrl + any downstream
+    // links pick up the new value without a refresh.
+    if (clubStore.current) {
+      clubStore.setCurrent({ ...clubStore.current, slug: res.subdomain })
+    }
+    toast.success(`Subdomain changed to ${res.primary_host}.`)
+    subdomainConfirmOpen.value = false
+    editingSubdomain.value = false
+  } catch (err) {
+    const code = err instanceof ApiError ? (err.code as ChangeSubdomainErrorCode | undefined) : undefined
+    if (code === 'subdomain_taken') {
+      // Lost the race between check + save — bump back to the editor
+      // with the "taken" indicator so the owner can pick another.
+      subdomainCheck.value = { kind: 'taken' }
+      subdomainConfirmOpen.value = false
+    } else {
+      subdomainError.value = err instanceof ApiError ? err.message : 'Could not change the subdomain.'
+    }
+  } finally {
+    subdomainSaving.value = false
+  }
+}
+
 const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' ? 'ok' : s === 'unset' || s === 'missing' ? 'warn' : s === 'error' || s === 'wrong' ? 'danger' : 'info')
 </script>
 
@@ -516,11 +675,60 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
       </div>
 
       <div class="ws-card">
-        <div class="ws-card__eyebrow">Fallback</div>
-        <p class="ws-card__body">Every club also gets a Torny-hosted address that always works while DNS is settling.</p>
-        <div class="ws-mono-row">
-          <span class="ws-mono">{{ domain.fallback }}</span>
-          <button class="ws-link" @click="copyToClipboard(domain.fallback)">Copy</button>
+        <!-- Torny-hosted subdomain. Read-only by default; owner can
+             expand the inline editor to change it (brief 98). -->
+        <div class="ws-card__head">
+          <div>
+            <div class="ws-card__eyebrow">Fallback</div>
+            <p class="ws-card__body">Every club also gets a Torny-hosted address that always works while DNS is settling.</p>
+          </div>
+          <button
+            v-if="isOwner && !editingSubdomain && currentHost"
+            class="ws-btn ws-btn--outline"
+            @click="openSubdomainEditor"
+          >Edit</button>
+        </div>
+
+        <div v-if="!editingSubdomain" class="ws-mono-row">
+          <span class="ws-mono">{{ currentHost || '—' }}</span>
+          <button v-if="currentHost" class="ws-link" @click="copyToClipboard(currentHost)">Copy</button>
+        </div>
+
+        <div v-else class="ws-sub-editor">
+          <div class="ws-sub-editor__field">
+            <div class="ws-sub-editor__input-wrap">
+              <input
+                class="ws-sub-editor__input"
+                type="text"
+                :value="subdomainDraft"
+                @input="onSubdomainInput"
+                placeholder="your-club"
+                autofocus
+                maxlength="30"
+                aria-label="New subdomain"
+              />
+              <span class="ws-sub-editor__suffix">.torny.club</span>
+            </div>
+            <div
+              v-if="subdomainCheck.kind !== 'idle'"
+              class="ws-sub-editor__status"
+              :class="`ws-sub-editor__status--${subdomainCheck.kind === 'available' ? 'ok' : subdomainCheck.kind === 'checking' ? 'muted' : 'bad'}`"
+            >
+              <span v-if="subdomainCheck.kind === 'checking'" class="ws-sub-editor__spin" aria-hidden="true" />
+              <span v-else class="ws-sub-editor__dot" aria-hidden="true" />
+              <span>{{ subdomainStatusText }}</span>
+            </div>
+          </div>
+          <div v-if="subdomainError" class="ws-sub-editor__error">{{ subdomainError }}</div>
+          <div class="ws-sub-editor__actions">
+            <button type="button" class="ws-btn ws-btn--outline" @click="cancelSubdomainEditor">Cancel</button>
+            <button
+              type="button"
+              class="ws-btn ws-btn--primary"
+              :disabled="!subdomainCanSave"
+              @click="openSubdomainConfirm"
+            >Save</button>
+          </div>
         </div>
       </div>
 
@@ -960,6 +1168,35 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
       </template>
     </CrmModal>
 
+    <!-- Change-subdomain confirm (brief 98 §4.2). Danger pill because
+         the old URL stops resolving as soon as the Worker's KV entry
+         flips, which can break externally-shared links. -->
+    <CrmModal
+      :open="subdomainConfirmOpen"
+      eyebrow="Fallback subdomain"
+      title="Change this club's subdomain?"
+      width="sm"
+      @close="subdomainConfirmOpen = false"
+    >
+      <p class="ws-hint">
+        The new URL will be
+        <span class="ws-mono">https://{{ subdomainDraft }}.torny.club</span>.
+      </p>
+      <p class="ws-hint">
+        The old URL (<span class="ws-mono">https://{{ currentHost }}</span>) will
+        stop working within a few seconds. Links already sent in emails or
+        shared externally will break.
+      </p>
+      <p class="ws-hint ws-hint--muted">Custom domain settings are unaffected.</p>
+      <div v-if="subdomainError" class="ws-sub-editor__error">{{ subdomainError }}</div>
+      <template #footer>
+        <button type="button" class="ws-modal-btn ws-modal-btn--outline" :disabled="subdomainSaving" @click="subdomainConfirmOpen = false">Cancel</button>
+        <button type="button" class="ws-modal-btn ws-modal-btn--danger" :disabled="subdomainSaving" @click="commitSubdomainChange">
+          {{ subdomainSaving ? 'Saving…' : 'Change subdomain' }}
+        </button>
+      </template>
+    </CrmModal>
+
   </div>
 </template>
 
@@ -1269,6 +1506,84 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 .ws-modal-btn--primary:hover:not(:disabled) { background: var(--color-graphite); }
 .ws-modal-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .ws-modal-btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
+.ws-modal-btn--danger { background: var(--color-danger); color: #fff; }
+.ws-modal-btn--danger:hover:not(:disabled) { background: color-mix(in srgb, var(--color-danger) 85%, #000); }
+.ws-modal-btn--danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ws-hint--muted { color: var(--color-fog); font-size: 12px; }
+
+/* Subdomain inline editor ─────────────────────────────────────── */
+.ws-sub-editor { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.ws-sub-editor__field { display: flex; flex-direction: column; gap: 8px; }
+.ws-sub-editor__input-wrap {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-hairline);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.ws-sub-editor__input-wrap:focus-within {
+  border-color: var(--color-ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ink) 8%, transparent);
+}
+.ws-sub-editor__input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-ink);
+}
+.ws-sub-editor__input:focus { outline: none; }
+.ws-sub-editor__suffix {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-hairline);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-graphite);
+  white-space: nowrap;
+}
+.ws-sub-editor__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+.ws-sub-editor__status--ok { color: var(--color-ok, #16A34A); }
+.ws-sub-editor__status--muted { color: var(--color-fog); }
+.ws-sub-editor__status--bad { color: var(--color-danger); }
+.ws-sub-editor__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.ws-sub-editor__spin {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  animation: ws-sub-spin 700ms linear infinite;
+}
+@keyframes ws-sub-spin { to { transform: rotate(360deg); } }
+.ws-sub-editor__error {
+  color: var(--color-danger);
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  border-radius: 8px;
+}
+.ws-sub-editor__actions { display: inline-flex; gap: 10px; align-self: flex-end; }
 
 @media (max-width: 900px) {
   .ws-colours, .ws-upload-grid { grid-template-columns: 1fr; }

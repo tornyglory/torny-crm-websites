@@ -140,6 +140,8 @@ export type {
   BrandAssetsPatch,
   BrandAssetsResponse,
   ImageStyle,
+  ChangeSubdomainErrorCode,
+  ChangeSubdomainResult,
 } from './resources/clubs'
 export * as directory from './resources/directory'
 export type { DirectoryClub, ClubSearchParams, ClubSearchResult } from './resources/directory'

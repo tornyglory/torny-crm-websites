@@ -811,12 +811,20 @@ function dnsBadgeLabel(key: string): string {
   }
 }
 
-/** Returns the resolver's actual answer only when it's a mismatch — used
- *  by the template to show "Found: X" under the row. Wrapped as a helper
- *  so the template doesn't need to cast the discriminated union. */
-function dnsMismatchActual(key: string): string | null {
+/** Returns the resolver's actual answer whenever we have one, regardless
+ *  of whether it matched — so "Found: X" is visible on verified rows too
+ *  (confirms the record is pointing at us) and not just on mismatches.
+ *  Helper exists because Vue templates can't narrow the discriminated
+ *  union cleanly. */
+function dnsActual(key: string): string | null {
   const s = dnsChecks.value[key]
-  return s && s.kind === 'mismatch' ? s.actual : null
+  if (!s) return null
+  if (s.kind === 'ok' || s.kind === 'mismatch') return s.actual
+  return null
+}
+
+function dnsCheckKind(key: string): string {
+  return dnsChecks.value[key]?.kind ?? 'idle'
 }
 </script>
 
@@ -891,11 +899,19 @@ function dnsMismatchActual(key: string): string | null {
               <div class="ws-dns__body">
                 <div class="ws-mono">{{ r.host }}</div>
                 <div class="ws-mono ws-muted">→ {{ r.value }}</div>
-                <div v-if="dnsMismatchActual(r.key)" class="ws-dns__actual">
-                  Found: <span class="ws-mono">{{ dnsMismatchActual(r.key) }}</span>
-                  <div class="ws-dns__fix">
+                <!-- Actual DNS state, shown whenever a check has run. Green
+                     "Found: <target>" confirms a verified row; mismatch
+                     adds a fix hint; a missing record calls out that no
+                     CNAME exists at the host yet. -->
+                <div v-if="dnsActual(r.key)" class="ws-dns__actual" :class="`ws-dns__actual--${dnsCheckKind(r.key)}`">
+                  Found: <span class="ws-mono">{{ dnsActual(r.key) }}</span>
+                  <div v-if="dnsCheckKind(r.key) === 'mismatch'" class="ws-dns__fix">
                     Update this record to point at <span class="ws-mono">{{ r.value }}</span> instead.
                   </div>
+                </div>
+                <div v-else-if="dnsCheckKind(r.key) === 'missing'" class="ws-dns__actual ws-dns__actual--missing">
+                  No CNAME record found at <span class="ws-mono">{{ r.host }}</span>.
+                  Add one pointing at <span class="ws-mono">{{ r.value }}</span>.
                 </div>
               </div>
               <div class="ws-dns__actions">
@@ -1550,9 +1566,12 @@ function dnsMismatchActual(key: string): string | null {
 .ws-dns__actual {
   font-family: var(--font-body);
   font-size: 11px;
-  color: var(--color-danger);
-  margin-top: 2px;
+  color: var(--color-fog);
+  margin-top: 4px;
 }
+.ws-dns__actual--ok { color: #166534; }
+.ws-dns__actual--mismatch { color: var(--color-danger); }
+.ws-dns__actual--missing { color: #92400E; }
 .ws-dns__fix {
   margin-top: 4px;
   color: var(--color-graphite);

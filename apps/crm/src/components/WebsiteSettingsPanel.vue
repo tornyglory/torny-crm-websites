@@ -28,6 +28,7 @@ import {
 } from '@torny/api-client'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
+import { useOnboardingStore } from '@/stores/onboarding'
 import { usePermissions } from '@/composables/usePermissions'
 
 export type WebsiteSettingsSection =
@@ -499,6 +500,7 @@ function saveDomain() {
 // save behind a confirm modal that spells out the breakage.
 
 const { isOwner } = usePermissions()
+const onboarding = useOnboardingStore()
 
 /** Current slug from the club store. Preview / sitePreviewUrl uses this
  *  same value, so updating the store after a successful PATCH keeps the
@@ -620,11 +622,18 @@ async function commitSubdomainChange() {
   const next = subdomainDraft.value
   try {
     const res = await clubs.changeSubdomain(clubId, next)
-    // Keep the store's `slug` in sync so sitePreviewUrl + any downstream
-    // links pick up the new value without a refresh.
+    // Keep both stores in sync so every downstream link lights up without a
+    // refresh:
+    // - clubStore.current.slug — read by sitePreviewUrl() + any /clubs/<slug>
+    //   anchor.
+    // - onboarding.data.subdomain — read by the Website editor's Preview
+    //   button, which prefers this value over clubStore.current.slug (see
+    //   WebsiteEditorView.preview()). Stale here would keep the Preview
+    //   button pointing at the old host after a change.
     if (clubStore.current) {
       clubStore.setCurrent({ ...clubStore.current, slug: res.subdomain })
     }
+    onboarding.data.subdomain = res.subdomain
     toast.success(`Subdomain changed to ${res.primary_host}.`)
     subdomainConfirmOpen.value = false
     editingSubdomain.value = false

@@ -10,7 +10,7 @@
  * All state is currently local — the real API wiring lives in a follow-up
  * ticket (site-settings persistence + read-through to the Nuxt layout).
  */
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 import FontPicker from '@/components/FontPicker.vue'
@@ -60,18 +60,170 @@ function onColorSchemeSlugChange(_slug: string | null) {
   void clubStore.hydrateFull()
 }
 
-const domain = ref({
-  custom: 'kelburnbowls.co.nz',
-  status: 'live' as 'live' | 'pending' | 'unset',
-  ssl: 'issued' as 'issued' | 'issuing' | 'error',
-  fallback: 'kelburn.torny.club',
-  redirectWww: true,
-  dnsRecords: [
-    { type: 'CNAME', host: 'kelburnbowls.co.nz', value: 'proxy.torny.pages.dev', status: 'ok' as 'ok' | 'missing' | 'wrong' },
-    { type: 'TXT', host: '_torny-verify', value: 'torny=verify-abc123', status: 'ok' as 'ok' | 'missing' | 'wrong' },
-    { type: 'CNAME', host: 'www.kelburnbowls.co.nz', value: 'proxy.torny.pages.dev', status: 'ok' as 'ok' | 'missing' | 'wrong' },
-  ],
+// ── Custom domain — instructions + client-side DNS check ─────
+// No backend persistence yet (see brief 99). The admin types their apex,
+// we show the records they need to add, and a Cloudflare DNS-over-HTTPS
+// lookup per record confirms what their registrar has published. Backend
+// still needs to register the host with Cloudflare Pages + provision SSL
+// before the domain actually serves — that's the "Enable" step, disabled
+// here and flagged in the brief.
+
+const PROXY_TARGET = 'proxy.torny.pages.dev'
+
+/** Loose apex-domain check — admin pastes "https://www.kelburnbowls.co.nz"
+ *  all the time, so we strip the scheme + leading www before validating.
+ *  Not the full RFC — just enough to catch the obvious "that's a URL, not
+ *  a hostname" mistakes. The backend validator is authoritative. */
+function normaliseDomain(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\/.*$/, '')
+}
+
+function isPlausibleDomain(d: string): boolean {
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(d)
+  && d.includes('.') && d.length <= 253
+}
+
+/** Load the apex this admin last entered. Stored per-club in localStorage
+ *  so the "pending" instructions survive a page refresh while the backend
+ *  endpoint isn't there yet. Brief 99 replaces this with a server-side
+ *  record. */
+function customDomainStorageKey(clubId: number): string {
+  return `torny.crm.custom-domain.${clubId}`
+}
+
+const customDomainInput = ref('')
+const savedCustomDomain = ref<string | null>(null)
+
+function loadSavedCustomDomain() {
+  const cid = clubStore.current?.id
+  if (cid == null) return
+  const raw = localStorage.getItem(customDomainStorageKey(cid))
+  savedCustomDomain.value = raw && raw.length > 0 ? raw : null
+}
+loadSavedCustomDomain()
+watch(() => clubStore.current?.id, loadSavedCustomDomain)
+
+const customDomainError = ref<string | null>(null)
+function saveCustomDomain() {
+  const cid = clubStore.current?.id
+  if (cid == null) return
+  const next = normaliseDomain(customDomainInput.value)
+  if (!isPlausibleDomain(next)) {
+    customDomainError.value = "That doesn't look like a domain — try something like `yourclub.co.nz`."
+    return
+  }
+  savedCustomDomain.value = next
+  localStorage.setItem(customDomainStorageKey(cid), next)
+  customDomainInput.value = ''
+  customDomainError.value = null
+  resetDnsChecks()
+}
+
+function clearCustomDomain() {
+  const cid = clubStore.current?.id
+  if (cid == null) return
+  savedCustomDomain.value = null
+  localStorage.removeItem(customDomainStorageKey(cid))
+  resetDnsChecks()
+}
+
+/** The records the admin needs to add — derived from the saved apex so
+ *  copy-to-clipboard + DNS checks always refer to the current domain. */
+interface DnsRecord {
+  key: string
+  type: 'CNAME'
+  host: string
+  value: string
+  hint: string
+}
+const requiredDnsRecords = computed<DnsRecord[]>(() => {
+  const apex = savedCustomDomain.value
+  if (!apex) return []
+  return [
+    {
+      key: 'apex',
+      type: 'CNAME',
+      host: apex,
+      value: PROXY_TARGET,
+      hint: 'Needs CNAME flattening on apex — most modern registrars (Cloudflare, Netlify DNS, DNSimple) support it.',
+    },
+    {
+      key: 'www',
+      type: 'CNAME',
+      host: `www.${apex}`,
+      value: PROXY_TARGET,
+      hint: 'Sends www visitors to the same site.',
+    },
+  ]
 })
+
+type DnsCheckStatus =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'ok'; actual: string }
+  | { kind: 'mismatch'; actual: string }
+  | { kind: 'missing' }
+  | { kind: 'error'; message: string }
+
+const dnsChecks = ref<Record<string, DnsCheckStatus>>({})
+const dnsChecking = ref(false)
+
+function resetDnsChecks() {
+  dnsChecks.value = {}
+}
+
+/** Query Cloudflare's public DNS-over-HTTPS resolver. Lives on
+ *  cloudflare-dns.com with a stable JSON payload. */
+async function lookupCname(host: string): Promise<string[]> {
+  const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=CNAME`
+  const res = await fetch(url, { headers: { Accept: 'application/dns-json' } })
+  if (!res.ok) throw new Error(`DoH ${res.status}`)
+  const body = (await res.json()) as { Answer?: Array<{ type: number; data: string }> }
+  // Type 5 = CNAME. Strip trailing dots so the compare is forgiving.
+  return (body.Answer ?? [])
+    .filter((a) => a.type === 5)
+    .map((a) => a.data.replace(/\.$/, '').toLowerCase())
+}
+
+async function checkRecord(rec: DnsRecord): Promise<void> {
+  dnsChecks.value = { ...dnsChecks.value, [rec.key]: { kind: 'checking' } }
+  try {
+    const answers = await lookupCname(rec.host)
+    if (answers.length === 0) {
+      dnsChecks.value = { ...dnsChecks.value, [rec.key]: { kind: 'missing' } }
+      return
+    }
+    const expected = rec.value.toLowerCase()
+    if (answers.some((a) => a === expected)) {
+      dnsChecks.value = { ...dnsChecks.value, [rec.key]: { kind: 'ok', actual: answers[0]! } }
+    } else {
+      dnsChecks.value = { ...dnsChecks.value, [rec.key]: { kind: 'mismatch', actual: answers[0]! } }
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'lookup failed'
+    dnsChecks.value = { ...dnsChecks.value, [rec.key]: { kind: 'error', message } }
+  }
+}
+
+async function checkAllDns(): Promise<void> {
+  if (dnsChecking.value) return
+  dnsChecking.value = true
+  try {
+    await Promise.all(requiredDnsRecords.value.map(checkRecord))
+  } finally {
+    dnsChecking.value = false
+  }
+}
+
+const allDnsOk = computed(() =>
+  requiredDnsRecords.value.length > 0
+  && requiredDnsRecords.value.every((r) => dnsChecks.value[r.key]?.kind === 'ok'),
+)
 
 // Reactive view of the persisted brand assets. Two-way with the store so
 // a successful PATCH round-trip lights up other CRM surfaces too.
@@ -481,19 +633,6 @@ function replaceUpload(what: string) {
   toast.info(`File picker for ${what} opens next session.`)
 }
 
-// ── Edit custom domain modal ──────────────────────────────────
-const editDomainOpen = ref(false)
-const domainForm = reactive({ custom: '' })
-function openEditDomain() {
-  domainForm.custom = domain.value.custom
-  editDomainOpen.value = true
-}
-function saveDomain() {
-  domain.value.custom = domainForm.custom.trim() || domain.value.custom
-  editDomainOpen.value = false
-  toast.success('Domain updated — DNS check re-runs in the background.')
-}
-
 // ── Torny-hosted subdomain editor (brief 98) ─────────────────
 // The "Fallback" card lets the owner change the club's <slug>.torny.club
 // subdomain. Debounced availability check on each keystroke; explicit
@@ -652,35 +791,144 @@ async function commitSubdomainChange() {
   }
 }
 
-const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' ? 'ok' : s === 'unset' || s === 'missing' ? 'warn' : s === 'error' || s === 'wrong' ? 'danger' : 'info')
+function dnsBadgeTone(key: string): 'ok' | 'muted' | 'warn' | 'danger' {
+  const s = dnsChecks.value[key]
+  if (!s || s.kind === 'idle') return 'muted'
+  if (s.kind === 'checking') return 'muted'
+  if (s.kind === 'ok') return 'ok'
+  if (s.kind === 'missing') return 'warn'
+  return 'danger'
+}
+
+function dnsBadgeLabel(key: string): string {
+  const s = dnsChecks.value[key]
+  if (!s || s.kind === 'idle') return 'Not checked'
+  switch (s.kind) {
+    case 'checking': return 'Checking…'
+    case 'ok': return 'Verified'
+    case 'missing': return 'Not found'
+    case 'mismatch': return 'Wrong value'
+    case 'error': return `Lookup failed`
+  }
+}
+
+/** Returns the resolver's actual answer only when it's a mismatch — used
+ *  by the template to show "Found: X" under the row. Wrapped as a helper
+ *  so the template doesn't need to cast the discriminated union. */
+function dnsMismatchActual(key: string): string | null {
+  const s = dnsChecks.value[key]
+  return s && s.kind === 'mismatch' ? s.actual : null
+}
 </script>
 
 <template>
   <div class="ws-panel">
     <!-- Domain -->
     <template v-if="props.section === 'domain'">
+      <!-- Custom domain — brief 99 placeholder UI.
+           Admin enters their apex, we show the records they need to add,
+           and client-side DNS-over-HTTPS confirms what their registrar has
+           published. The "Enable" step requires backend provisioning and
+           is disabled until brief 99 ships. -->
       <div class="ws-card">
         <div class="ws-card__head">
           <div>
             <div class="ws-card__eyebrow">Custom domain</div>
-            <h2 class="ws-card__title">{{ domain.custom }}</h2>
-            <div class="ws-meta">
-              <span class="ws-badge" :class="`ws-badge--${statusTone(domain.status)}`">{{ domain.status }}</span>
-              <span class="ws-badge" :class="`ws-badge--${statusTone(domain.ssl)}`">SSL {{ domain.ssl }}</span>
-            </div>
+            <h2 v-if="savedCustomDomain" class="ws-card__title">{{ savedCustomDomain }}</h2>
+            <h2 v-else class="ws-card__title">No custom domain yet</h2>
+            <p class="ws-card__body">
+              Point your own domain at this club's Torny site. You keep ownership —
+              Torny only asks you to add two DNS records.
+            </p>
           </div>
-          <button class="ws-btn ws-btn--outline" @click="openEditDomain">Edit</button>
+          <button
+            v-if="savedCustomDomain"
+            class="ws-btn ws-btn--outline"
+            @click="clearCustomDomain"
+          >Clear</button>
         </div>
 
-        <div class="ws-row-switch">
-          <div>
-            <h3>Redirect www → apex</h3>
-            <p>Send www visitors to the bare domain.</p>
-          </div>
-          <button class="ws-switch" :class="{ 'is-on': domain.redirectWww }" @click="domain.redirectWww = !domain.redirectWww">
-            <span class="ws-switch__knob" />
-          </button>
+        <div v-if="!savedCustomDomain" class="ws-domain-input">
+          <label class="ws-form-field">
+            <span class="ws-form-field__label">Your domain</span>
+            <input
+              v-model="customDomainInput"
+              type="text"
+              placeholder="yourclub.co.nz"
+              autocomplete="off"
+              @keyup.enter="saveCustomDomain"
+            />
+          </label>
+          <button class="ws-btn ws-btn--primary" @click="saveCustomDomain">Continue</button>
         </div>
+
+        <div v-if="customDomainError" class="ws-sub-editor__error">{{ customDomainError }}</div>
+
+        <template v-if="savedCustomDomain">
+          <ol class="ws-steps">
+            <li>
+              Sign in to your domain registrar (GoDaddy, Namecheap, Cloudflare, etc.).
+            </li>
+            <li>
+              Add the two <strong>CNAME</strong> records below. Both point to
+              <span class="ws-mono">{{ PROXY_TARGET }}</span>.
+            </li>
+            <li>
+              Wait a few minutes for DNS to propagate, then click
+              <strong>Check DNS</strong>. SSL is issued automatically once
+              both records are live.
+            </li>
+          </ol>
+
+          <div class="ws-dns">
+            <div
+              v-for="r in requiredDnsRecords"
+              :key="r.key"
+              class="ws-dns__row"
+            >
+              <span class="ws-dns__type">{{ r.type }}</span>
+              <div class="ws-dns__body">
+                <div class="ws-mono">{{ r.host }}</div>
+                <div class="ws-mono ws-muted">→ {{ r.value }}</div>
+                <div v-if="r.hint" class="ws-dns__hint">{{ r.hint }}</div>
+                <div v-if="dnsMismatchActual(r.key)" class="ws-dns__actual">
+                  Found: <span class="ws-mono">{{ dnsMismatchActual(r.key) }}</span>
+                </div>
+              </div>
+              <div class="ws-dns__actions">
+                <button
+                  class="ws-link"
+                  type="button"
+                  @click="copyToClipboard(r.value)"
+                >Copy value</button>
+                <span class="ws-dns__badge" :class="`ws-dns__badge--${dnsBadgeTone(r.key)}`">
+                  {{ dnsBadgeLabel(r.key) }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="ws-domain-foot">
+            <button
+              class="ws-btn ws-btn--outline"
+              type="button"
+              :disabled="dnsChecking"
+              @click="checkAllDns"
+            >{{ dnsChecking ? 'Checking…' : 'Check DNS' }}</button>
+            <button
+              class="ws-btn ws-btn--primary"
+              type="button"
+              disabled
+              title="Available once backend brief 99 ships"
+            >Enable custom domain</button>
+            <p v-if="allDnsOk" class="ws-domain-foot__hint ws-domain-foot__hint--ok">
+              All records look good — once brief 99 ships, this flips the switch.
+            </p>
+            <p v-else class="ws-domain-foot__hint">
+              DNS can take a few minutes to propagate after you add the records.
+            </p>
+          </div>
+        </template>
       </div>
 
       <div class="ws-card">
@@ -741,19 +989,6 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
         </div>
       </div>
 
-      <div class="ws-card">
-        <div class="ws-card__eyebrow">DNS records</div>
-        <ul class="ws-dns">
-          <li v-for="r in domain.dnsRecords" :key="r.host + r.value" class="ws-dns__row">
-            <span class="ws-dns__type">{{ r.type }}</span>
-            <div class="ws-dns__body">
-              <div class="ws-mono">{{ r.host }}</div>
-              <div class="ws-mono ws-muted">{{ r.value }}</div>
-            </div>
-            <span class="ws-badge" :class="`ws-badge--${statusTone(r.status)}`">{{ r.status }}</span>
-          </li>
-        </ul>
-      </div>
     </template>
 
     <!-- Brand -->
@@ -1159,24 +1394,6 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
       </div>
     </template>
 
-    <CrmModal
-      :open="editDomainOpen"
-      eyebrow="Custom domain"
-      title="Edit custom domain"
-      width="sm"
-      @close="editDomainOpen = false"
-    >
-      <p class="ws-hint">Enter the domain you want visitors to see. DNS check runs automatically after saving.</p>
-      <label class="ws-form-field">
-        <span class="ws-form-field__label">Domain</span>
-        <input v-model="domainForm.custom" type="text" placeholder="mybowlsclub.co.nz" autofocus />
-      </label>
-      <template #footer>
-        <button type="button" class="ws-modal-btn ws-modal-btn--outline" @click="editDomainOpen = false">Cancel</button>
-        <button type="button" class="ws-modal-btn ws-modal-btn--primary" @click="saveDomain">Save</button>
-      </template>
-    </CrmModal>
-
     <!-- Change-subdomain confirm (brief 98 §4.2). Danger pill because
          the old URL stops resolving as soon as the Worker's KV entry
          flips, which can break externally-shared links. -->
@@ -1252,10 +1469,95 @@ const statusTone = (s: string) => (s === 'ok' || s === 'live' || s === 'issued' 
 .ws-switch.is-on .ws-switch__knob { transform: translateX(16px); }
 .ws-switch--sm.is-on .ws-switch__knob { transform: translateX(14px); }
 
-.ws-dns { list-style: none; padding: 0; margin: 0; }
-.ws-dns__row { display: grid; grid-template-columns: 60px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--color-hairline); }
-.ws-dns__row:last-child { border-bottom: 0; }
-.ws-dns__type { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: var(--color-fog); }
+/* Custom domain cards ──────────────────────────────────────── */
+.ws-domain-input { display: flex; align-items: end; gap: 12px; margin-top: 20px; }
+.ws-domain-input .ws-form-field { flex: 1; min-width: 0; }
+.ws-steps {
+  margin: 20px 0 16px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-graphite);
+}
+.ws-steps li::marker { color: var(--color-fog); font-weight: 600; }
+
+.ws-dns {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-hairline);
+}
+.ws-dns__row {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 16px;
+  align-items: start;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-hairline);
+}
+.ws-dns__type {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--color-fog);
+  padding-top: 2px;
+}
+.ws-dns__body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ws-dns__hint {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--color-fog);
+  margin-top: 2px;
+}
+.ws-dns__actual {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--color-danger);
+  margin-top: 2px;
+}
+.ws-dns__actions {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.ws-dns__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+}
+.ws-dns__badge--ok { background: #DCFCE7; color: #166534; }
+.ws-dns__badge--muted { background: var(--color-surface); color: var(--color-fog); }
+.ws-dns__badge--warn { background: #FEF3C7; color: #92400E; }
+.ws-dns__badge--danger { background: #FEE2E2; color: #991B1B; }
+
+.ws-domain-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+.ws-domain-foot__hint {
+  flex: 1 1 100%;
+  margin: 2px 0 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--color-fog);
+}
+.ws-domain-foot__hint--ok { color: #166534; }
 
 .ws-colours { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ws-colour { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--color-hairline); border-radius: 10px; }

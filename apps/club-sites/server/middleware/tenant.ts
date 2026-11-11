@@ -14,7 +14,16 @@ export default defineEventHandler(async (event) => {
   const url = event.node.req.url ?? ''
   if (url.startsWith('/_nuxt') || url.startsWith('/__nuxt') || url.startsWith('/_ipx')) return
 
-  const rawRequestHost = (getRequestHeader(event, 'host') ?? '').toLowerCase()
+  // Prefer `x-torny-tenant-host` (set by the Cloudflare tenant-router Worker
+  // fronting `*.torny.club/*`) over `Host`. The Worker rewrites `Host` to the
+  // pages.dev origin when it proxies, so without this fallback Nuxt would
+  // 404 every Worker-routed request. Direct `.torny.co` traffic (no Worker)
+  // keeps hitting the `Host` branch and is unaffected. Brief 97.
+  const rawRequestHost = (
+    getRequestHeader(event, 'x-torny-tenant-host')
+    ?? getRequestHeader(event, 'host')
+    ?? ''
+  ).toLowerCase()
   const isLocalhost = rawRequestHost.startsWith('localhost') || rawRequestHost.startsWith('127.0.0.1')
 
   const query = getQuery(event)

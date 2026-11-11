@@ -1374,18 +1374,19 @@ function slugify(s: string): string {
 }
 
 async function preview(): Promise<void> {
-  // Prefer onboarding.subdomain — the guard already hydrated it and it's
-  // the authoritative slug the tenant middleware resolves on. Fall back to
-  // clubStore.current.slug (backfilled from /clubs/:id), then to a
-  // slugified club name so the button never dead-ends.
-  if (!onboarding.data.subdomain && !clubStore.current?.slug) {
-    // Guard should have hydrated, but on a fresh reload of /crm/website
-    // there's a race — force it.
+  // Prefer clubStore.current.slug — backed by /clubs/:id, which reflects
+  // live brief-98 subdomain changes. The onboarding wizard snapshot
+  // (onboarding.data.subdomain) is set during setup and doesn't update
+  // when the owner edits the subdomain afterwards, so it can drift. Keep
+  // it as a secondary fallback for fresh reloads where clubStore hasn't
+  // hydrated yet; last-resort slugify the club name so the button never
+  // dead-ends on a brand-new signup.
+  if (!clubStore.current?.slug && !onboarding.data.subdomain) {
     await Promise.all([onboarding.hydrate(), clubStore.hydrateFull()])
   }
   const slug =
+    (clubStore.current?.slug?.trim() || null) ??
     (onboarding.data.subdomain?.trim() || null) ??
-    clubStore.current?.slug ??
     (clubStore.current?.name ? slugify(clubStore.current.name) : null)
 
   if (!slug) {

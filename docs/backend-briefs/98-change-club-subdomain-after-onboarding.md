@@ -264,3 +264,49 @@ ahead of the handler. Verification steps from §5 will go green once:
 - `PATCH /clubs/{id}/subdomain` exists on CRM API.
 - KV write-before-DB ordering is in place so the new host serves pre-cutover.
 
+---
+
+## 10. Follow-up — keep the wizard snapshot in sync
+
+The PATCH handler now updates `clubs_data.subdomain` + `primary_host` + the
+KV. Confirmed working end-to-end (curl against `/clubs/resolve?host=`
+returns the new host). One drift remains: `GET /clubs/{id}/onboarding`
+still returns the **wizard-completion snapshot** of `data.subdomain`, so a
+club that renamed from `nae-nae-bowling-club` → `naenae-bowling-club` via
+this endpoint still has `"nae-nae-bowling-club"` in the onboarding blob.
+
+The FE has shipped a workaround — the Website editor's Preview button now
+reads `clubStore.current.slug` (which comes from `/clubs/{id}` and is
+authoritative) before the onboarding snapshot
+(`apps/crm/src/views/website/WebsiteEditorView.vue`, commit `098d7a5`).
+That unblocks Preview, but the inconsistency is still there for any
+future consumer that reads the wizard blob.
+
+**Ask:** inside the brief-98 handler, after the DB cutover in step 9,
+also patch the wizard snapshot so the two storages stay in sync. Depending
+on how the wizard is persisted, that's either:
+
+```sql
+-- If onboarding state lives in a JSON column on `clubs_data`:
+UPDATE clubs_data
+   SET onboarding_data = JSON_SET(onboarding_data, '$.subdomain', ?)
+ WHERE club_id = ?
+```
+
+…or the equivalent write against whatever table holds the onboarding
+JSON. Idempotent, same-transaction as the primary cutover, no new error
+codes.
+
+**Verify** after the change: the existing §5 test suite plus one more:
+
+```bash
+# After step 4 (PATCH subdomain), the wizard snapshot reflects it.
+curl -s "$CRM/clubs/$CLUB/onboarding" -H "Authorization: Bearer $TOKEN" \
+  | jq '.data.data.subdomain'
+# → "kelburn-bowls"   (was: "kelburn")
+```
+
+Not urgent — the FE isn't using that field for routing anymore. But worth
+closing the drift before someone else wires a feature off the wizard
+snapshot and gets surprised.
+

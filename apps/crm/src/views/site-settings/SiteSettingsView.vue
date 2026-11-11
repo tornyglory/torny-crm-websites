@@ -24,9 +24,9 @@ const domain = ref({
   fallback: 'kelburn.torny.club',
   redirectWww: true,
   dnsRecords: [
-    { type: 'CNAME', host: 'kelburnbowls.co.nz', value: 'proxy.torny.pages.dev', status: 'ok' as 'ok' | 'missing' | 'wrong' },
+    { type: 'CNAME', host: 'kelburnbowls.co.nz', value: 'torny-crm-websites.pages.dev', status: 'ok' as 'ok' | 'missing' | 'wrong' },
     { type: 'TXT', host: '_torny-verify', value: 'torny=verify-abc123', status: 'ok' as 'ok' | 'missing' | 'wrong' },
-    { type: 'CNAME', host: 'www.kelburnbowls.co.nz', value: 'proxy.torny.pages.dev', status: 'ok' as 'ok' | 'missing' | 'wrong' },
+    { type: 'CNAME', host: 'www.kelburnbowls.co.nz', value: 'torny-crm-websites.pages.dev', status: 'ok' as 'ok' | 'missing' | 'wrong' },
   ],
 })
 

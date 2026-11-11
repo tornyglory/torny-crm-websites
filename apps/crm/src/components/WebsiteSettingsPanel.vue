@@ -61,14 +61,20 @@ function onColorSchemeSlugChange(_slug: string | null) {
 }
 
 // ── Custom domain — instructions + client-side DNS check ─────
-// No backend persistence yet (see brief 99). The admin types their apex,
-// we show the records they need to add, and a Cloudflare DNS-over-HTTPS
-// lookup per record confirms what their registrar has published. Backend
-// still needs to register the host with Cloudflare Pages + provision SSL
-// before the domain actually serves — that's the "Enable" step, disabled
-// here and flagged in the brief.
+// No backend persistence yet (see brief 99). The admin types their
+// domain, we normalise to the bare apex + show them the single CNAME
+// record they need (www only — apex CNAME is only safe on Cloudflare
+// DNS via flattening, so we default to www + an advanced aside), and a
+// Cloudflare DNS-over-HTTPS lookup confirms what their registrar has
+// published. Backend still needs to register the host with Cloudflare
+// Pages + provision SSL — that's the "Enable" step, disabled here and
+// spec'd in brief 99 §3.
 
-const PROXY_TARGET = 'proxy.torny.pages.dev'
+/** The Pages project's canonical hostname. Brief 99 §2 clarifies this
+ *  is the real target — the previous `proxy.torny.pages.dev` string
+ *  never resolved to anything. Once brief 99's POST endpoint ships this
+ *  value will come from `dns_instructions.target` in the response. */
+const PAGES_PROJECT_HOST = 'torny-crm-websites.pages.dev'
 
 /** Loose apex-domain check — admin pastes "https://www.kelburnbowls.co.nz"
  *  all the time, so we strip the scheme + leading www before validating.
@@ -132,32 +138,25 @@ function clearCustomDomain() {
   resetDnsChecks()
 }
 
-/** The records the admin needs to add — derived from the saved apex so
- *  copy-to-clipboard + DNS checks always refer to the current domain. */
+/** The single CNAME the admin needs to add — derived from the saved
+ *  apex so copy-to-clipboard + DNS checks always refer to the current
+ *  domain. Brief 99 §4.2 guides us to www-only; the apex CNAME trap
+ *  (unsupported at most registrars) is surfaced as an aside instead. */
 interface DnsRecord {
   key: string
   type: 'CNAME'
   host: string
   value: string
-  hint: string
 }
 const requiredDnsRecords = computed<DnsRecord[]>(() => {
   const apex = savedCustomDomain.value
   if (!apex) return []
   return [
     {
-      key: 'apex',
-      type: 'CNAME',
-      host: apex,
-      value: PROXY_TARGET,
-      hint: 'Needs CNAME flattening on apex — most modern registrars (Cloudflare, Netlify DNS, DNSimple) support it.',
-    },
-    {
       key: 'www',
       type: 'CNAME',
       host: `www.${apex}`,
-      value: PROXY_TARGET,
-      hint: 'Sends www visitors to the same site.',
+      value: PAGES_PROJECT_HOST,
     },
   ]
 })
@@ -870,13 +869,15 @@ function dnsMismatchActual(key: string): string | null {
               Sign in to your domain registrar (GoDaddy, Namecheap, Cloudflare, etc.).
             </li>
             <li>
-              Add the two <strong>CNAME</strong> records below. Both point to
-              <span class="ws-mono">{{ PROXY_TARGET }}</span>.
+              Add the <strong>CNAME</strong> record below. It points to
+              <span class="ws-mono">{{ PAGES_PROJECT_HOST }}</span>.
+              Set the proxy / cloud icon to <strong>DNS only</strong> if your
+              provider has one (grey cloud on Cloudflare).
             </li>
             <li>
               Wait a few minutes for DNS to propagate, then click
               <strong>Check DNS</strong>. SSL is issued automatically once
-              both records are live.
+              the record is live.
             </li>
           </ol>
 
@@ -890,7 +891,6 @@ function dnsMismatchActual(key: string): string | null {
               <div class="ws-dns__body">
                 <div class="ws-mono">{{ r.host }}</div>
                 <div class="ws-mono ws-muted">→ {{ r.value }}</div>
-                <div v-if="r.hint" class="ws-dns__hint">{{ r.hint }}</div>
                 <div v-if="dnsMismatchActual(r.key)" class="ws-dns__actual">
                   Found: <span class="ws-mono">{{ dnsMismatchActual(r.key) }}</span>
                 </div>
@@ -907,6 +907,33 @@ function dnsMismatchActual(key: string): string | null {
               </div>
             </div>
           </div>
+
+          <!-- Advanced: apex (bare domain) options. Most registrars reject
+               CNAME at the apex (RFC 1912) — call out the three practical
+               paths rather than silently suggest an unsupported record. -->
+          <details class="ws-domain-aside">
+            <summary>Using the bare domain (<span class="ws-mono">{{ savedCustomDomain }}</span>) instead of www?</summary>
+            <ul>
+              <li>
+                <strong>On Cloudflare DNS:</strong> add a CNAME at
+                <span class="ws-mono">@</span> pointing to
+                <span class="ws-mono">{{ PAGES_PROJECT_HOST }}</span>. Cloudflare
+                flattens it automatically.
+              </li>
+              <li>
+                <strong>On GoDaddy / Namecheap / Google Domains:</strong> use an
+                <span class="ws-mono">ALIAS</span> or <span class="ws-mono">ANAME</span>
+                record if your provider supports one. Pointed at
+                <span class="ws-mono">{{ PAGES_PROJECT_HOST }}</span>.
+              </li>
+              <li>
+                <strong>Everywhere else:</strong> use your registrar's
+                "forwarding" / redirect feature to send
+                <span class="ws-mono">{{ savedCustomDomain }}</span> → <span class="ws-mono">www.{{ savedCustomDomain }}</span>.
+                Simplest path and works at every registrar.
+              </li>
+            </ul>
+          </details>
 
           <div class="ws-domain-foot">
             <button
@@ -1558,6 +1585,30 @@ function dnsMismatchActual(key: string): string | null {
   color: var(--color-fog);
 }
 .ws-domain-foot__hint--ok { color: #166534; }
+
+.ws-domain-aside {
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: var(--color-surface);
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-graphite);
+  line-height: 1.55;
+}
+.ws-domain-aside summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.ws-domain-aside ul {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ws-domain-aside li::marker { color: var(--color-fog); }
 
 .ws-colours { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ws-colour { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--color-hairline); border-radius: 10px; }

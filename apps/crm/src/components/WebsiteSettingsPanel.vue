@@ -806,7 +806,7 @@ function dnsBadgeLabel(key: string): string {
     case 'checking': return 'Checking…'
     case 'ok': return 'Verified'
     case 'missing': return 'Not found'
-    case 'mismatch': return 'Wrong value'
+    case 'mismatch': return 'Points elsewhere'
     case 'error': return `Lookup failed`
   }
 }
@@ -893,6 +893,9 @@ function dnsMismatchActual(key: string): string | null {
                 <div class="ws-mono ws-muted">→ {{ r.value }}</div>
                 <div v-if="dnsMismatchActual(r.key)" class="ws-dns__actual">
                   Found: <span class="ws-mono">{{ dnsMismatchActual(r.key) }}</span>
+                  <div class="ws-dns__fix">
+                    Update this record to point at <span class="ws-mono">{{ r.value }}</span> instead.
+                  </div>
                 </div>
               </div>
               <div class="ws-dns__actions">
@@ -1549,6 +1552,10 @@ function dnsMismatchActual(key: string): string | null {
   font-size: 11px;
   color: var(--color-danger);
   margin-top: 2px;
+}
+.ws-dns__fix {
+  margin-top: 4px;
+  color: var(--color-graphite);
 }
 .ws-dns__actions {
   display: inline-flex;

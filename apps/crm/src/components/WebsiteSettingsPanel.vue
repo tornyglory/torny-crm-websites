@@ -790,27 +790,6 @@ async function commitSubdomainChange() {
   }
 }
 
-function dnsBadgeTone(key: string): 'ok' | 'muted' | 'warn' | 'danger' {
-  const s = dnsChecks.value[key]
-  if (!s || s.kind === 'idle') return 'muted'
-  if (s.kind === 'checking') return 'muted'
-  if (s.kind === 'ok') return 'ok'
-  if (s.kind === 'missing') return 'warn'
-  return 'danger'
-}
-
-function dnsBadgeLabel(key: string): string {
-  const s = dnsChecks.value[key]
-  if (!s || s.kind === 'idle') return 'Not checked'
-  switch (s.kind) {
-    case 'checking': return 'Checking…'
-    case 'ok': return 'Verified'
-    case 'missing': return 'Not found'
-    case 'mismatch': return 'Points elsewhere'
-    case 'error': return `Lookup failed`
-  }
-}
-
 /** Returns the resolver's actual answer whenever we have one, regardless
  *  of whether it matched — so "Found: X" is visible on verified rows too
  *  (confirms the record is pointing at us) and not just on mismatches.
@@ -889,43 +868,54 @@ function dnsCheckKind(key: string): string {
             </li>
           </ol>
 
-          <div class="ws-dns">
-            <div
-              v-for="r in requiredDnsRecords"
-              :key="r.key"
-              class="ws-dns__row"
-            >
-              <span class="ws-dns__type">{{ r.type }}</span>
-              <div class="ws-dns__body">
-                <div class="ws-mono">{{ r.host }}</div>
-                <div class="ws-mono ws-muted">→ {{ r.value }}</div>
-                <!-- Actual DNS state, shown whenever a check has run. Green
-                     "Found: <target>" confirms a verified row; mismatch
-                     adds a fix hint; a missing record calls out that no
-                     CNAME exists at the host yet. -->
-                <div v-if="dnsActual(r.key)" class="ws-dns__actual" :class="`ws-dns__actual--${dnsCheckKind(r.key)}`">
-                  Found: <span class="ws-mono">{{ dnsActual(r.key) }}</span>
-                  <div v-if="dnsCheckKind(r.key) === 'mismatch'" class="ws-dns__fix">
-                    Update this record to point at <span class="ws-mono">{{ r.value }}</span> instead.
+          <!-- DNS settings table (Squarespace-style). Columns: Host |
+               Type | Required Data | Current Data. The last column is
+               the point of the whole page — it spells out exactly what
+               the resolver sees vs what we need. -->
+          <table class="ws-dns-table">
+            <thead>
+              <tr>
+                <th>Host</th>
+                <th>Type</th>
+                <th>Required data</th>
+                <th>Current data</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in requiredDnsRecords" :key="r.key">
+                <td><span class="ws-mono">{{ r.host }}</span></td>
+                <td><span class="ws-mono ws-dns-table__type">{{ r.type }}</span></td>
+                <td>
+                  <div class="ws-dns-table__required">
+                    <span class="ws-mono">{{ r.value }}</span>
+                    <button class="ws-link" type="button" @click="copyToClipboard(r.value)">Copy</button>
                   </div>
-                </div>
-                <div v-else-if="dnsCheckKind(r.key) === 'missing'" class="ws-dns__actual ws-dns__actual--missing">
-                  No CNAME record found at <span class="ws-mono">{{ r.host }}</span>.
-                  Add one pointing at <span class="ws-mono">{{ r.value }}</span>.
-                </div>
-              </div>
-              <div class="ws-dns__actions">
-                <button
-                  class="ws-link"
-                  type="button"
-                  @click="copyToClipboard(r.value)"
-                >Copy value</button>
-                <span class="ws-dns__badge" :class="`ws-dns__badge--${dnsBadgeTone(r.key)}`">
-                  {{ dnsBadgeLabel(r.key) }}
-                </span>
-              </div>
-            </div>
-          </div>
+                </td>
+                <td :class="`ws-dns-table__current ws-dns-table__current--${dnsCheckKind(r.key)}`">
+                  <template v-if="dnsCheckKind(r.key) === 'idle'">
+                    <span class="ws-dns-table__muted">Not checked yet</span>
+                  </template>
+                  <template v-else-if="dnsCheckKind(r.key) === 'checking'">
+                    <span class="ws-dns-table__spin" aria-hidden="true" />
+                    <span class="ws-dns-table__muted">Checking…</span>
+                  </template>
+                  <template v-else-if="dnsCheckKind(r.key) === 'ok'">
+                    <span class="ws-mono">{{ dnsActual(r.key) }}</span>
+                  </template>
+                  <template v-else-if="dnsCheckKind(r.key) === 'mismatch'">
+                    <span class="ws-mono">{{ dnsActual(r.key) }}</span>
+                    <span class="ws-dns-table__hint">Points at the wrong target — update to the value on the left.</span>
+                  </template>
+                  <template v-else-if="dnsCheckKind(r.key) === 'missing'">
+                    Record not found
+                  </template>
+                  <template v-else>
+                    Lookup failed
+                  </template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
 
           <!-- Advanced: apex (bare domain) options. Most registrars reject
                CNAME at the apex (RFC 1912) — call out the three practical
@@ -1531,70 +1521,66 @@ function dnsCheckKind(key: string): string {
 }
 .ws-steps li::marker { color: var(--color-fog); font-weight: 600; }
 
-.ws-dns {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
+/* DNS settings table — a Squarespace-style grid so the admin can read
+ * host / type / required / current state at a glance. */
+.ws-dns-table {
+  width: 100%;
+  border-collapse: collapse;
   margin: 0;
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid var(--color-hairline);
+  font-family: var(--font-body);
+  font-size: 13px;
 }
-.ws-dns__row {
-  display: grid;
-  grid-template-columns: 56px 1fr auto;
-  gap: 16px;
-  align-items: start;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--color-hairline);
-}
-.ws-dns__type {
-  font-family: var(--font-mono);
+.ws-dns-table th {
+  text-align: left;
+  padding: 10px 12px 10px 0;
+  font-family: var(--font-body);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--color-fog);
-  padding-top: 2px;
+  border-bottom: 1px solid var(--color-hairline);
 }
-.ws-dns__body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.ws-dns__hint {
-  font-family: var(--font-body);
+.ws-dns-table td {
+  vertical-align: top;
+  padding: 14px 12px 14px 0;
+  border-bottom: 1px solid var(--color-hairline);
+  color: var(--color-ink);
+}
+.ws-dns-table tr:last-child td { border-bottom: 0; }
+.ws-dns-table__type {
   font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   color: var(--color-fog);
-  margin-top: 2px;
 }
-.ws-dns__actual {
-  font-family: var(--font-body);
-  font-size: 11px;
-  color: var(--color-fog);
-  margin-top: 4px;
-}
-.ws-dns__actual--ok { color: #166534; }
-.ws-dns__actual--mismatch { color: var(--color-danger); }
-.ws-dns__actual--missing { color: #92400E; }
-.ws-dns__fix {
-  margin-top: 4px;
-  color: var(--color-graphite);
-}
-.ws-dns__actions {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-.ws-dns__badge {
+.ws-dns-table__required {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
-  border-radius: 999px;
+  gap: 10px;
+}
+.ws-dns-table__current { font-family: var(--font-body); font-size: 13px; }
+.ws-dns-table__current--idle { color: var(--color-fog); }
+.ws-dns-table__current--checking { color: var(--color-fog); display: inline-flex; align-items: center; gap: 8px; }
+.ws-dns-table__current--ok { color: #166534; }
+.ws-dns-table__current--mismatch { color: var(--color-danger); display: flex; flex-direction: column; gap: 4px; }
+.ws-dns-table__current--missing { color: var(--color-danger); font-weight: 600; }
+.ws-dns-table__current--error { color: var(--color-danger); }
+.ws-dns-table__muted { color: var(--color-fog); }
+.ws-dns-table__hint {
   font-family: var(--font-body);
   font-size: 11px;
-  font-weight: 600;
+  color: var(--color-graphite);
+  font-weight: 400;
 }
-.ws-dns__badge--ok { background: #DCFCE7; color: #166534; }
-.ws-dns__badge--muted { background: var(--color-surface); color: var(--color-fog); }
-.ws-dns__badge--warn { background: #FEF3C7; color: #92400E; }
-.ws-dns__badge--danger { background: #FEE2E2; color: #991B1B; }
+.ws-dns-table__spin {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  animation: ws-sub-spin 700ms linear infinite;
+}
 
 .ws-domain-foot {
   display: flex;

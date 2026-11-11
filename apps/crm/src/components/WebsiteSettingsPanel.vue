@@ -138,15 +138,18 @@ function clearCustomDomain() {
   resetDnsChecks()
 }
 
-/** The single CNAME the admin needs to add — derived from the saved
+/** The CNAME records the admin needs to add — derived from the saved
  *  apex so copy-to-clipboard + DNS checks always refer to the current
- *  domain. Brief 99 §4.2 guides us to www-only; the apex CNAME trap
- *  (unsupported at most registrars) is surfaced as an aside instead. */
+ *  domain. Brief 99 §4.2 guides us to www as the primary; the apex row
+ *  is shown too (admins want to see both states at a glance) with a
+ *  note explaining that apex CNAME only works on providers that support
+ *  flattening. Three practical apex paths live in the aside below. */
 interface DnsRecord {
   key: string
   type: 'CNAME'
   host: string
   value: string
+  note?: string
 }
 const requiredDnsRecords = computed<DnsRecord[]>(() => {
   const apex = savedCustomDomain.value
@@ -157,6 +160,13 @@ const requiredDnsRecords = computed<DnsRecord[]>(() => {
       type: 'CNAME',
       host: `www.${apex}`,
       value: PAGES_PROJECT_HOST,
+    },
+    {
+      key: 'apex',
+      type: 'CNAME',
+      host: apex,
+      value: PAGES_PROJECT_HOST,
+      note: 'Only works on providers that support apex CNAME flattening (Cloudflare DNS). On GoDaddy / Namecheap etc. use an ALIAS or ANAME record pointing to the same value, or set up a registrar redirect from the bare domain → www — details below.',
     },
   ]
 })
@@ -890,6 +900,7 @@ function dnsCheckKind(key: string): string {
                     <span class="ws-mono">{{ r.value }}</span>
                     <button class="ws-link" type="button" @click="copyToClipboard(r.value)">Copy</button>
                   </div>
+                  <div v-if="r.note" class="ws-dns-table__note">{{ r.note }}</div>
                 </td>
                 <td :class="`ws-dns-table__current ws-dns-table__current--${dnsCheckKind(r.key)}`">
                   <template v-if="dnsCheckKind(r.key) === 'idle'">
@@ -1558,6 +1569,14 @@ function dnsCheckKind(key: string): string {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+}
+.ws-dns-table__note {
+  margin-top: 6px;
+  max-width: 420px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--color-fog);
 }
 .ws-dns-table__current { font-family: var(--font-body); font-size: 13px; }
 .ws-dns-table__current--idle { color: var(--color-fog); }

@@ -58,6 +58,10 @@ const props = defineProps<{
    *  default bulkEmail flow — useful for contexts where recipients
    *  aren't members (enquiries) or need a different backend endpoint. */
   sendHandler?: (payload: SendEmailPayload) => Promise<void>
+  /** Optional subject populated when the modal opens — the Reply button
+   *  on an inbound-email row sets this to `Re: <original>`. Brief 100
+   *  §10.3. */
+  prefillSubject?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -268,7 +272,7 @@ watch(
   () => props.open,
   (isOpen) => {
     if (isOpen) {
-      state.subject = ''
+      state.subject = (props.prefillSubject ?? '').trim()
       state.body = ''
       sending.value = false
       insertOpen.value = false

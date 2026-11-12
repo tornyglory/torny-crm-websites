@@ -13,7 +13,7 @@ import { authedFetch } from '../http'
 
 // ── Types ─────────────────────────────────────────────────────────
 
-export type CommunicationChannel = 'note' | 'email' | 'call'
+export type CommunicationChannel = 'note' | 'email' | 'email_inbound' | 'call'
 
 export type NoteType = 'call' | 'meeting' | 'visit' | 'text_whatsapp' | 'general'
 
@@ -75,6 +75,31 @@ export interface MemberCommunication {
    *  link. Future broadcasts to this address will be suppressed. */
   unsubscribed_at: string | null
   provider_message_id: string | null
+  // ── Inbound-only fields (brief 100). Null / undefined on every other
+  //    channel. Populated by the SES Inbound Lambda → /internal/inbound-email
+  //    handler, then read back by the Member Communications timeline.
+  /** Sender's display name as parsed from the message's From header.
+   *  Null when the mailer only gave us the email. */
+  from_name?: string | null
+  /** Sender's bare email address. Always present on inbound rows. */
+  from_email?: string | null
+  /** When the SES receipt rule saw the message. Distinct from `sent_at`
+   *  (which is when we wrote the row). Can lag by a few seconds. */
+  received_at?: string | null
+  /** Email Message-ID header. Used to thread subsequent replies. */
+  message_id?: string | null
+  /** Email In-Reply-To header — our clue for parent linking. */
+  in_reply_to?: string | null
+  /** Resolved parent row when `in_reply_to` matched an outbound we sent.
+   *  Null when we couldn't match (first-contact inbound, or the original
+   *  outbound was sent through a different provider). */
+  parent_communication_id?: number | null
+  /** HTML body if the sender's mailer attached one. */
+  body_html?: string | null
+  /** S3 key under `torny-inbox-prod/raw/` for forensics — admins can
+   *  pull the original .eml for 30 days before lifecycle expiry. FE
+   *  never reads this directly; it's here for backend / debug use. */
+  raw_s3_key?: string | null
 }
 
 export interface Pagination {

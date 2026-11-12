@@ -133,9 +133,16 @@ watch(memberId, loadComms)
 const notesFeed = computed(() =>
   comms.value.filter((c) => c.channel === 'note'),
 )
+/** Combined email feed — outbound sends (brief 68/69) + inbound replies
+ *  (brief 100). Rendered together so the admin sees the full conversation
+ *  on the member's record without hopping between tabs. */
 const emailsFeed = computed(() =>
-  comms.value.filter((c) => c.channel === 'email'),
+  comms.value.filter((c) => c.channel === 'email' || c.channel === 'email_inbound'),
 )
+
+function isInboundEmail(c: MemberCommunication): boolean {
+  return c.channel === 'email_inbound'
+}
 
 const emailCounts = computed(() => {
   const list = emailsFeed.value
@@ -676,6 +683,9 @@ async function confirmDeletePayment() {
 // feed on save so the Notes / Communications tab reflect the write.
 const logNoteOpen = ref(false)
 const sendEmailOpen = ref(false)
+/** Optional subject prefill for the next send-email modal open — used by
+ *  the Reply button on inbound-email rows to pre-populate `Re: …`. */
+const sendEmailPrefillSubject = ref<string | null>(null)
 function logNote() {
   if (!member.value) return
   activeTab.value = 'notes'
@@ -683,6 +693,21 @@ function logNote() {
 }
 function sendEmail() {
   if (!member.value?.email) return
+  sendEmailPrefillSubject.value = null
+  sendEmailOpen.value = true
+}
+
+/** Reply to an inbound email — the admin clicked the Reply button on a
+ *  `channel = 'email_inbound'` row. Prefills the subject with `Re: …`
+ *  (idempotent if the inbound already starts with Re:) and reuses the
+ *  existing SendEmailModal flow. Brief 100 §10.3. */
+function replyToInbound(c: MemberCommunication) {
+  if (c.channel !== 'email_inbound') return
+  if (!member.value?.email) return
+  const baseSubject = c.subject?.trim() ?? ''
+  sendEmailPrefillSubject.value = /^re:\s/i.test(baseSubject)
+    ? baseSubject
+    : `Re: ${baseSubject || '(no subject)'}`
   sendEmailOpen.value = true
 }
 async function onNoteSaved() {
@@ -1590,15 +1615,52 @@ async function submitEdit() {
                 />
               </div>
               <ul v-else class="comms-feed">
-                <li
-                  v-for="c in emailsFeed"
-                  :key="c.communication_id"
-                  class="comms-row"
-                  :class="{ 'comms-row--fail': c.status === 'bounced' || c.status === 'complained' || c.status === 'failed' }"
-                  tabindex="0"
-                  @click="openEmail(c)"
-                  @keydown.enter="openEmail(c)"
-                >
+                <template v-for="c in emailsFeed" :key="c.communication_id">
+                  <!-- Inbound email row (brief 100). Different interaction
+                       model from outbound — no batch to open; instead a
+                       Reply button that goes through SendEmailModal with
+                       a prefilled Re: subject. -->
+                  <li v-if="isInboundEmail(c)" class="comms-row comms-row--inbound">
+                    <div class="comms-row__avatar comms-row__avatar--inbound" aria-hidden="true">
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                        <path d="M3 8h10M7 4l-4 4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </div>
+                    <div class="comms-row__body">
+                      <div class="comms-row__subject">{{ c.subject || '(no subject)' }}</div>
+                      <div class="comms-row__meta">
+                        <span class="comms-row__meta-text">
+                          <span class="comms-row__inbound-chip">Inbound</span>
+                          <span class="comms-row__meta-dot">·</span>
+                          <span>{{ commsDate(c) }} · {{ commsTime(c.received_at ?? c.sent_at) }}</span>
+                          <template v-if="c.from_name || c.from_email">
+                            <span class="comms-row__meta-dot">·</span>
+                            <span>from {{ c.from_name || c.from_email }}</span>
+                          </template>
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      class="btn btn--outline btn--sm comms-row__reply"
+                      :disabled="!member?.email"
+                      @click.stop="replyToInbound(c)"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M7 4L3 8l4 4M3 8h7a3 3 0 013 3v1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                      <span>Reply</span>
+                    </button>
+                  </li>
+                  <!-- Outbound email row — unchanged render. -->
+                  <li
+                    v-else
+                    class="comms-row"
+                    :class="{ 'comms-row--fail': c.status === 'bounced' || c.status === 'complained' || c.status === 'failed' }"
+                    tabindex="0"
+                    @click="openEmail(c)"
+                    @keydown.enter="openEmail(c)"
+                  >
                   <div
                     class="comms-row__avatar"
                     :class="{
@@ -1639,6 +1701,7 @@ async function submitEdit() {
                   </div>
                   <div class="comms-row__chevron" aria-hidden="true">›</div>
                 </li>
+                </template>
               </ul>
             </article>
 
@@ -2049,6 +2112,7 @@ async function submitEdit() {
       :open="sendEmailOpen"
       :club-id="clubStore.current?.id ?? null"
       :member="member"
+      :prefill-subject="sendEmailPrefillSubject"
       @close="sendEmailOpen = false"
       @sent="onEmailSent"
     />
@@ -2369,6 +2433,43 @@ async function submitEdit() {
 .comms-row__meta-dot { color: var(--color-mute); }
 .comms-row__chips { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
 .comms-row__chevron { flex-shrink: 0; color: var(--color-mute); font-size: 18px; line-height: 36px; align-self: center; }
+
+/* Inbound-email row variant (brief 100). Non-clickable at the row level
+ * — the Reply button handles its own action, unlike outbound rows which
+ * open the EmailDetailModal on click. */
+.comms-row--inbound { cursor: default; align-items: center; }
+.comms-row--inbound:hover,
+.comms-row--inbound:focus-visible {
+  background: transparent;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+  outline: none;
+}
+.comms-row__avatar--inbound {
+  background: var(--color-accent-soft, #DBEAFE);
+  color: #1E40AF;
+}
+.comms-row__inbound-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--color-accent-soft, #DBEAFE);
+  color: #1E40AF;
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.comms-row__reply {
+  flex-shrink: 0;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 
 .comms-feed__chip { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-body); font-size: 11px; font-weight: 600; }
 .comms-feed__chip--ok      { color: #14532D; }

@@ -95,6 +95,7 @@ export const useClubStore = defineStore('club', () => {
         name: full.name ?? c.name,
         slug: full.slug ?? null,
         domain: full.domain ?? null,
+        emailHandle: full.emailHandle ?? c.emailHandle ?? null,
         brandPrimary: full.brandPrimary ?? c.brandPrimary ?? null,
         brandAccent: full.brandAccent ?? c.brandAccent ?? null,
         logoUrl: full.logoUrl ?? c.logoUrl ?? null,

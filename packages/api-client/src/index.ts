@@ -142,6 +142,9 @@ export type {
   ImageStyle,
   ChangeSubdomainErrorCode,
   ChangeSubdomainResult,
+  ChangeEmailHandleErrorCode,
+  ChangeEmailHandleResult,
+  EmailHandleCheckResult,
 } from './resources/clubs'
 export * as directory from './resources/directory'
 export type { DirectoryClub, ClubSearchParams, ClubSearchResult } from './resources/directory'

@@ -1,6 +1,6 @@
 import type { TornyClient } from '../client'
-import { CRM_BASE } from '../config'
-import { authedFetch } from '../http'
+import { CRM_BASE, VENUE_BASE } from '../config'
+import { authedFetch, publicFetch } from '../http'
 import type { Club, ID } from '../types'
 
 export const listMine = (c: TornyClient) =>
@@ -97,6 +97,59 @@ export async function changeSubdomain(
     {
       method: 'PATCH',
       body: JSON.stringify({ subdomain }),
+      signal: opts.signal,
+    },
+  )
+  return res.data
+}
+
+// ── Club email handle (brief 100) ───────────────────────────────
+
+export type ChangeEmailHandleErrorCode =
+  | 'email_handle_required'
+  | 'email_handle_invalid'
+  | 'email_handle_reserved'
+  | 'email_handle_taken'
+  | 'forbidden'
+  | 'not_found'
+
+export interface ChangeEmailHandleResult {
+  club_id: number
+  email_handle: string
+  /** Fully-qualified address — i.e. `<handle>@torny.pro`. */
+  address: string
+}
+
+export type EmailHandleCheckResult =
+  | { available: true; value: string }
+  | { available: false; reason: 'taken' | 'reserved' | 'invalid' }
+
+/** GET /email-handles/check?value=… — public availability check. Mirrors
+ *  the subdomain availability shape used by the onboarding wizard + the
+ *  brief 98 subdomain editor. */
+export async function checkEmailHandle(
+  value: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<EmailHandleCheckResult> {
+  const url = `${VENUE_BASE}/email-handles/check?value=${encodeURIComponent(value)}`
+  const res = await publicFetch<Envelope<EmailHandleCheckResult>>(url, { signal: opts.signal })
+  return res.data
+}
+
+/** PATCH /clubs/{clubId}/email-handle — owner-only. Flips the mailbox
+ *  the club sends from AND receives at. Brief 100 §4.2 / §10.2.
+ *  Routed through the Venue API because the CRM stack hit the CFN
+ *  500-resource cap (noted in brief 99 §5). */
+export async function changeEmailHandle(
+  clubId: number,
+  emailHandle: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<ChangeEmailHandleResult> {
+  const res = await authedFetch<Envelope<ChangeEmailHandleResult>>(
+    `${VENUE_BASE}/clubs/${clubId}/email-handle`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ email_handle: emailHandle }),
       signal: opts.signal,
     },
   )

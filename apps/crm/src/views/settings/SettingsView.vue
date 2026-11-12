@@ -6,6 +6,7 @@ import StripeConnectCard from '@/views/settings/StripeConnectCard.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 import TeamAccessCard from '@/views/settings/TeamAccessCard.vue'
 import EmailSignaturesPanel from '@/views/settings/EmailSignaturesPanel.vue'
+import ClubInboxCard from '@/views/settings/ClubInboxCard.vue'
 import { useToast } from '@/composables/useToast'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useClubStore } from '@/stores/club'
@@ -1560,6 +1561,10 @@ function toggleIntegration(id: string) {
         <!-- Integrations -->
         <template v-else-if="active === 'integrations'">
           <StripeConnectCard />
+          <!-- Club email handle (brief 100) — sits above the generic
+               integration grid because it's the hero: this is what lets
+               mail flow both directions through the CRM. -->
+          <ClubInboxCard />
           <div class="grid grid--intg">
             <article
               v-for="i in integrations.filter((x) => x.id !== 'stripe')"

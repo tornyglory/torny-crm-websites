@@ -143,6 +143,10 @@ export interface Club {
   name: string
   slug?: string | null
   domain?: string | null
+  /** The local part of the club's receive-and-send mailbox (brief 100).
+   *  Full address is `<email_handle>@torny.pro`. Null when the backend
+   *  hasn't provisioned one (older clubs pre-migration 155). */
+  emailHandle?: string | null
   brandPrimary?: string | null
   /** Optional accent-colour override. When null, public site falls
    *  back to the colour-scheme preset. Brief 81. */

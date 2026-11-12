@@ -642,7 +642,7 @@ function replaceUpload(what: string) {
 }
 
 // ── Torny-hosted subdomain editor (brief 98) ─────────────────
-// The "Fallback" card lets the owner change the club's <slug>.torny.club
+// The "Fallback" card lets the owner change the club's <slug>.torny.pro
 // subdomain. Debounced availability check on each keystroke; explicit
 // save behind a confirm modal that spells out the breakage.
 
@@ -654,7 +654,7 @@ const onboarding = useOnboardingStore()
  *  Preview button in sync without a page refresh. */
 const currentSubdomain = computed<string>(() => clubStore.current?.slug ?? '')
 const currentHost = computed<string>(() =>
-  currentSubdomain.value ? `${currentSubdomain.value}.torny.club` : '',
+  currentSubdomain.value ? `${currentSubdomain.value}.torny.pro` : '',
 )
 
 const editingSubdomain = ref(false)
@@ -1010,7 +1010,7 @@ function dnsCheckKind(key: string): string {
                 maxlength="30"
                 aria-label="New subdomain"
               />
-              <span class="ws-sub-editor__suffix">.torny.club</span>
+              <span class="ws-sub-editor__suffix">.torny.pro</span>
             </div>
             <div
               v-if="subdomainCheck.kind !== 'idle'"
@@ -1448,7 +1448,7 @@ function dnsCheckKind(key: string): string {
     >
       <p class="ws-hint">
         The new URL will be
-        <span class="ws-mono">https://{{ subdomainDraft }}.torny.club</span>.
+        <span class="ws-mono">https://{{ subdomainDraft }}.torny.pro</span>.
       </p>
       <p class="ws-hint">
         The old URL (<span class="ws-mono">https://{{ currentHost }}</span>) will

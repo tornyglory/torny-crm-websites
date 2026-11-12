@@ -1374,15 +1374,15 @@ function slugify(s: string): string {
 }
 
 async function preview(): Promise<void> {
-  // Prefer clubStore.current.slug — backed by /clubs/:id, which reflects
-  // live brief-98 subdomain changes. The onboarding wizard snapshot
-  // (onboarding.data.subdomain) is set during setup and doesn't update
-  // when the owner edits the subdomain afterwards, so it can drift. Keep
-  // it as a secondary fallback for fresh reloads where clubStore hasn't
-  // hydrated yet; last-resort slugify the club name so the button never
-  // dead-ends on a brand-new signup.
+  // Always force-refresh clubStore.current.slug on Preview — a brief-98
+  // subdomain change in another tab, or a slug cached in localStorage
+  // from before a rename, would otherwise generate the wrong URL. Cheap
+  // (one GET /clubs/:id per click). Onboarding snapshot stays as a
+  // secondary fallback for fresh signups where the backend hasn't yet
+  // written slug on /clubs/:id.
+  await clubStore.hydrateFull({ force: true })
   if (!clubStore.current?.slug && !onboarding.data.subdomain) {
-    await Promise.all([onboarding.hydrate(), clubStore.hydrateFull()])
+    await onboarding.hydrate()
   }
   const slug =
     (clubStore.current?.slug?.trim() || null) ??

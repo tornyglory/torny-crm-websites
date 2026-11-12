@@ -77,9 +77,15 @@ export const useClubStore = defineStore('club', () => {
    * other public-site link) needs. Safe to call repeatedly; noops if the
    * current club already has a slug or if the fetch fails.
    */
-  async function hydrateFull(): Promise<void> {
+  async function hydrateFull(opts: { force?: boolean } = {}): Promise<void> {
     const c = current.value
-    if (!c || c.slug) return
+    if (!c) return
+    // Normal callers (slug backfill after login, font-picker refresh) only
+    // care about filling in a missing slug — short-circuit keeps them cheap.
+    // `force` is for callers that need to pick up live mutations from
+    // elsewhere (brief 98 subdomain change in another tab, or stale
+    // localStorage after a rename). The Preview button uses it.
+    if (!opts.force && c.slug) return
     try {
       const res = await authedFetch<Envelope<Club>>(`${CRM_BASE}/clubs/${c.id}`)
       const full = res.data

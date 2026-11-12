@@ -1,4 +1,5 @@
 export { default as BlockRenderer } from './BlockRenderer.vue'
+export { default as RichTextEditor } from './components/RichTextEditor.vue'
 export { default as HeroBlock } from './blocks/HeroBlock.vue'
 export { default as RichTextBlock } from './blocks/RichTextBlock.vue'
 export { default as EventListBlock } from './blocks/EventListBlock.vue'

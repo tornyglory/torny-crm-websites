@@ -5,6 +5,7 @@ import ImagePicker from '@/components/ImagePicker.vue'
 import StripeConnectCard from '@/views/settings/StripeConnectCard.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 import TeamAccessCard from '@/views/settings/TeamAccessCard.vue'
+import EmailSignaturesPanel from '@/views/settings/EmailSignaturesPanel.vue'
 import { useToast } from '@/composables/useToast'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useClubStore } from '@/stores/club'
@@ -61,6 +62,7 @@ type SectionKey =
   | 'notifications'
   | 'enquiries'
   | 'integrations'
+  | 'email-signatures'
   | 'danger'
 
 const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
@@ -72,6 +74,7 @@ const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
   { key: 'security', label: 'Security', hint: 'Sign-in, sessions, 2FA.' },
   { key: 'notifications', label: 'Notifications', hint: 'Which kinds ping you in-app + by email.' },
   { key: 'enquiries', label: 'Enquiries', hint: 'Contact-form intake, notify email, auto-reply.' },
+  { key: 'email-signatures', label: 'Email signatures', hint: 'Your personal sign-off + the club footer.' },
   { key: 'integrations', label: 'Integrations', hint: 'Stripe, mail, accounting.' },
   { key: 'danger', label: 'Danger zone', hint: 'Archive or transfer the club.' },
 ]
@@ -81,7 +84,7 @@ const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
 // to the right panel. `active` is a reactive view of the URL.
 const route = useRoute()
 const router = useRouter()
-const VALID_SECTIONS: SectionKey[] = ['club', 'membership', 'hours', 'billing', 'team', 'security', 'notifications', 'enquiries', 'integrations', 'danger']
+const VALID_SECTIONS: SectionKey[] = ['club', 'membership', 'hours', 'billing', 'team', 'security', 'notifications', 'enquiries', 'email-signatures', 'integrations', 'danger']
 const active = computed<SectionKey>(() => {
   const s = route.params.section
   if (typeof s === 'string' && (VALID_SECTIONS as string[]).includes(s)) return s as SectionKey
@@ -1548,6 +1551,11 @@ function toggleIntegration(id: string) {
           </div>
         </template>
 
+
+        <!-- Email signatures (brief 102 FE pre-wire; backend hook is brief 103). -->
+        <template v-else-if="active === 'email-signatures'">
+          <EmailSignaturesPanel />
+        </template>
 
         <!-- Integrations -->
         <template v-else-if="active === 'integrations'">

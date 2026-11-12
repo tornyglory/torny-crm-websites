@@ -22,8 +22,10 @@ import {
 import CrmModal from '@/components/modals/CrmModal.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 import TornyMultiSelect from '@/components/TornyMultiSelect.vue'
+import { RichTextEditor } from '@torny/content-blocks'
 import { useClubStore } from '@/stores/club'
 import { useToast } from '@/composables/useToast'
+import { useEmailSignatures, stitchSignature } from '@/composables/useEmailSignatures'
 
 /** Lightweight shape the modal needs — RosterMember already satisfies it,
  *  and callers composing a bulk send can pass trimmed rows without having
@@ -78,14 +80,17 @@ const INSERT_FIELDS: InsertField[] = [
 ]
 
 const SUBJECT_MAX = 200
-const BODY_MAX = 8000
 
+// Body is now HTML (TipTap's output). The initial empty state is '' — the
+// RichTextEditor renders its placeholder when the editor is empty.
 const state = reactive({ subject: '', body: '' })
 const sending = ref(false)
 const insertOpen = ref(false)
 const lastFocused = ref<'subject' | 'body'>('body')
 const subjectEl = ref<HTMLInputElement | null>(null)
-const bodyEl = ref<HTMLTextAreaElement | null>(null)
+const bodyEl = ref<InstanceType<typeof RichTextEditor> | null>(null)
+const signatures = useEmailSignatures()
+const includeSignature = ref(true)
 /** User IDs the sender has removed from the chip row for this compose
  *  session — we hide them from the recipients list but don't mutate the
  *  caller's selection. Cleared on open. */
@@ -271,6 +276,7 @@ watch(
       removedIds.value = new Set()
       clearAudienceFilters()
       void ensureTiersLoaded()
+      includeSignature.value = true
       void nextTick(() => bodyEl.value?.focus())
     }
   },
@@ -342,25 +348,27 @@ const canSend = computed(() => {
   )
 })
 
-/** Convert a plain-text body into HTML paragraphs. Blank lines split
- *  paragraphs; single `\n` becomes `<br>`. Escapes HTML so pasted text
- *  can't inject markup — except `{{tokens}}`, which we leave intact so
- *  the server can substitute them (they contain no HTML-special chars). */
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
+/** Strip HTML tags for the plain-text fallback the server also wants.
+ *  Rough — relies on DOM parsing for correctness. Good enough for a
+ *  text-only view in mail clients that don't render HTML. */
+function htmlToPlain(html: string): string {
+  if (typeof document === 'undefined') return html
+  const div = document.createElement('div')
+  div.innerHTML = html
+  return (div.textContent ?? '').trim()
 }
-function toBodyHtml(text: string): string {
-  const trimmed = text.trim()
-  if (!trimmed) return ''
-  return trimmed
-    .split(/\n{2,}/)
-    .map((para) => `<p>${escapeHtml(para).replace(/\n/g, '<br>')}</p>`)
-    .join('\n')
+
+/** Stitch the drafted body with the admin's saved signatures when the
+ *  toggle is on. See `useEmailSignatures` — brief 103 swaps localStorage
+ *  for the real GET/PUT endpoints without changing this call site. */
+function finalBodyHtml(): string {
+  const body = state.body
+  if (!includeSignature.value) return body
+  return stitchSignature({
+    bodyHtml: body,
+    personalHtml: signatures.personal.value || null,
+    clubHtml: signatures.club.value || null,
+  })
 }
 
 async function send() {
@@ -369,10 +377,11 @@ async function send() {
   if (cid == null) return
   sending.value = true
   try {
+    const bodyHtml = finalBodyHtml()
     const payload: SendEmailPayload = {
       subject: state.subject.trim(),
-      body: state.body.trim(),
-      bodyHtml: toBodyHtml(state.body),
+      body: htmlToPlain(bodyHtml),
+      bodyHtml,
     }
     // Custom send path (enquiry replies etc). Parent is responsible for
     // its own success toasts — we only surface a generic one.
@@ -430,18 +439,21 @@ function onCmdEnter(e: KeyboardEvent) {
 }
 
 function insertAt(target: 'subject' | 'body', token: string) {
-  const el = target === 'subject' ? subjectEl.value : bodyEl.value
-  const current = target === 'subject' ? state.subject : state.body
-  const start = el?.selectionStart ?? current.length
-  const end = el?.selectionEnd ?? current.length
-  const next = current.slice(0, start) + token + current.slice(end)
-  if (target === 'subject') state.subject = next
-  else state.body = next
-  void nextTick(() => {
-    el?.focus()
-    const caret = start + token.length
-    el?.setSelectionRange(caret, caret)
-  })
+  if (target === 'subject') {
+    const el = subjectEl.value
+    const current = state.subject
+    const start = el?.selectionStart ?? current.length
+    const end = el?.selectionEnd ?? current.length
+    state.subject = current.slice(0, start) + token + current.slice(end)
+    void nextTick(() => {
+      el?.focus()
+      const caret = start + token.length
+      el?.setSelectionRange(caret, caret)
+    })
+    return
+  }
+  // Body is the RichTextEditor — ask it to insert at the live cursor.
+  bodyEl.value?.insertText(token)
 }
 
 function pickField(f: InsertField) {
@@ -626,17 +638,56 @@ function pickField(f: InsertField) {
         </div>
       </div>
 
-      <textarea
-        ref="bodyEl"
-        v-model="state.body"
-        class="email__body"
-        rows="10"
-        :maxlength="BODY_MAX"
-        :disabled="sending"
-        :placeholder="`Hi {{recipient_first_name}},\n\nJust a quick note from the club…`"
-        @focus="lastFocused = 'body'"
-        @keydown="onCmdEnter"
-      />
+      <div class="email__body" @focusin="lastFocused = 'body'" @keydown="onCmdEnter">
+        <RichTextEditor
+          ref="bodyEl"
+          v-model="state.body"
+          placeholder="Hi {{recipient_first_name}},
+
+Just a quick note from the club…"
+          size="md"
+        />
+      </div>
+
+      <!-- Signature preview — stitches the admin's saved personal sig +
+           the club footer into every send. Hidden when nothing's saved so
+           admins without a signature don't see a dead block. -->
+      <div
+        v-if="includeSignature && (signatures.personal.value || signatures.club.value)"
+        class="email__sig"
+      >
+        <div class="email__sig-head">
+          <div class="email__sig-eyebrow">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M2 12c2-3 4-6 6-6s3 3 1 4-3-1-1-3 4-4 6-4"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linecap="round"
+              />
+            </svg>
+            <span>Signature auto-appended</span>
+          </div>
+          <router-link
+            class="email__sig-manage"
+            :to="{ name: 'settings', params: { section: 'email-signatures' } }"
+          >Manage</router-link>
+        </div>
+        <div
+          v-if="signatures.personal.value"
+          class="email__sig-body"
+          v-html="signatures.personal.value"
+        />
+        <hr
+          v-if="signatures.personal.value && signatures.club.value"
+          class="email__sig-divider"
+        />
+        <div
+          v-if="signatures.club.value"
+          class="email__sig-body email__sig-body--muted"
+          v-html="signatures.club.value"
+        />
+      </div>
     </section>
 
     <template #footer>
@@ -952,19 +1003,72 @@ function pickField(f: InsertField) {
 
 .email__body {
   width: 100%;
-  min-height: 260px;
-  padding: 18px 20px;
+  padding: 10px 20px 18px;
   border-radius: 10px;
   border: 1px solid var(--color-hairline);
   background: #fff;
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--color-ink);
-  resize: vertical;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.12s ease;
 }
-.email__body:focus { outline: none; border-color: var(--color-ink); }
-.email__body:disabled { opacity: 0.6; cursor: not-allowed; }
+.email__body:focus-within { border-color: var(--color-ink); }
+
+/* Signature preview strip — hairline-left muted block previewing what
+ * will be appended to the sent email. Not the sender's personal inbox. */
+.email__sig {
+  margin-top: 14px;
+  padding: 14px 16px 14px 18px;
+  border-left: 2px solid var(--color-hairline);
+  background: #FAFAF7;
+  border-radius: 0 10px 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.email__sig-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.email__sig-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-fog);
+}
+.email__sig-manage {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent, #2563eb);
+  text-decoration: none;
+}
+.email__sig-manage:hover { text-decoration: underline; }
+.email__sig-body {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-graphite);
+}
+.email__sig-body :deep(p) { margin: 0 0 4px; }
+.email__sig-body :deep(p:last-child) { margin-bottom: 0; }
+.email__sig-body :deep(a) { color: var(--color-accent, #2563eb); text-decoration: underline; }
+.email__sig-body--muted {
+  font-size: 12px;
+  color: var(--color-fog);
+}
+.email__sig-divider {
+  height: 1px;
+  background: var(--color-hairline);
+  border: 0;
+  margin: 0;
+}
 
 .email__foot-hint {
   margin-right: auto;

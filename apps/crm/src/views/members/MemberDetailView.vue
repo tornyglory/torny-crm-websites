@@ -344,23 +344,49 @@ function noteTypeLabel(t: NoteType | null): string {
   return t ? NOTE_TYPE_LABEL[t] : 'General'
 }
 
-const COMMS_DATE_FMT = new Intl.DateTimeFormat(undefined, {
-  day: 'numeric', month: 'short', year: 'numeric',
-})
 const COMMS_TIME_FMT = new Intl.DateTimeFormat(undefined, {
   hour: 'numeric', minute: '2-digit',
 })
-function commsDate(c: MemberCommunication): string {
-  const iso = c.occurred_at ?? c.sent_at
-  if (!iso) return ''
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : COMMS_DATE_FMT.format(d)
-}
+/** "24 Oct" — short date for the left rail of a comms row. */
+const COMMS_DAY_FMT = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' })
+
 function commsTime(iso: string | null): string {
   if (!iso) return ''
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? '' : COMMS_TIME_FMT.format(d)
 }
+
+/** Short day label for the comms row date-rail. Falls back to full date
+ *  if the ISO is missing. */
+function commsDay(c: MemberCommunication): string {
+  const iso = (c.channel === 'email_inbound' ? c.received_at : null) ?? c.occurred_at ?? c.sent_at
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : COMMS_DAY_FMT.format(d)
+}
+/** "3 weeks ago" — relative-time string shown under the day in the rail. */
+function commsRelative(c: MemberCommunication): string {
+  const iso = (c.channel === 'email_inbound' ? c.received_at : null) ?? c.occurred_at ?? c.sent_at
+  if (!iso) return ''
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return ''
+  const seconds = Math.max(1, Math.floor((Date.now() - then) / 1000))
+  if (seconds < 60) return `${seconds}s ago`
+  const mins = Math.floor(seconds / 60)
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return 'yesterday'
+  if (days < 7) return `${days} days ago`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 4) return weeks === 1 ? 'a week ago' : `${weeks} weeks ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return months === 1 ? 'a month ago' : `${months} months ago`
+  const years = Math.floor(days / 365)
+  return years === 1 ? 'a year ago' : `${years} years ago`
+}
+
 
 // Row-level edit / delete for notes. Admin or the original author.
 const editingNoteId = ref<number | null>(null)
@@ -1616,66 +1642,92 @@ async function submitEdit() {
               </div>
               <ul v-else class="comms-feed">
                 <template v-for="c in emailsFeed" :key="c.communication_id">
-                  <!-- Inbound email row (brief 100). Different interaction
-                       model from outbound — no batch to open; instead a
-                       Reply button that goes through SendEmailModal with
-                       a prefilled Re: subject. -->
-                  <li v-if="isInboundEmail(c)" class="comms-row comms-row--inbound">
-                    <div class="comms-row__avatar comms-row__avatar--inbound" aria-hidden="true">
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                        <path d="M3 8h10M7 4l-4 4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                      </svg>
+                  <!-- Inbound email row (brief 100). Expanded card
+                       matching the Paper design — distinct layout from
+                       outbound because there's no batch to open; the
+                       whole thing reads as a mini email with a Reply
+                       action card. -->
+                  <li v-if="isInboundEmail(c)" class="comms-card comms-card--inbound">
+                    <div class="comms-card__rail">
+                      <div class="comms-card__day">{{ commsDay(c) }}</div>
+                      <div class="comms-card__rel">{{ commsRelative(c) }}</div>
+                      <span class="comms-card__pill comms-card__pill--inbound">Inbound</span>
                     </div>
-                    <div class="comms-row__body">
-                      <div class="comms-row__subject">{{ c.subject || '(no subject)' }}</div>
-                      <div class="comms-row__meta">
-                        <span class="comms-row__meta-text">
-                          <span class="comms-row__inbound-chip">Inbound</span>
-                          <span class="comms-row__meta-dot">·</span>
-                          <span>{{ commsDate(c) }} · {{ commsTime(c.received_at ?? c.sent_at) }}</span>
-                          <template v-if="c.from_name || c.from_email">
-                            <span class="comms-row__meta-dot">·</span>
-                            <span>from {{ c.from_name || c.from_email }}</span>
-                          </template>
-                        </span>
+                    <div class="comms-card__body">
+                      <div class="comms-card__head">
+                        <div class="comms-card__sender">
+                          <span class="comms-card__avatar comms-card__avatar--inbound">{{ senderInitials(c.from_name ?? c.from_email ?? member?.name ?? '?') }}</span>
+                          <span class="comms-card__sender-name">{{ c.from_name || c.from_email || member?.name }}</span>
+                          <span v-if="c.from_email" class="comms-card__sender-email">&lt;{{ c.from_email }}&gt;</span>
+                          <span v-if="c.user_id" class="comms-card__matched">
+                            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                              <path d="M2 8l4 4 8-8" stroke="#166534" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            <span>Matched</span>
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          class="btn btn--outline btn--sm comms-card__reply"
+                          :disabled="!member?.email"
+                          @click.stop="replyToInbound(c)"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                            <path d="M7 4L3 8l4 4M3 8h7a3 3 0 013 3v1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                          </svg>
+                          <span>Reply</span>
+                        </button>
                       </div>
+                      <div class="comms-card__subject">{{ c.subject || '(no subject)' }}</div>
+                      <div class="comms-card__meta">
+                        <span>Received {{ commsTime(c.received_at ?? c.sent_at) }}</span>
+                        <template v-if="c.message_id">
+                          <span class="comms-card__meta-dot">·</span>
+                          <span class="comms-card__meta-mono">{{ c.message_id }}</span>
+                        </template>
+                      </div>
+                      <!-- Prefer plain body on the timeline — avoids rogue
+                           CSS from pasted HTML blowing out the row. Full
+                           HTML view lives in the follow-up modal. -->
+                      <div v-if="c.body" class="comms-card__content">{{ c.body }}</div>
+                      <div v-else-if="c.body_html" class="comms-card__content comms-card__content--muted">(HTML message — expand to view)</div>
                     </div>
-                    <button
-                      type="button"
-                      class="btn btn--outline btn--sm comms-row__reply"
-                      :disabled="!member?.email"
-                      @click.stop="replyToInbound(c)"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                        <path d="M7 4L3 8l4 4M3 8h7a3 3 0 013 3v1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                      </svg>
-                      <span>Reply</span>
-                    </button>
                   </li>
-                  <!-- Outbound email row — unchanged render. -->
+                  <!-- Outbound email row — rebuilt to match the Paper
+                       design's date-rail + body + action grammar. Keeps
+                       click-to-open behaviour that opens the batch
+                       detail modal. -->
                   <li
                     v-else
-                    class="comms-row"
-                    :class="{ 'comms-row--fail': c.status === 'bounced' || c.status === 'complained' || c.status === 'failed' }"
+                    class="comms-card"
+                    :class="{ 'comms-card--fail': c.status === 'bounced' || c.status === 'complained' || c.status === 'failed' }"
                     tabindex="0"
                     @click="openEmail(c)"
                     @keydown.enter="openEmail(c)"
                   >
-                  <div
-                    class="comms-row__avatar"
-                    :class="{
-                      'comms-row__avatar--fail': c.status === 'bounced' || c.status === 'complained' || c.status === 'failed',
-                      'comms-row__avatar--system': c.sent_by == null,
-                    }"
-                  >{{ senderInitials(c.sent_by_name) }}</div>
-                  <div class="comms-row__body">
-                    <div class="comms-row__subject">{{ c.subject || '(no subject)' }}</div>
-                    <div class="comms-row__meta">
-                      <span class="comms-row__meta-text">
-                        <span>{{ commsDate(c) }} · {{ commsTime(c.sent_at) }}</span>
-                        <template v-if="c.sent_by_name"><span class="comms-row__meta-dot">·</span><span>{{ c.sent_by_name }}</span></template>
-                      </span>
-                      <span class="comms-row__chips">
+                  <div class="comms-card__rail">
+                    <div class="comms-card__day">{{ commsDay(c) }}</div>
+                    <div class="comms-card__rel">{{ commsRelative(c) }}</div>
+                    <span class="comms-card__pill comms-card__pill--sent">Sent</span>
+                  </div>
+                  <div class="comms-card__body">
+                    <div class="comms-card__head">
+                      <div class="comms-card__sender">
+                        <span
+                          class="comms-card__avatar"
+                          :class="{
+                            'comms-card__avatar--fail': c.status === 'bounced' || c.status === 'complained' || c.status === 'failed',
+                            'comms-card__avatar--system': c.sent_by == null,
+                          }"
+                        >{{ senderInitials(c.sent_by_name) }}</span>
+                        <span v-if="c.sent_by_name" class="comms-card__sender-name">{{ c.sent_by_name }}</span>
+                        <span class="comms-card__sender-email">· sent {{ commsTime(c.sent_at) }}</span>
+                      </div>
+                      <div class="comms-card__chevron" aria-hidden="true">›</div>
+                    </div>
+                    <div class="comms-card__subject">{{ c.subject || '(no subject)' }}</div>
+                    <div class="comms-card__meta">
+                      <span class="comms-card__chips">
                         <span
                           v-for="chip in emailTimeline(c)"
                           :key="chip.key"
@@ -1699,7 +1751,6 @@ async function submitEdit() {
                       </span>
                     </div>
                   </div>
-                  <div class="comms-row__chevron" aria-hidden="true">›</div>
                 </li>
                 </template>
               </ul>
@@ -2434,42 +2485,174 @@ async function submitEdit() {
 .comms-row__chips { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
 .comms-row__chevron { flex-shrink: 0; color: var(--color-mute); font-size: 18px; line-height: 36px; align-self: center; }
 
-/* Inbound-email row variant (brief 100). Non-clickable at the row level
- * — the Reply button handles its own action, unlike outbound rows which
- * open the EmailDetailModal on click. */
-.comms-row--inbound { cursor: default; align-items: center; }
-.comms-row--inbound:hover,
-.comms-row--inbound:focus-visible {
-  background: transparent;
+/* ── comms-card (brief 100 Paper redesign) ────────────────────
+ * Grid: left date rail (90px) + body (1fr). Shared by outbound
+ * (click-to-open) and inbound (expanded with body + Reply). */
+.comms-card {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 18px;
+  padding: 18px 20px;
   margin: 0;
-  padding-left: 0;
-  padding-right: 0;
+  background: #fff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.comms-card:not(.comms-card--inbound):hover,
+.comms-card:not(.comms-card--inbound):focus-visible {
   outline: none;
+  border-color: var(--color-ink);
+  box-shadow: 0 4px 12px -8px rgba(10, 10, 11, 0.15);
 }
-.comms-row__avatar--inbound {
-  background: var(--color-accent-soft, #DBEAFE);
-  color: #1E40AF;
+.comms-feed > li + li { margin-top: 10px; border-top: 0; }
+
+.comms-card__rail { display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
+.comms-card__day {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
 }
-.comms-row__inbound-chip {
+.comms-card__rel {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--color-fog);
+}
+.comms-card__pill {
+  margin-top: 8px;
   display: inline-flex;
   align-items: center;
-  padding: 1px 8px;
+  padding: 1px 7px;
+  width: fit-content;
   border-radius: 999px;
-  background: var(--color-accent-soft, #DBEAFE);
-  color: #1E40AF;
   font-family: var(--font-body);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.comms-row__reply {
+.comms-card__pill--sent { background: #EDE9FE; color: #5B21B6; }
+.comms-card__pill--inbound { background: #DBEAFE; color: #1E40AF; }
+.comms-card__pill--meeting { background: #DCFCE7; color: #14532D; }
+
+.comms-card__body { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.comms-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.comms-card__sender {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.comms-card__avatar {
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
-  align-self: center;
+  border-radius: 999px;
+  background: var(--color-ink);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+}
+.comms-card__avatar--inbound { background: var(--color-accent-soft, #DBEAFE); color: #1E40AF; }
+.comms-card__avatar--fail { background: #FEE2E2; color: #991B1B; }
+.comms-card__avatar--system { background: #DCFCE7; color: #14532D; }
+.comms-card__sender-name {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.comms-card__sender-email {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-fog);
+}
+.comms-card__matched {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fafaf7;
+  border: 1px solid var(--color-hairline);
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-fog);
+}
+.comms-card__reply {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
+.comms-card__chevron {
+  flex-shrink: 0;
+  color: var(--color-mute);
+  font-size: 22px;
+  line-height: 1;
+  align-self: center;
+}
+.comms-card__subject {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comms-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--color-fog);
+}
+.comms-card__meta-dot { color: var(--color-mute); }
+.comms-card__meta-mono { font-family: var(--font-mono); }
+.comms-card__chips { display: inline-flex; align-items: center; gap: 10px; }
+
+/* Inbound card body preview — plain-text excerpt of the email. Kept
+ * short so a long thread doesn't blow out the timeline. */
+.comms-card--inbound {
+  cursor: default;
+  border-color: var(--color-ink);
+  box-shadow: 0 8px 24px -14px rgba(10, 10, 11, 0.18);
+}
+.comms-card__content {
+  margin-top: 4px;
+  padding: 12px 14px;
+  background: #fafaf7;
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-graphite);
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.comms-card__content--muted { color: var(--color-fog); font-style: italic; }
+.comms-card--fail .comms-card__pill--sent { background: #FEE2E2; color: #991B1B; }
 
 .comms-feed__chip { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-body); font-size: 11px; font-weight: 600; }
 .comms-feed__chip--ok      { color: #14532D; }

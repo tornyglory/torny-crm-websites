@@ -1718,6 +1718,7 @@ async function submitEdit() {
                   No threads match that filter or search.
                 </div>
               </template>
+              </template>
             </article>
 
             <!-- Notes -->

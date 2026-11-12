@@ -54,7 +54,7 @@ function clearClub() {
     <section class="esig-card">
       <header class="esig-card__head">
         <div class="esig-card__title">
-          <span class="esig-card__no">01</span>
+          <span class="esig-card__no">02</span>
           <h2>Personal signature</h2>
         </div>
         <span class="esig-badge esig-badge--ok">
@@ -105,7 +105,7 @@ function clearClub() {
     <section class="esig-card">
       <header class="esig-card__head">
         <div class="esig-card__title">
-          <span class="esig-card__no">02</span>
+          <span class="esig-card__no">03</span>
           <h2>Club footer</h2>
         </div>
         <span class="esig-badge" :class="signatures.isOwnerOrAdmin.value ? 'esig-badge--warn' : 'esig-badge--muted'">

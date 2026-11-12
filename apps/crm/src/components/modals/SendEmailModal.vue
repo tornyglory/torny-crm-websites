@@ -674,7 +674,7 @@ Just a quick note from the club…"
           </div>
           <router-link
             class="email__sig-manage"
-            :to="{ name: 'settings', params: { section: 'email-signatures' } }"
+            :to="{ name: 'settings', params: { section: 'email' } }"
           >Manage</router-link>
         </div>
         <div

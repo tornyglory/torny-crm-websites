@@ -8,7 +8,7 @@
 //
 // All endpoints live under the CRM base; JWT required on every call.
 
-import { CRM_BASE } from '../config'
+import { CRM_BASE, VENUE_BASE } from '../config'
 import { authedFetch } from '../http'
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -330,6 +330,104 @@ export async function getBatch(
   const res = await authedFetch<Envelope<BatchDetail>>(
     `${CRM_BASE}/clubs/${clubId}/communications/${batchId}${query ? `?${query}` : ''}`,
     { method: 'GET', signal: opts.signal },
+  )
+  return res.data
+}
+
+// ── Thread view + reply (brief 101) ───────────────────────────────
+
+/** `direction` is server-computed from `channel` — FE renders by it
+ *  without having to inspect channel values. */
+export type CommunicationDirection = 'inbound' | 'outbound'
+
+/** A single message as returned by GET …/thread. Extends MemberCommunication
+ *  with the server-computed `direction` + always-present inbound metadata
+ *  (`from_name` / `from_email` are null on outbound). The feed's /communications
+ *  endpoint returns a more permissive shape; the thread endpoint is stricter. */
+export interface ThreadMessage {
+  communication_id: number
+  direction: CommunicationDirection
+  channel: CommunicationChannel
+  subject: string | null
+  body: string | null
+  body_html: string | null
+  message_id: string | null
+  in_reply_to: string | null
+  parent_communication_id: number | null
+  from_name: string | null
+  from_email: string | null
+  sent_by: number | null
+  sent_by_name: string | null
+  user_id: number | null
+  sent_at: string | null
+  received_at: string | null
+  status: CommunicationStatus
+}
+
+export interface ThreadResponse {
+  /** RFC 5322 Message-ID of the thread root. Null on pre-feature anchors. */
+  thread_id: string | null
+  /** The comm_id the caller asked about — useful so the FE can highlight it. */
+  anchor_id: number
+  /** Chronological, oldest first. FE reverses for display per Paper 33b. */
+  messages: ThreadMessage[]
+}
+
+/** GET /clubs/{clubId}/communications/{commId}/thread — load every message
+ *  that shares a `thread_id` with the anchor. Oldest-first ordering;
+ *  rendering surface reverses. Brief 101 §3.1. */
+export async function getThread(
+  clubId: number,
+  communicationId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<ThreadResponse> {
+  const res = await authedFetch<Envelope<ThreadResponse>>(
+    `${VENUE_BASE}/clubs/${clubId}/communications/${communicationId}/thread`,
+    { method: 'GET', signal: opts.signal },
+  )
+  return res.data
+}
+
+export type ReplyErrorCode =
+  | 'body_required'
+  | 'no_recipient'
+  | 'send_failed'
+  | 'forbidden'
+  | 'not_found'
+
+export interface ReplyInput {
+  body_html: string
+  /** Defaults to `Re: <parent.subject>` on the server when omitted. */
+  subject?: string
+}
+
+export interface ReplyResult {
+  communication_id: number
+  thread_id: string | null
+  parent_communication_id: number
+  recipient_email: string
+  recipient_user_id: number | null
+  message_id: string
+  provider_message_id: string | null
+}
+
+/** POST /clubs/{clubId}/communications/{commId}/reply — admin+ only.
+ *  Backend resolves recipient, sets In-Reply-To / References headers on
+ *  the SES send, and inserts the new row with the parent's thread_id.
+ *  Brief 101 §3.2. */
+export async function replyToCommunication(
+  clubId: number,
+  communicationId: number,
+  input: ReplyInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<ReplyResult> {
+  const res = await authedFetch<Envelope<ReplyResult>>(
+    `${VENUE_BASE}/clubs/${clubId}/communications/${communicationId}/reply`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+      signal: opts.signal,
+    },
   )
   return res.data
 }

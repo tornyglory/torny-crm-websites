@@ -133,6 +133,12 @@ export type {
   BatchCounts,
   BatchDetail,
   GetBatchParams,
+  CommunicationDirection,
+  ThreadMessage,
+  ThreadResponse,
+  ReplyInput,
+  ReplyResult,
+  ReplyErrorCode,
 } from './resources/communications'
 export * as devices from './resources/devices'
 export * as clubs from './resources/clubs'

@@ -38,7 +38,7 @@ import CrmModal from '@/components/modals/CrmModal.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 import LogNoteModal from '@/components/modals/LogNoteModal.vue'
 import SendEmailModal from '@/components/modals/SendEmailModal.vue'
-import EmailDetailModal from '@/components/modals/EmailDetailModal.vue'
+import CommunicationThreadView from '@/components/CommunicationThreadView.vue'
 import RecordPaymentModal from '@/components/modals/RecordPaymentModal.vue'
 import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
@@ -142,6 +142,21 @@ const emailsFeed = computed(() =>
 
 function isInboundEmail(c: MemberCommunication): boolean {
   return c.channel === 'email_inbound'
+}
+
+/** Brief 101 — the Communications tab flips to the inline thread view
+ *  when the admin clicks any email row. `null` = show the list. The
+ *  value is the comm_id the admin clicked; the thread view fetches the
+ *  full thread and uses it as the anchor. */
+const expandedThreadCommId = ref<number | null>(null)
+function openThread(c: MemberCommunication) {
+  if (c.channel !== 'email' && c.channel !== 'email_inbound') return
+  expandedThreadCommId.value = c.communication_id
+}
+function closeThread() {
+  expandedThreadCommId.value = null
+  // Refresh the timeline so any reply we just sent is reflected.
+  void loadComms()
 }
 
 const emailCounts = computed(() => {
@@ -289,48 +304,6 @@ function noteDateRel(c: MemberCommunication): string {
   if (diffDays > 1 && diffDays < 7) return `${diffDays}d ago`
   if (diffDays >= 7 && diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
   return String(d.getFullYear())
-}
-
-// Email detail modal — opens on row click to render the full body.
-const emailDetailOpen = ref(false)
-const emailDetailBatchId = ref<number | null>(null)
-const emailDetailFallback = ref<{
-  subject: string | null
-  sent_at: string | null
-  sent_by_name: string | null
-  status: string | null
-  failure_reason: string | null
-  delivered_at: string | null
-  opened_at: string | null
-  open_count: number | null
-  clicked_at: string | null
-  click_count: number | null
-  bounced_at: string | null
-  complained_at: string | null
-  unsubscribed_at: string | null
-} | null>(null)
-function openEmail(c: MemberCommunication) {
-  if (c.channel !== 'email') return
-  emailDetailBatchId.value = c.batch_id
-  emailDetailFallback.value = {
-    subject: c.subject,
-    sent_at: c.sent_at,
-    sent_by_name: c.sent_by_name,
-    status: c.status,
-    failure_reason: c.failure_reason,
-    delivered_at: c.delivered_at,
-    opened_at: c.opened_at,
-    open_count: c.open_count,
-    clicked_at: c.clicked_at,
-    click_count: c.click_count,
-    bounced_at: c.bounced_at,
-    complained_at: c.complained_at,
-    unsubscribed_at: c.unsubscribed_at,
-  }
-  emailDetailOpen.value = true
-}
-function closeEmailDetail() {
-  emailDetailOpen.value = false
 }
 
 const NOTE_TYPE_LABEL: Record<NoteType, string> = {
@@ -709,9 +682,6 @@ async function confirmDeletePayment() {
 // feed on save so the Notes / Communications tab reflect the write.
 const logNoteOpen = ref(false)
 const sendEmailOpen = ref(false)
-/** Optional subject prefill for the next send-email modal open — used by
- *  the Reply button on inbound-email rows to pre-populate `Re: …`. */
-const sendEmailPrefillSubject = ref<string | null>(null)
 function logNote() {
   if (!member.value) return
   activeTab.value = 'notes'
@@ -719,21 +689,6 @@ function logNote() {
 }
 function sendEmail() {
   if (!member.value?.email) return
-  sendEmailPrefillSubject.value = null
-  sendEmailOpen.value = true
-}
-
-/** Reply to an inbound email — the admin clicked the Reply button on a
- *  `channel = 'email_inbound'` row. Prefills the subject with `Re: …`
- *  (idempotent if the inbound already starts with Re:) and reuses the
- *  existing SendEmailModal flow. Brief 100 §10.3. */
-function replyToInbound(c: MemberCommunication) {
-  if (c.channel !== 'email_inbound') return
-  if (!member.value?.email) return
-  const baseSubject = c.subject?.trim() ?? ''
-  sendEmailPrefillSubject.value = /^re:\s/i.test(baseSubject)
-    ? baseSubject
-    : `Re: ${baseSubject || '(no subject)'}`
   sendEmailOpen.value = true
 }
 async function onNoteSaved() {
@@ -1595,6 +1550,16 @@ async function submitEdit() {
 
             <!-- Communications -->
             <article v-else-if="activeTab === 'communications'" class="member-detail__card">
+              <!-- Brief 101 thread view — swaps in when the admin clicks
+                   any email row. Hides the list + header while a
+                   conversation is active. -->
+              <CommunicationThreadView
+                v-if="expandedThreadCommId != null && clubStore.current?.id"
+                :club-id="clubStore.current.id"
+                :comm-id="expandedThreadCommId"
+                @close="closeThread"
+              />
+              <template v-else>
               <header class="member-detail__card-head member-detail__card-head--stacked">
                 <div class="member-detail__card-head-main">
                   <div class="member-detail__card-label">Email history</div>
@@ -1647,7 +1612,13 @@ async function submitEdit() {
                        outbound because there's no batch to open; the
                        whole thing reads as a mini email with a Reply
                        action card. -->
-                  <li v-if="isInboundEmail(c)" class="comms-card comms-card--inbound">
+                  <li
+                    v-if="isInboundEmail(c)"
+                    class="comms-card comms-card--inbound"
+                    tabindex="0"
+                    @click="openThread(c)"
+                    @keydown.enter="openThread(c)"
+                  >
                     <div class="comms-card__rail">
                       <div class="comms-card__day">{{ commsDay(c) }}</div>
                       <div class="comms-card__rel">{{ commsRelative(c) }}</div>
@@ -1670,12 +1641,12 @@ async function submitEdit() {
                           type="button"
                           class="btn btn--outline btn--sm comms-card__reply"
                           :disabled="!member?.email"
-                          @click.stop="replyToInbound(c)"
+                          @click.stop="openThread(c)"
                         >
                           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                             <path d="M7 4L3 8l4 4M3 8h7a3 3 0 013 3v1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
                           </svg>
-                          <span>Reply</span>
+                          <span>Open thread</span>
                         </button>
                       </div>
                       <div class="comms-card__subject">{{ c.subject || '(no subject)' }}</div>
@@ -1702,8 +1673,8 @@ async function submitEdit() {
                     class="comms-card"
                     :class="{ 'comms-card--fail': c.status === 'bounced' || c.status === 'complained' || c.status === 'failed' }"
                     tabindex="0"
-                    @click="openEmail(c)"
-                    @keydown.enter="openEmail(c)"
+                    @click="openThread(c)"
+                    @keydown.enter="openThread(c)"
                   >
                   <div class="comms-card__rail">
                     <div class="comms-card__day">{{ commsDay(c) }}</div>
@@ -1754,6 +1725,7 @@ async function submitEdit() {
                 </li>
                 </template>
               </ul>
+              </template>
             </article>
 
             <!-- Notes -->
@@ -2163,18 +2135,8 @@ async function submitEdit() {
       :open="sendEmailOpen"
       :club-id="clubStore.current?.id ?? null"
       :member="member"
-      :prefill-subject="sendEmailPrefillSubject"
       @close="sendEmailOpen = false"
       @sent="onEmailSent"
-    />
-
-    <EmailDetailModal
-      :open="emailDetailOpen"
-      :club-id="clubStore.current?.id ?? null"
-      :user-id="memberId"
-      :batch-id="emailDetailBatchId"
-      :fallback="emailDetailFallback"
-      @close="closeEmailDetail"
     />
 
     <RecordPaymentModal

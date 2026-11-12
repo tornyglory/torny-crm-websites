@@ -58,7 +58,11 @@ const routes: RouteRecordRaw[] = [
       { path: 'dashboard', name: 'dashboard', component: () => import('@/views/dashboard/DashboardView.vue') },
       { path: 'members', name: 'members', component: () => import('@/views/members/MembersView.vue'), meta: { permission: 'members:read' } },
       { path: 'members/import', name: 'members-import', component: () => import('@/views/members/MembersImportView.vue'), meta: { permission: 'members:write' } },
-      { path: 'members/:id', name: 'member-detail', component: () => import('@/views/members/MemberDetailView.vue'), meta: { permission: 'members:read' } },
+      // `:tab` and `:commId` are optional. /crm/members/42 lands on the
+      // default tab; /crm/members/42/communications/123 deep-links into
+      // the Communications tab with thread #123 already expanded. Used
+      // by the brief-101 "new email" notification click target.
+      { path: 'members/:id/:tab?/:commId?', name: 'member-detail', component: () => import('@/views/members/MemberDetailView.vue'), meta: { permission: 'members:read' } },
       { path: 'applications', name: 'applications', component: () => import('@/views/applications/ApplicationsView.vue'), meta: { permission: 'applications:read' } },
       { path: 'applications/:id', name: 'application-detail', component: () => import('@/views/applications/ApplicationDetailView.vue'), meta: { permission: 'applications:read' } },
       { path: 'enquiries', name: 'enquiries', component: () => import('@/views/enquiries/EnquiriesView.vue'), meta: { permission: 'enquiries:read' } },

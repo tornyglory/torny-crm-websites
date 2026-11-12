@@ -51,6 +51,8 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 type Tab = 'payments' | 'communications' | 'notes'
+const TAB_KEYS: readonly Tab[] = ['payments', 'communications', 'notes'] as const
+const DEFAULT_TAB: Tab = 'payments'
 type StandingTone = 'paid' | 'due' | 'overdue' | 'waived' | 'partial' | 'invited' | 'lapsed' | 'prospect' | 'visitor' | 'none'
 interface Standing { tone: StandingTone; label: string; sub: string }
 
@@ -60,7 +62,31 @@ const memberId = computed(() => Number(route.params.id ?? 0))
 const roster = ref<RosterMember[]>([])
 const rosterLoading = ref(false)
 const rosterError = ref<string | null>(null)
-const activeTab = ref<Tab>('payments')
+
+/** Derived from the URL — /crm/members/:id/communications swaps to the
+ *  Communications tab; /crm/members/:id lands on the default tab. The
+ *  tab segment is validated against the TABS enum; anything else falls
+ *  through to the default. Setting this ref pushes a new URL so the tab
+ *  is bookmarkable + back-button friendly (brief 101 §4.2). */
+const activeTab = computed<Tab>({
+  get() {
+    const raw = route.params.tab
+    const str = Array.isArray(raw) ? raw[0] : raw
+    if (!str) return DEFAULT_TAB
+    return (TAB_KEYS as readonly string[]).includes(str) ? (str as Tab) : DEFAULT_TAB
+  },
+  set(next) {
+    if (next === activeTab.value) return
+    void router.push({
+      name: 'member-detail',
+      params: {
+        id: String(memberId.value),
+        tab: next === DEFAULT_TAB ? '' : next,
+        commId: '',
+      },
+    })
+  },
+})
 
 const member = computed<RosterMember | null>(() => {
   const id = memberId.value
@@ -311,16 +337,37 @@ function inboxTime(r: InboxRow): string {
 }
 
 /** Brief 101 — the Communications tab flips to the inline thread view
- *  when the admin clicks any email row. `null` = show the list. The
- *  value is the comm_id the admin clicked; the thread view fetches the
- *  full thread and uses it as the anchor. */
-const expandedThreadCommId = ref<number | null>(null)
+ *  when the admin clicks any email row. Derived from the URL
+ *  (`/crm/members/:id/communications/:commId`) so the "new email"
+ *  notification can deep-link straight into a thread. `null` = show
+ *  the list. */
+const expandedThreadCommId = computed<number | null>(() => {
+  if (activeTab.value !== 'communications') return null
+  const raw = route.params.commId
+  const value = Array.isArray(raw) ? raw[0] : raw
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? n : null
+})
 function openThread(c: MemberCommunication) {
   if (c.channel !== 'email' && c.channel !== 'email_inbound') return
-  expandedThreadCommId.value = c.communication_id
+  void router.push({
+    name: 'member-detail',
+    params: {
+      id: String(memberId.value),
+      tab: 'communications',
+      commId: String(c.communication_id),
+    },
+  })
 }
 function closeThread() {
-  expandedThreadCommId.value = null
+  void router.push({
+    name: 'member-detail',
+    params: {
+      id: String(memberId.value),
+      tab: 'communications',
+      commId: '',
+    },
+  })
   // Refresh the timeline so any reply we just sent is reflected.
   void loadComms()
 }

@@ -90,6 +90,11 @@ export interface MemberCommunication {
   message_id?: string | null
   /** Email In-Reply-To header — our clue for parent linking. */
   in_reply_to?: string | null
+  /** Denormalised thread id (RFC 5322 Message-ID of the thread root).
+   *  Shared by every message in the same conversation; indexed for the
+   *  brief 101 thread-group list grammar. Null on pre-feature historical
+   *  rows; fall back to `message_id` when grouping client-side. */
+  thread_id?: string | null
   /** Resolved parent row when `in_reply_to` matched an outbound we sent.
    *  Null when we couldn't match (first-contact inbound, or the original
    *  outbound was sent through a different provider). */

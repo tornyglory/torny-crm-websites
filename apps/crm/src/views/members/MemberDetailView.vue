@@ -140,8 +140,174 @@ const emailsFeed = computed(() =>
   comms.value.filter((c) => c.channel === 'email' || c.channel === 'email_inbound'),
 )
 
-function isInboundEmail(c: MemberCommunication): boolean {
-  return c.channel === 'email_inbound'
+// ── Inbox grouping + filters (Paper 33a) ─────────────────────────
+
+/** Visible inbox row — one per thread. Backend row metadata is folded
+ *  into aggregates the Gmail-style list needs. */
+interface InboxRow {
+  /** Thread key — `thread_id` when backend provided it, else the
+   *  message_id or communication_id of the standalone message. */
+  key: string
+  /** The latest message in the thread — this is what we open on click,
+   *  and the row's subject/time/sender are derived from it. */
+  latest: MemberCommunication
+  /** Count of messages in the thread. 1 for standalone. */
+  count: number
+  /** True when the thread has at least one inbound message we haven't
+   *  rendered as "opened". Backend doesn't track read-state yet; for
+   *  now we treat recent inbound (<= 48h) as unread. */
+  unread: boolean
+  /** True when the member (or an unmatched external sender) contributed
+   *  at least one message to the thread. Drives the "From <member>" filter. */
+  hasInbound: boolean
+  /** True when the club contributed at least one message to the thread. */
+  hasOutbound: boolean
+  /** Latest timestamp for sorting — received_at on inbound, sent_at on
+   *  outbound, falling back to occurred_at. */
+  latestAt: number
+}
+
+/** Stable thread key — falls back through thread_id → message_id → the
+ *  row's own communication_id, so pre-feature rows still show up as
+ *  single-message threads. */
+function threadKeyFor(c: MemberCommunication): string {
+  return c.thread_id ?? c.message_id ?? `c:${c.communication_id}`
+}
+
+function rowTimestamp(c: MemberCommunication): number {
+  const iso = (c.channel === 'email_inbound' ? c.received_at ?? null : null) ?? c.occurred_at ?? c.sent_at
+  if (!iso) return 0
+  const t = new Date(iso).getTime()
+  return Number.isNaN(t) ? 0 : t
+}
+
+const UNREAD_WINDOW_MS = 48 * 60 * 60 * 1000
+
+/** Group `emailsFeed` by thread, pick the latest message per group as
+ *  the row anchor. Threads sort newest-first by their latest timestamp. */
+const inboxRows = computed<InboxRow[]>(() => {
+  const groups = new Map<string, InboxRow>()
+  for (const c of emailsFeed.value) {
+    const key = threadKeyFor(c)
+    const ts = rowTimestamp(c)
+    const isInbound = c.channel === 'email_inbound'
+    const existing = groups.get(key)
+    if (!existing) {
+      groups.set(key, {
+        key,
+        latest: c,
+        count: 1,
+        unread: isInbound && Date.now() - ts < UNREAD_WINDOW_MS,
+        hasInbound: isInbound,
+        hasOutbound: !isInbound,
+        latestAt: ts,
+      })
+      continue
+    }
+    existing.count += 1
+    existing.hasInbound ||= isInbound
+    existing.hasOutbound ||= !isInbound
+    existing.unread ||= isInbound && Date.now() - ts < UNREAD_WINDOW_MS
+    if (ts > existing.latestAt) {
+      existing.latest = c
+      existing.latestAt = ts
+    }
+  }
+  return Array.from(groups.values()).sort((a, b) => b.latestAt - a.latestAt)
+})
+
+type InboxFilter = 'all' | 'unread' | 'from-member' | 'from-club'
+const inboxFilter = ref<InboxFilter>('all')
+const inboxSearch = ref('')
+
+const inboxCounts = computed(() => {
+  const rows = inboxRows.value
+  return {
+    all: rows.length,
+    unread: rows.filter((r) => r.unread).length,
+    fromMember: rows.filter((r) => r.hasInbound).length,
+    fromClub: rows.filter((r) => r.hasOutbound && !r.hasInbound).length,
+  }
+})
+
+const visibleInboxRows = computed<InboxRow[]>(() => {
+  const q = inboxSearch.value.trim().toLowerCase()
+  return inboxRows.value.filter((r) => {
+    if (inboxFilter.value === 'unread' && !r.unread) return false
+    if (inboxFilter.value === 'from-member' && !r.hasInbound) return false
+    if (inboxFilter.value === 'from-club' && !(r.hasOutbound && !r.hasInbound)) return false
+    if (q) {
+      const subject = (r.latest.subject ?? '').toLowerCase()
+      const preview = inboxPreview(r.latest).toLowerCase()
+      const sender = inboxSenderName(r).toLowerCase()
+      if (!subject.includes(q) && !preview.includes(q) && !sender.includes(q)) return false
+    }
+    return true
+  })
+})
+
+/** Strip HTML tags + collapse whitespace so previews render as a single
+ *  clean line. Trims to ~160 chars so long paragraphs don't blow out the
+ *  grid. */
+function inboxPreview(c: MemberCommunication): string {
+  const raw = c.body?.trim() || ''
+  if (raw) return raw.replace(/\s+/g, ' ').slice(0, 180)
+  const html = c.body_html?.trim() || ''
+  if (!html) return ''
+  const stripped = html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+  return stripped.slice(0, 180)
+}
+
+/** The display name for a row — matches the Paper 33a "Ruth, you"
+ *  pattern when both sides contributed, otherwise just the latest
+ *  message's sender. */
+function inboxSenderName(r: InboxRow): string {
+  if (r.hasInbound && r.hasOutbound) {
+    const inboundName = r.latest.channel === 'email_inbound'
+      ? r.latest.from_name || r.latest.from_email || member.value?.name || ''
+      : member.value?.name || ''
+    return inboundName ? `${inboundName.split(/\s+/)[0]}, you` : 'You'
+  }
+  if (r.latest.channel === 'email_inbound') {
+    return r.latest.from_name || r.latest.from_email || 'Unknown sender'
+  }
+  return r.latest.sent_by_name || 'Club'
+}
+
+function inboxSenderInitials(r: InboxRow): string {
+  const name = r.latest.channel === 'email_inbound'
+    ? r.latest.from_name || r.latest.from_email || '?'
+    : r.latest.sent_by_name || 'Nev'
+  return name
+    .split(/\s+/)
+    .map((p) => p[0] ?? '')
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || '?'
+}
+
+const INBOX_DAY_FMT = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' })
+const INBOX_TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
+
+/** Today → `13:52`. Otherwise `24 Oct`. Matches Gmail's compact slot. */
+function inboxTime(r: InboxRow): string {
+  if (!r.latestAt) return ''
+  const d = new Date(r.latestAt)
+  const now = new Date()
+  const isToday = d.toDateString() === now.toDateString()
+  return isToday ? INBOX_TIME_FMT.format(d) : INBOX_DAY_FMT.format(d)
 }
 
 /** Brief 101 — the Communications tab flips to the inline thread view
@@ -157,100 +323,6 @@ function closeThread() {
   expandedThreadCommId.value = null
   // Refresh the timeline so any reply we just sent is reflected.
   void loadComms()
-}
-
-const emailCounts = computed(() => {
-  const list = emailsFeed.value
-  const total = list.length
-  // Delivered counts anyone past the SES Delivery event — opened/clicked/
-  // unsubscribed all imply delivery landed at some point.
-  const delivered = list.filter(
-    (c) => c.status === 'delivered' || c.status === 'opened' || c.status === 'clicked' || c.status === 'unsubscribed',
-  ).length
-  const opened = list.filter((c) => c.status === 'opened' || c.status === 'clicked').length
-  const clicked = list.filter((c) => c.clicked_at != null).length
-  const bounced = list.filter((c) => c.status === 'bounced').length
-  const unsubscribed = list.filter((c) => c.unsubscribed_at != null).length
-  return { total, delivered, opened, clicked, bounced, unsubscribed }
-})
-
-interface EmailTimelineChip {
-  key: string
-  label: string
-  time: string
-  tone: 'ok' | 'engaged' | 'fail' | 'pending'
-  suffix?: string
-}
-function emailTimeline(c: MemberCommunication): EmailTimelineChip[] {
-  const chips: EmailTimelineChip[] = []
-  if (c.status === 'bounced') {
-    chips.push({
-      key: 'bounced',
-      label: 'Bounced',
-      time: commsTime(c.bounced_at ?? c.sent_at),
-      tone: 'fail',
-      suffix: c.failure_reason ?? undefined,
-    })
-    return chips
-  }
-  if (c.status === 'complained') {
-    chips.push({
-      key: 'complained',
-      label: 'Complained',
-      time: commsTime(c.complained_at ?? c.sent_at),
-      tone: 'fail',
-    })
-    return chips
-  }
-  if (c.status === 'failed') {
-    chips.push({
-      key: 'failed',
-      label: 'Failed',
-      time: commsTime(c.sent_at),
-      tone: 'fail',
-      suffix: c.failure_reason ?? undefined,
-    })
-    return chips
-  }
-  if (c.delivered_at) {
-    chips.push({
-      key: 'delivered',
-      label: 'Delivered',
-      time: commsTime(c.delivered_at),
-      tone: 'ok',
-    })
-  } else {
-    chips.push({ key: 'sent', label: 'Sent', time: commsTime(c.sent_at), tone: 'ok' })
-  }
-  if (c.opened_at) {
-    chips.push({
-      key: 'opened',
-      label: 'Opened',
-      time: commsTime(c.opened_at),
-      tone: 'engaged',
-      suffix: c.open_count > 1 ? `${c.open_count}×` : undefined,
-    })
-  } else if (c.delivered_at) {
-    chips.push({ key: 'notopen', label: 'Not opened yet', time: '', tone: 'pending' })
-  }
-  if (c.clicked_at) {
-    chips.push({
-      key: 'clicked',
-      label: 'Clicked',
-      time: commsTime(c.clicked_at),
-      tone: 'engaged',
-      suffix: c.click_count > 1 ? `${c.click_count}×` : undefined,
-    })
-  }
-  if (c.unsubscribed_at) {
-    chips.push({
-      key: 'unsubscribed',
-      label: 'Unsubscribed',
-      time: commsTime(c.unsubscribed_at),
-      tone: 'fail',
-    })
-  }
-  return chips
 }
 
 function senderInitials(name: string | null | undefined): string {
@@ -320,46 +392,11 @@ function noteTypeLabel(t: NoteType | null): string {
 const COMMS_TIME_FMT = new Intl.DateTimeFormat(undefined, {
   hour: 'numeric', minute: '2-digit',
 })
-/** "24 Oct" — short date for the left rail of a comms row. */
-const COMMS_DAY_FMT = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' })
-
 function commsTime(iso: string | null): string {
   if (!iso) return ''
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? '' : COMMS_TIME_FMT.format(d)
 }
-
-/** Short day label for the comms row date-rail. Falls back to full date
- *  if the ISO is missing. */
-function commsDay(c: MemberCommunication): string {
-  const iso = (c.channel === 'email_inbound' ? c.received_at : null) ?? c.occurred_at ?? c.sent_at
-  if (!iso) return ''
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : COMMS_DAY_FMT.format(d)
-}
-/** "3 weeks ago" — relative-time string shown under the day in the rail. */
-function commsRelative(c: MemberCommunication): string {
-  const iso = (c.channel === 'email_inbound' ? c.received_at : null) ?? c.occurred_at ?? c.sent_at
-  if (!iso) return ''
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return ''
-  const seconds = Math.max(1, Math.floor((Date.now() - then) / 1000))
-  if (seconds < 60) return `${seconds}s ago`
-  const mins = Math.floor(seconds / 60)
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days === 1) return 'yesterday'
-  if (days < 7) return `${days} days ago`
-  const weeks = Math.floor(days / 7)
-  if (weeks < 4) return weeks === 1 ? 'a week ago' : `${weeks} weeks ago`
-  const months = Math.floor(days / 30)
-  if (months < 12) return months === 1 ? 'a month ago' : `${months} months ago`
-  const years = Math.floor(days / 365)
-  return years === 1 ? 'a year ago' : `${years} years ago`
-}
-
 
 // Row-level edit / delete for notes. Admin or the original author.
 const editingNoteId = ref<number | null>(null)
@@ -1560,28 +1597,8 @@ async function submitEdit() {
                 @close="closeThread"
               />
               <template v-else>
-              <header class="member-detail__card-head member-detail__card-head--stacked">
-                <div class="member-detail__card-head-main">
-                  <div class="member-detail__card-label">Email history</div>
-                  <div v-if="emailsFeed.length > 0" class="comms-counts">
-                    <span class="comms-counts__total">{{ emailCounts.total }} <span class="comms-counts__total-sub">sent</span></span>
-                    <span class="comms-counts__pip comms-counts__pip--ok"><span class="comms-counts__dot"></span>{{ emailCounts.delivered }} delivered</span>
-                    <span class="comms-counts__pip comms-counts__pip--engaged"><span class="comms-counts__dot"></span>{{ emailCounts.opened }} opened</span>
-                    <span v-if="emailCounts.clicked > 0" class="comms-counts__pip comms-counts__pip--engaged"><span class="comms-counts__dot"></span>{{ emailCounts.clicked }} clicked</span>
-                    <span v-if="emailCounts.bounced > 0" class="comms-counts__pip comms-counts__pip--mute"><span class="comms-counts__dot"></span>{{ emailCounts.bounced }} bounced</span>
-                    <span v-if="emailCounts.unsubscribed > 0" class="comms-counts__pip comms-counts__pip--mute"><span class="comms-counts__dot"></span>{{ emailCounts.unsubscribed }} unsubscribed</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  class="btn btn--primary btn--sm"
-                  :disabled="!member.email"
-                  @click="sendEmail"
-                >
-                  + Send email
-                </button>
-              </header>
-
+              <!-- Loading / error / empty — rendered before the toolbar
+                   so the admin isn't filtering an empty inbox. -->
               <div v-if="commsLoading && emailsFeed.length === 0" class="member-detail__card-empty">
                 <CrmSkeleton shape="text" width="80%" height="14px" />
                 <CrmSkeleton shape="text" width="60%" height="14px" />
@@ -1605,126 +1622,101 @@ async function submitEdit() {
                   @action="sendEmail"
                 />
               </div>
-              <ul v-else class="comms-feed">
-                <template v-for="c in emailsFeed" :key="c.communication_id">
-                  <!-- Inbound email row (brief 100). Expanded card
-                       matching the Paper design — distinct layout from
-                       outbound because there's no batch to open; the
-                       whole thing reads as a mini email with a Reply
-                       action card. -->
+
+              <!-- Inbox (Paper 33a) — toolbar + dense thread-grouped rows.
+                   Replaces the previous card grammar; each row is a thread
+                   that opens into the ThreadView on click. -->
+              <template v-else>
+                <div class="inbox-toolbar">
+                  <label class="inbox-search">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5" />
+                      <path d="M11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                    <input
+                      v-model="inboxSearch"
+                      type="search"
+                      placeholder="Search in this thread…"
+                    />
+                  </label>
+                  <div class="inbox-filters">
+                    <button
+                      type="button"
+                      class="inbox-filter"
+                      :class="{ 'is-active': inboxFilter === 'all' }"
+                      @click="inboxFilter = 'all'"
+                    >All <span class="inbox-filter__count">{{ inboxCounts.all }}</span></button>
+                    <button
+                      type="button"
+                      class="inbox-filter"
+                      :class="{ 'is-active': inboxFilter === 'unread' }"
+                      @click="inboxFilter = 'unread'"
+                    >Unread <span class="inbox-filter__count inbox-filter__count--accent">{{ inboxCounts.unread }}</span></button>
+                    <button
+                      type="button"
+                      class="inbox-filter"
+                      :class="{ 'is-active': inboxFilter === 'from-member' }"
+                      @click="inboxFilter = 'from-member'"
+                    >From {{ member.name?.split(' ')[0] || 'member' }} <span class="inbox-filter__count">{{ inboxCounts.fromMember }}</span></button>
+                    <button
+                      type="button"
+                      class="inbox-filter"
+                      :class="{ 'is-active': inboxFilter === 'from-club' }"
+                      @click="inboxFilter = 'from-club'"
+                    >From club <span class="inbox-filter__count">{{ inboxCounts.fromClub }}</span></button>
+                  </div>
+                  <div class="inbox-sort">
+                    <span>Sort · newest first</span>
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </div>
+                </div>
+
+                <ul class="inbox">
                   <li
-                    v-if="isInboundEmail(c)"
-                    class="comms-card comms-card--inbound"
+                    v-for="r in visibleInboxRows"
+                    :key="r.key"
+                    class="inbox-row"
+                    :class="{ 'inbox-row--unread': r.unread }"
                     tabindex="0"
-                    @click="openThread(c)"
-                    @keydown.enter="openThread(c)"
+                    @click="openThread(r.latest)"
+                    @keydown.enter="openThread(r.latest)"
                   >
-                    <div class="comms-card__rail">
-                      <div class="comms-card__day">{{ commsDay(c) }}</div>
-                      <div class="comms-card__rel">{{ commsRelative(c) }}</div>
-                      <span class="comms-card__pill comms-card__pill--inbound">Inbound</span>
+                    <span class="inbox-row__star" aria-hidden="true">
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 2l1.9 4 4.1.5-3 3 .8 4.3L8 11.7 4.2 13.8 5 9.5l-3-3L6.1 6z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+                      </svg>
+                    </span>
+                    <div class="inbox-row__sender">
+                      <span
+                        class="inbox-row__avatar"
+                        :class="{ 'inbox-row__avatar--inbound': r.latest.channel === 'email_inbound' }"
+                      >{{ inboxSenderInitials(r) }}</span>
+                      <span class="inbox-row__name">{{ inboxSenderName(r) }}</span>
+                      <span
+                        v-if="r.count > 1"
+                        class="inbox-row__count"
+                        :class="{ 'inbox-row__count--accent': r.unread }"
+                      >{{ r.count }}</span>
                     </div>
-                    <div class="comms-card__body">
-                      <div class="comms-card__head">
-                        <div class="comms-card__sender">
-                          <span class="comms-card__avatar comms-card__avatar--inbound">{{ senderInitials(c.from_name ?? c.from_email ?? member?.name ?? '?') }}</span>
-                          <span class="comms-card__sender-name">{{ c.from_name || c.from_email || member?.name }}</span>
-                          <span v-if="c.from_email" class="comms-card__sender-email">&lt;{{ c.from_email }}&gt;</span>
-                          <span v-if="c.user_id" class="comms-card__matched">
-                            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                              <path d="M2 8l4 4 8-8" stroke="#166534" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
-                            </svg>
-                            <span>Matched</span>
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          class="btn btn--outline btn--sm comms-card__reply"
-                          :disabled="!member?.email"
-                          @click.stop="openThread(c)"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                            <path d="M7 4L3 8l4 4M3 8h7a3 3 0 013 3v1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                          </svg>
-                          <span>Open thread</span>
-                        </button>
-                      </div>
-                      <div class="comms-card__subject">{{ c.subject || '(no subject)' }}</div>
-                      <div class="comms-card__meta">
-                        <span>Received {{ commsTime(c.received_at ?? c.sent_at) }}</span>
-                        <template v-if="c.message_id">
-                          <span class="comms-card__meta-dot">·</span>
-                          <span class="comms-card__meta-mono">{{ c.message_id }}</span>
-                        </template>
-                      </div>
-                      <!-- Prefer plain body on the timeline — avoids rogue
-                           CSS from pasted HTML blowing out the row. Full
-                           HTML view lives in the follow-up modal. -->
-                      <div v-if="c.body" class="comms-card__content">{{ c.body }}</div>
-                      <div v-else-if="c.body_html" class="comms-card__content comms-card__content--muted">(HTML message — expand to view)</div>
+                    <div class="inbox-row__content">
+                      <span class="inbox-row__subject">{{ r.latest.subject || '(no subject)' }}</span>
+                      <span class="inbox-row__preview">— {{ inboxPreview(r.latest) }}</span>
+                    </div>
+                    <div class="inbox-row__time">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M3 3h6l4 4v6H3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+                        <path d="M9 3v4h4" stroke="currentColor" stroke-width="1.3" />
+                      </svg>
+                      <span>{{ inboxTime(r) }}</span>
                     </div>
                   </li>
-                  <!-- Outbound email row — rebuilt to match the Paper
-                       design's date-rail + body + action grammar. Keeps
-                       click-to-open behaviour that opens the batch
-                       detail modal. -->
-                  <li
-                    v-else
-                    class="comms-card"
-                    :class="{ 'comms-card--fail': c.status === 'bounced' || c.status === 'complained' || c.status === 'failed' }"
-                    tabindex="0"
-                    @click="openThread(c)"
-                    @keydown.enter="openThread(c)"
-                  >
-                  <div class="comms-card__rail">
-                    <div class="comms-card__day">{{ commsDay(c) }}</div>
-                    <div class="comms-card__rel">{{ commsRelative(c) }}</div>
-                    <span class="comms-card__pill comms-card__pill--sent">Sent</span>
-                  </div>
-                  <div class="comms-card__body">
-                    <div class="comms-card__head">
-                      <div class="comms-card__sender">
-                        <span
-                          class="comms-card__avatar"
-                          :class="{
-                            'comms-card__avatar--fail': c.status === 'bounced' || c.status === 'complained' || c.status === 'failed',
-                            'comms-card__avatar--system': c.sent_by == null,
-                          }"
-                        >{{ senderInitials(c.sent_by_name) }}</span>
-                        <span v-if="c.sent_by_name" class="comms-card__sender-name">{{ c.sent_by_name }}</span>
-                        <span class="comms-card__sender-email">· sent {{ commsTime(c.sent_at) }}</span>
-                      </div>
-                      <div class="comms-card__chevron" aria-hidden="true">›</div>
-                    </div>
-                    <div class="comms-card__subject">{{ c.subject || '(no subject)' }}</div>
-                    <div class="comms-card__meta">
-                      <span class="comms-card__chips">
-                        <span
-                          v-for="chip in emailTimeline(c)"
-                          :key="chip.key"
-                          class="comms-feed__chip"
-                          :class="`comms-feed__chip--${chip.tone}`"
-                        >
-                          <svg v-if="chip.tone === 'ok'" width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                            <path d="M13 4L6 11l-3-3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-                          </svg>
-                          <svg v-else-if="chip.tone === 'engaged'" width="12" height="11" viewBox="0 0 16 12" fill="none" aria-hidden="true">
-                            <path d="M1 6s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.6"/>
-                            <circle cx="8" cy="6" r="2" fill="currentColor"/>
-                          </svg>
-                          <svg v-else-if="chip.tone === 'fail'" width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-                          </svg>
-                          <span>{{ chip.label }}</span>
-                          <span v-if="chip.time" class="comms-feed__chip-time">{{ chip.time }}</span>
-                          <span v-if="chip.suffix" class="comms-feed__chip-suffix">· {{ chip.suffix }}</span>
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                </li>
-                </template>
-              </ul>
+                </ul>
+
+                <div v-if="visibleInboxRows.length === 0" class="inbox-empty">
+                  No threads match that filter or search.
+                </div>
               </template>
             </article>
 
@@ -3046,5 +3038,205 @@ async function submitEdit() {
   .edit-section__grid { grid-template-columns: 1fr; }
   .edit-field--full { grid-column: auto; }
   .edit-check { grid-column: auto; }
+}
+
+/* ── Inbox (Paper 33a) ───────────────────────────────────────── */
+.inbox-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 0 12px;
+  margin-top: 4px;
+}
+.inbox-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  width: 360px;
+  background: var(--color-surface);
+  border-radius: 999px;
+  color: var(--color-fog);
+}
+.inbox-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-ink);
+}
+.inbox-search input::placeholder { color: var(--color-mute); }
+
+.inbox-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: var(--color-surface);
+  border-radius: 999px;
+}
+.inbox-filter {
+  padding: 7px 14px;
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-fog);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.inbox-filter:hover:not(.is-active) { color: var(--color-ink); }
+.inbox-filter.is-active {
+  background: var(--color-ink);
+  color: #fff;
+  font-weight: 600;
+}
+.inbox-filter__count {
+  margin-left: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-mute);
+}
+.inbox-filter.is-active .inbox-filter__count { color: rgba(255, 255, 255, 0.7); }
+.inbox-filter__count--accent { color: var(--color-accent, #2563eb); font-weight: 700; }
+
+.inbox-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-mute);
+}
+
+/* List + row grammar. */
+.inbox { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
+.inbox-row {
+  display: grid;
+  grid-template-columns: 24px 200px 1fr 110px;
+  gap: 20px;
+  align-items: center;
+  padding: 14px 16px 14px 12px;
+  border-bottom: 1px solid var(--color-hairline);
+  border-left: 4px solid transparent;
+  background: #fff;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.inbox-row:hover { background: var(--color-surface); }
+.inbox-row:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -2px; }
+.inbox-row:first-child { border-top: 1px solid var(--color-hairline); }
+.inbox-row--unread {
+  background: #F7FAFF;
+  border-left-color: var(--color-accent, #2563eb);
+}
+.inbox-row--unread:hover { background: #EEF4FF; }
+
+.inbox-row__star {
+  color: var(--color-mute);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inbox-row__sender {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.inbox-row__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--color-ink);
+  color: #fff;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+}
+.inbox-row__avatar--inbound {
+  background: var(--color-accent-soft, #DBEAFE);
+  color: #1E40AF;
+}
+.inbox-row__name {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.inbox-row--unread .inbox-row__name { font-weight: 700; }
+.inbox-row__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-mute);
+  flex-shrink: 0;
+}
+.inbox-row__count--accent {
+  color: var(--color-accent, #2563eb);
+  font-weight: 700;
+}
+
+.inbox-row__content {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+.inbox-row__subject {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-ink);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.inbox-row--unread .inbox-row__subject { font-weight: 700; }
+.inbox-row__preview {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-fog);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.inbox-row__time {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.inbox-row__time svg { color: var(--color-fog); }
+.inbox-row--unread .inbox-row__time { font-weight: 700; }
+
+.inbox-empty {
+  padding: 48px 16px;
+  text-align: center;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-fog);
 }
 </style>

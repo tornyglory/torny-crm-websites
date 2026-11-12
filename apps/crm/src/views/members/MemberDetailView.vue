@@ -2397,7 +2397,7 @@ async function submitEdit() {
 .notes-row__rail { width: 76px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
 .notes-row__date-day { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--color-ink); letter-spacing: 0.02em; }
 .notes-row__date-sub { font-family: var(--font-mono); font-size: 10px; color: var(--color-fog); letter-spacing: 0.02em; }
-.notes-row__pill { margin-top: 10px; display: inline-flex; align-items: center; height: 26px; padding: 0 14px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; width: fit-content; white-space: nowrap; }
+.notes-row__pill { margin-top: 8px; display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 999px; font-family: var(--font-body); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; width: fit-content; white-space: nowrap; }
 .notes-row__pill--call          { background: #F3E8FF; color: #5B21B6; }
 .notes-row__pill--meeting       { background: #DCFCE7; color: #14532D; }
 .notes-row__pill--visit         { background: #DBEAFE; color: #1E40AF; }

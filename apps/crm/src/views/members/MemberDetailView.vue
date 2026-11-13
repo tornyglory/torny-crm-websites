@@ -43,6 +43,28 @@ import RecordPaymentModal from '@/components/modals/RecordPaymentModal.vue'
 import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
 import CrmEmptyState from '@/components/CrmEmptyState.vue'
+import { RichTextEditor } from '@torny/content-blocks'
+
+/** TipTap emits `<p></p>` for an empty editor, so a trim-length check
+ *  on the raw HTML always passes. Strip tags before measuring so the
+ *  Save button on inline note-edit only enables once there's real text. */
+function isBlankNoteHtml(html: string): boolean {
+  return html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim().length === 0
+}
+
+/** Historical notes are plain text (newlines, no tags); new notes are
+ *  HTML from TipTap. Detect which shape we have and render accordingly
+ *  — HTML passes through as-is, plain text gets HTML-escaped + nl2br so
+ *  stray `<` / `&` never render as markup. */
+function noteBodyHtml(raw: string | null | undefined): string {
+  if (!raw) return ''
+  if (/<\/(p|div|br|strong|em|ul|ol|li|a|h2|h3|u|span)\b/i.test(raw)) return raw
+  return raw
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>')
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -462,7 +484,7 @@ async function saveEditNote(c: MemberCommunication) {
   const uid = memberId.value
   if (cid == null || !uid) return
   const body = editNoteBody.value.trim()
-  if (!body) {
+  if (!body || isBlankNoteHtml(body)) {
     toast.info('Note body cannot be empty.')
     return
   }
@@ -1836,17 +1858,21 @@ async function submitEdit() {
                   <div class="notes-row__rail">
                     <div class="notes-row__date-day">{{ noteDateDay(c) }}</div>
                     <div class="notes-row__date-sub">{{ noteDateRel(c) }}</div>
-                    <span
-                      class="notes-row__pill"
-                      :class="`notes-row__pill--${c.note_type ?? 'general'}`"
-                    >{{ noteTypeLabel(c.note_type) }}</span>
                   </div>
                   <div class="notes-row__body">
                     <div class="notes-row__head">
                       <div v-if="c.sent_by_name" class="notes-row__author">
                         <div class="notes-row__avatar">{{ senderInitials(c.sent_by_name) }}</div>
-                        <span class="notes-row__author-name">{{ c.sent_by_name }}</span>
-                        <span class="notes-row__author-time">· {{ commsTime(c.sent_at) }}</span>
+                        <div class="notes-row__author-stack">
+                          <div class="notes-row__author-line">
+                            <span class="notes-row__author-name">{{ c.sent_by_name }}</span>
+                            <span class="notes-row__author-time">· {{ commsTime(c.sent_at) }}</span>
+                          </div>
+                          <span
+                            class="notes-row__pill"
+                            :class="`notes-row__pill--${c.note_type ?? 'general'}`"
+                          >{{ noteTypeLabel(c.note_type) }}</span>
+                        </div>
                       </div>
                       <div v-if="canEditNote(c) && editingNoteId !== c.communication_id" class="notes-row__actions">
                         <button
@@ -1870,22 +1896,23 @@ async function submitEdit() {
                       </div>
                     </div>
                     <template v-if="editingNoteId === c.communication_id">
-                      <textarea
-                        v-model="editNoteBody"
-                        class="notes-row__textarea"
-                        rows="3"
-                        maxlength="4000"
-                        :disabled="editNoteSaving"
-                      />
+                      <div class="notes-row__editor">
+                        <RichTextEditor
+                          v-model="editNoteBody"
+                          size="sm"
+                          placeholder="Update this note…"
+                          hide-image
+                        />
+                      </div>
                       <div class="notes-row__edit-actions">
                         <button type="button" class="btn btn--outline btn--sm" :disabled="editNoteSaving" @click="cancelEditNote">Cancel</button>
-                        <button type="button" class="btn btn--primary btn--sm" :disabled="editNoteSaving" @click="saveEditNote(c)">
+                        <button type="button" class="btn btn--primary btn--sm" :disabled="editNoteSaving || isBlankNoteHtml(editNoteBody)" @click="saveEditNote(c)">
                           <CrmSpinner v-if="editNoteSaving" size="sm" label="Saving" />
                           <span>{{ editNoteSaving ? 'Saving…' : 'Save' }}</span>
                         </button>
                       </div>
                     </template>
-                    <p v-else class="notes-row__text">{{ c.body }}</p>
+                    <div v-else class="notes-row__text" v-html="noteBodyHtml(c.body)" />
                   </div>
                 </li>
               </ul>
@@ -2685,7 +2712,7 @@ async function submitEdit() {
 .notes-row__rail { width: 76px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
 .notes-row__date-day { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--color-ink); letter-spacing: 0.02em; }
 .notes-row__date-sub { font-family: var(--font-mono); font-size: 10px; color: var(--color-fog); letter-spacing: 0.02em; }
-.notes-row__pill { margin-top: 8px; display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 999px; font-family: var(--font-body); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; width: fit-content; white-space: nowrap; }
+.notes-row__pill { display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 999px; font-family: var(--font-body); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; width: fit-content; white-space: nowrap; }
 .notes-row__pill--call          { background: #F3E8FF; color: #5B21B6; }
 .notes-row__pill--meeting       { background: #DCFCE7; color: #14532D; }
 .notes-row__pill--visit         { background: #DBEAFE; color: #1E40AF; }
@@ -2693,8 +2720,10 @@ async function submitEdit() {
 .notes-row__pill--general       { background: var(--color-surface); color: var(--color-ink); border: 1px solid var(--color-hairline); }
 .notes-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .notes-row__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.notes-row__author { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-ink); }
-.notes-row__avatar { width: 24px; height: 24px; flex-shrink: 0; border-radius: 999px; background: #EDE9FE; color: #5B21B6; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 10px; font-weight: 600; }
+.notes-row__author { display: inline-flex; align-items: flex-start; gap: 10px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-ink); }
+.notes-row__avatar { width: 24px; height: 24px; flex-shrink: 0; border-radius: 999px; background: #EDE9FE; color: #5B21B6; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 10px; font-weight: 600; margin-top: 1px; }
+.notes-row__author-stack { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.notes-row__author-line { display: inline-flex; align-items: baseline; gap: 6px; }
 .notes-row__author-name { font-weight: 600; }
 .notes-row__author-time { color: var(--color-fog); font-weight: 400; font-size: 12px; }
 .notes-row__actions { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
@@ -2717,9 +2746,23 @@ async function submitEdit() {
 .notes-row__action:hover { background: var(--color-surface); border-color: var(--color-ink); }
 .notes-row__action--danger { color: #991B1B; }
 .notes-row__action--danger:hover { background: #FEE2E2; border-color: #991B1B; color: #991B1B; }
-.notes-row__text { font-family: var(--font-body); font-size: 15px; line-height: 1.5; color: var(--color-ink); margin: 0; white-space: pre-wrap; }
-.notes-row__textarea { width: 100%; min-height: 90px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--color-hairline); background: #fff; font-family: var(--font-body); font-size: 14px; line-height: 1.5; color: var(--color-ink); resize: vertical; }
-.notes-row__textarea:focus { outline: none; border-color: var(--color-ink); }
+.notes-row__text { font-family: var(--font-body); font-size: 15px; line-height: 1.55; color: var(--color-ink); }
+.notes-row__text :deep(p) { margin: 0 0 8px; font-size: 15px; line-height: 1.55; color: var(--color-ink); }
+.notes-row__text :deep(p:last-child) { margin-bottom: 0; }
+.notes-row__text :deep(a) { color: var(--color-accent, #2563eb); }
+.notes-row__text :deep(ul),
+.notes-row__text :deep(ol) { padding-left: 22px; margin: 0 0 8px; }
+.notes-row__text :deep(li) { margin: 2px 0; }
+.notes-row__text :deep(h2) { font-family: var(--font-display); font-size: 16px; margin: 6px 0; }
+.notes-row__text :deep(h3) { font-family: var(--font-display); font-size: 14px; margin: 6px 0; }
+.notes-row__editor {
+  border: 1px solid var(--color-hairline);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.notes-row__editor:focus-within { border-color: var(--color-ink); }
+.notes-row__editor :deep(.rte__content) { min-height: 90px; }
 .notes-row__edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .comms-feed__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .comms-feed__pill { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }

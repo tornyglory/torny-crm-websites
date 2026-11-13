@@ -12,6 +12,7 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import {
   bulkEmail as bulkEmailApi,
   members as membersApi,
+  media as mediaApi,
   ApiError,
   type MemberRole,
   type MemberStatus,
@@ -464,6 +465,16 @@ function pickField(f: InsertField) {
   insertOpen.value = false
   insertAt(lastFocused.value, f.token)
 }
+
+/** Uploader handed to the RichTextEditor's image modal. Runs the full
+ *  CF Images dance (request-url → POST file → confirm) and resolves to
+ *  the delivery URL the email client can fetch directly. */
+async function uploadEmailImage(file: File): Promise<string> {
+  const cid = props.clubId ?? clubStore.current?.id
+  if (cid == null) throw new Error('No club selected.')
+  const confirmed = await mediaApi.uploadClubImage(cid, file, { contentType: 'gallery', contentId: cid })
+  return confirmed.public_url
+}
 </script>
 
 <template>
@@ -650,6 +661,7 @@ function pickField(f: InsertField) {
 
 Just a quick note from the club…"
           size="md"
+          :upload-image="uploadEmailImage"
         />
       </div>
 

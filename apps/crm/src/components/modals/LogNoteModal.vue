@@ -13,9 +13,17 @@ import {
   type RosterMember,
   type NoteType,
 } from '@torny/api-client'
+import { RichTextEditor } from '@torny/content-blocks'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 import { useToast } from '@/composables/useToast'
+
+/** TipTap emits `<p></p>` for an empty editor, so a trim-length check
+ *  on the raw HTML always passes. Strip tags before measuring so the
+ *  Save button only enables once there's real text. */
+function isBlankHtml(html: string): boolean {
+  return html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim().length === 0
+}
 
 const props = defineProps<{
   open: boolean
@@ -40,7 +48,7 @@ const TYPES: { value: NoteType; label: string }[] = [
 
 const state = reactive({ type: 'call' as NoteType, body: '' })
 const saving = ref(false)
-const textareaEl = ref<HTMLTextAreaElement | null>(null)
+const editorEl = ref<{ focus: () => void } | null>(null)
 
 watch(
   () => props.open,
@@ -49,7 +57,7 @@ watch(
       state.type = 'call'
       state.body = ''
       saving.value = false
-      void nextTick(() => textareaEl.value?.focus())
+      void nextTick(() => editorEl.value?.focus())
     }
   },
 )
@@ -75,7 +83,7 @@ async function save() {
   const cid = props.clubId
   if (!member || cid == null) return
   const body = state.body.trim()
-  if (!body) {
+  if (!body || isBlankHtml(body)) {
     toast.info('Add a note before saving.')
     return
   }
@@ -137,18 +145,17 @@ function onCmdEnter(e: KeyboardEvent) {
     <section class="log-note__field">
       <div class="log-note__label-row">
         <div class="log-note__label">Note</div>
-        <div class="log-note__hint">Markdown supported</div>
+        <div class="log-note__hint">Rich text · ⌘↵ to save</div>
       </div>
-      <textarea
-        ref="textareaEl"
-        v-model="state.body"
-        class="log-note__textarea"
-        rows="5"
-        maxlength="2000"
-        :disabled="saving"
-        placeholder="What did you talk about? Any follow-ups?"
-        @keydown="onCmdEnter"
-      />
+      <div class="log-note__editor" @keydown="onCmdEnter">
+        <RichTextEditor
+          ref="editorEl"
+          v-model="state.body"
+          size="sm"
+          placeholder="What did you talk about? Any follow-ups?"
+          hide-image
+        />
+      </div>
     </section>
 
     <section class="log-note__field log-note__field--inline">
@@ -177,7 +184,7 @@ function onCmdEnter(e: KeyboardEvent) {
       <button
         type="button"
         class="pill-btn pill-btn--ink"
-        :disabled="saving || state.body.trim().length === 0"
+        :disabled="saving || isBlankHtml(state.body)"
         @click="save"
       >
         <CrmSpinner v-if="saving" size="sm" label="Saving" />
@@ -239,24 +246,18 @@ function onCmdEnter(e: KeyboardEvent) {
   color: var(--color-ink);
   border-color: var(--color-ink);
 }
-.log-note__textarea {
-  width: 100%;
-  min-height: 140px;
-  padding: 14px 16px;
-  border-radius: 12px;
+.log-note__editor {
   border: 1px solid var(--color-hairline);
+  border-radius: 12px;
   background: #fff;
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.5;
-  color: var(--color-ink);
-  resize: vertical;
+  overflow: hidden;
 }
-.log-note__textarea:focus {
-  outline: none;
+.log-note__editor:focus-within {
   border-color: var(--color-ink);
 }
-.log-note__textarea:disabled { opacity: 0.6; cursor: not-allowed; }
+/* TipTap inner editor runs with its own padding + font — pin a minimum
+ * height so the empty state doesn't shrink to one line. */
+.log-note__editor :deep(.rte__content) { min-height: 140px; }
 .log-note__date,
 .log-note__visibility {
   height: 44px;

@@ -299,9 +299,13 @@ interface Signal {
   href?: string
 }
 
-/** Map brief 40 notification kinds to the dashboard's icon set (unified). */
+/** Map brief 40 notification kinds to the dashboard's icon set (unified).
+ *  Backend may ship a kind we haven't typed yet; fall back to `milestone`
+ *  rather than crashing the icon lookup. */
 function iconFor(kind: NotificationKind): SignalIcon {
-  return kind === 'member_milestone' ? 'milestone' : kind
+  if (kind === 'member_milestone') return 'milestone'
+  const known: SignalIcon[] = ['application', 'enquiry', 'rsvp', 'team', 'publish', 'payment', 'milestone']
+  return (known as string[]).includes(kind) ? (kind as SignalIcon) : 'milestone'
 }
 
 function timeAgo(iso: string): string {
@@ -489,7 +493,7 @@ const iconTone: Record<SignalIcon, { bg: string; fg: string }> = {
           :to="s.href"
           class="signal"
         >
-          <div class="signal__icon" :style="{ background: iconTone[s.icon].bg, color: iconTone[s.icon].fg }">
+          <div class="signal__icon" :style="{ background: (iconTone[s.icon] ?? iconTone.milestone).bg, color: (iconTone[s.icon] ?? iconTone.milestone).fg }">
             <svg v-if="s.icon === 'application'" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="8" cy="6" r="3" /><path d="M2.5 17c0-3 2.5-5 5.5-5s5.5 2 5.5 5" /><path d="M15 8v4M13 10h4" />
             </svg>

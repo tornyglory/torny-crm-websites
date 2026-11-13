@@ -301,19 +301,19 @@ function inboxPreview(c: MemberCommunication): string {
 function inboxSenderName(r: InboxRow): string {
   if (r.hasInbound && r.hasOutbound) {
     const inboundName = r.latest.channel === 'email_inbound'
-      ? r.latest.from_name || r.latest.from_email || member.value?.name || ''
+      ? r.latest.from_name || r.latest.from_email || member.value?.name || member.value?.email || ''
       : member.value?.name || ''
     return inboundName ? `${inboundName.split(/\s+/)[0]}, you` : 'You'
   }
   if (r.latest.channel === 'email_inbound') {
-    return r.latest.from_name || r.latest.from_email || 'Unknown sender'
+    return r.latest.from_name || r.latest.from_email || member.value?.name || member.value?.email || 'Unknown sender'
   }
   return r.latest.sent_by_name || 'Club'
 }
 
 function inboxSenderInitials(r: InboxRow): string {
   const name = r.latest.channel === 'email_inbound'
-    ? r.latest.from_name || r.latest.from_email || '?'
+    ? r.latest.from_name || r.latest.from_email || member.value?.name || member.value?.email || '?'
     : r.latest.sent_by_name || 'Nev'
   return name
     .split(/\s+/)
@@ -1641,6 +1641,8 @@ async function submitEdit() {
                 v-if="expandedThreadCommId != null && clubStore.current?.id"
                 :club-id="clubStore.current.id"
                 :comm-id="expandedThreadCommId"
+                :member-name="member?.name ?? null"
+                :member-email="member?.email ?? null"
                 @close="closeThread"
               />
               <template v-else>

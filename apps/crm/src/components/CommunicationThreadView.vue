@@ -33,6 +33,11 @@ const props = defineProps<{
   clubId: number
   /** The communication_id the admin clicked — becomes the anchor. */
   commId: number
+  /** Fallback display when inbound rows are missing from_name/from_email
+   *  (e.g. backend populated those fields later). The thread is scoped
+   *  to this member, so any inbound reply is by construction from them. */
+  memberName?: string | null
+  memberEmail?: string | null
 }>()
 
 const emit = defineEmits<{ (e: 'close'): void }>()
@@ -79,8 +84,8 @@ const participants = computed<string>(() => {
   const names = new Set<string>()
   for (const m of messages.value) {
     if (m.direction === 'inbound') {
-      if (m.from_name) names.add(m.from_name)
-      else if (m.from_email) names.add(m.from_email)
+      const name = m.from_name || m.from_email || props.memberName || props.memberEmail
+      if (name) names.add(name)
     } else if (m.sent_by_name) {
       names.add(m.sent_by_name)
     }
@@ -104,7 +109,9 @@ function timestampFor(m: ThreadMessage): { day: string; time: string; isToday: b
 }
 
 function senderName(m: ThreadMessage): string {
-  if (m.direction === 'inbound') return m.from_name || m.from_email || 'Unknown sender'
+  if (m.direction === 'inbound') {
+    return m.from_name || m.from_email || props.memberName || props.memberEmail || 'Unknown sender'
+  }
   return m.sent_by_name || 'Club admin'
 }
 
@@ -209,6 +216,90 @@ async function sendReply() {
 function isAnchor(m: ThreadMessage): boolean {
   return m.communication_id === anchorId.value
 }
+
+// ── Body rendering ─────────────────────────────────────────────
+//
+// Inbound replies arrive with both `body` (plain, Gmail's `> On Thu…`
+// style quote markers and `[image: …]` placeholders) and `body_html`
+// (the actual message as rendered in Gmail, with inline images and a
+// proper `<blockquote>` for the quoted history). We prefer the HTML
+// so admins see the email the way the sender wrote it, and fall back
+// to the plain-text (pre-wrap) only when the row has no HTML at all.
+//
+// Backend sanitises HTML on ingest (brief 102 §297) so scripts and
+// dangerous attrs are already gone by the time we render. We still
+// strip `<style>` / `<script>` tags defensively here so an inbound
+// mailer's stylesheet can't leak into the CRM chrome.
+
+type BodyRender =
+  | { kind: 'html'; main: string; quoted: string | null }
+  | { kind: 'text'; text: string }
+  | { kind: 'empty' }
+
+/** Collapsed-quote state is per-message — click "Show quoted history"
+ *  to expand a specific message's blockquote. Keyed by communication_id. */
+const expandedQuotes = ref<Set<number>>(new Set())
+function toggleQuote(id: number) {
+  const next = new Set(expandedQuotes.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  expandedQuotes.value = next
+}
+
+const STYLE_SCRIPT_RE = /<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi
+
+/** Pull the Gmail-style quoted history (`<blockquote type="cite">` and
+ *  the `gmail_quote` / `gmail_attr` divs most clients use) off the end
+ *  of an HTML body so we can render it collapsed. Returns `[main, quoted]`
+ *  where `quoted` is null when nothing matched. */
+function splitQuotedHistory(html: string): [string, string | null] {
+  // Gmail's quoted-reply wrapper(s). Order matters: match the attr + quote
+  // together so we don't leave a dangling attribution line in `main`.
+  const markers = [
+    /<div[^>]*class="[^"]*gmail_quote[^"]*"[\s\S]*$/i,
+    /<blockquote[^>]*(?:class="gmail_quote"|type="cite")[\s\S]*$/i,
+  ]
+  for (const re of markers) {
+    const match = html.match(re)
+    if (match && typeof match.index === 'number') {
+      return [html.slice(0, match.index), html.slice(match.index)]
+    }
+  }
+  return [html, null]
+}
+
+const bodyCache = new Map<number, BodyRender>()
+function bodyFor(m: ThreadMessage): BodyRender {
+  const cached = bodyCache.get(m.communication_id)
+  if (cached) return cached
+  const html = m.body_html?.trim() || ''
+  let render: BodyRender
+  if (html) {
+    const cleaned = html.replace(STYLE_SCRIPT_RE, '')
+    const [main, quoted] = splitQuotedHistory(cleaned)
+    render = { kind: 'html', main, quoted }
+  } else {
+    const text = m.body?.trim() || ''
+    render = text ? { kind: 'text', text } : { kind: 'empty' }
+  }
+  bodyCache.set(m.communication_id, render)
+  return render
+}
+function bodyHtmlMain(m: ThreadMessage): string {
+  const b = bodyFor(m)
+  return b.kind === 'html' ? b.main : ''
+}
+function bodyHtmlQuoted(m: ThreadMessage): string | null {
+  const b = bodyFor(m)
+  return b.kind === 'html' ? b.quoted : null
+}
+function bodyText(m: ThreadMessage): string {
+  const b = bodyFor(m)
+  return b.kind === 'text' ? b.text : ''
+}
+function bodyKind(m: ThreadMessage): BodyRender['kind'] {
+  return bodyFor(m).kind
+}
 </script>
 
 <template>
@@ -301,12 +392,33 @@ function isAnchor(m: ThreadMessage): boolean {
             <span>{{ timestampFor(m).time }}</span>
           </div>
         </header>
-        <!-- Body: prefer plain text to avoid rogue CSS from pasted
-             HTML; the HTML variant is used only when there's no plain
-             fallback (some clients send HTML-only). -->
+        <!-- Body: prefer sanitised HTML (inline images, blockquotes,
+             etc.). Gmail's quoted history (`gmail_quote` / `type="cite"`)
+             collapses behind a toggle so the latest reply is the thing
+             you see first. Plain-text fallback only when there's no HTML. -->
         <div class="msg__body">
-          <div v-if="m.body" class="msg__body-text">{{ m.body }}</div>
-          <div v-else-if="m.body_html" class="msg__body-html" v-html="m.body_html" />
+          <template v-if="bodyKind(m) === 'html'">
+            <div class="msg__body-html" v-html="bodyHtmlMain(m)" />
+            <template v-if="bodyHtmlQuoted(m)">
+              <button
+                type="button"
+                class="msg__quote-toggle"
+                @click="toggleQuote(m.communication_id)"
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path v-if="!expandedQuotes.has(m.communication_id)" d="M4 8h8M8 4v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path v-else d="M4 8h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                </svg>
+                <span>{{ expandedQuotes.has(m.communication_id) ? 'Hide quoted history' : 'Show quoted history' }}</span>
+              </button>
+              <div
+                v-if="expandedQuotes.has(m.communication_id)"
+                class="msg__body-html msg__body-html--quoted"
+                v-html="bodyHtmlQuoted(m) ?? ''"
+              />
+            </template>
+          </template>
+          <div v-else-if="bodyKind(m) === 'text'" class="msg__body-text">{{ bodyText(m) }}</div>
           <div v-else class="msg__body-empty">(empty message)</div>
         </div>
       </article>
@@ -543,8 +655,89 @@ function isAnchor(m: ThreadMessage): boolean {
   color: var(--color-ink);
   white-space: pre-wrap;
 }
+.msg__body-html {
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--color-ink);
+  /* Scope to prevent inbound inline styles from spilling onto page chrome. */
+  contain: content;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
 .msg__body-html :deep(p) { margin: 0 0 14px; font-size: 15px; line-height: 1.65; color: var(--color-ink); }
-.msg__body-html :deep(a) { color: var(--color-accent, #2563eb); }
+.msg__body-html :deep(p:last-child) { margin-bottom: 0; }
+.msg__body-html :deep(a) { color: var(--color-accent, #2563eb); word-break: break-word; }
+.msg__body-html :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  display: inline-block;
+}
+.msg__body-html :deep(h1),
+.msg__body-html :deep(h2),
+.msg__body-html :deep(h3) {
+  font-family: var(--font-display);
+  margin: 18px 0 8px;
+  color: var(--color-ink);
+}
+.msg__body-html :deep(ul),
+.msg__body-html :deep(ol) { padding-left: 22px; margin: 0 0 14px; }
+.msg__body-html :deep(li) { margin: 2px 0; }
+.msg__body-html :deep(hr) {
+  border: 0;
+  border-top: 1px solid var(--color-hairline);
+  margin: 18px 0;
+}
+.msg__body-html :deep(blockquote) {
+  margin: 0 0 14px;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--color-hairline);
+  color: var(--color-fog);
+}
+.msg__body-html :deep(table) {
+  max-width: 100%;
+  border-collapse: collapse;
+}
+.msg__body-html :deep(pre),
+.msg__body-html :deep(code) {
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--color-surface);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+/* Quoted-history toggle sits inline between the main body and the
+ * collapsed (or expanded) `<blockquote>` with the prior message. */
+.msg__quote-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 4px 10px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-fog);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.msg__quote-toggle:hover { color: var(--color-ink); border-color: var(--color-ink); }
+
+.msg__body-html--quoted {
+  margin-top: 12px;
+  padding: 10px 0 2px 14px;
+  border-left: 3px solid var(--color-hairline);
+  color: var(--color-fog);
+  font-size: 13px;
+}
+.msg__body-html--quoted :deep(p) { font-size: 13px; color: var(--color-fog); margin: 0 0 8px; }
+.msg__body-html--quoted :deep(a) { color: var(--color-mute); }
+
 .msg__body-empty {
   font-family: var(--font-body);
   font-size: 13px;

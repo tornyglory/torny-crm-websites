@@ -7,6 +7,7 @@ import CrmSpinner from '@/components/CrmSpinner.vue'
 import TeamAccessCard from '@/views/settings/TeamAccessCard.vue'
 import EmailSignaturesPanel from '@/views/settings/EmailSignaturesPanel.vue'
 import ClubInboxCard from '@/views/settings/ClubInboxCard.vue'
+import CustomFieldsPanel from '@/views/settings/CustomFieldsPanel.vue'
 import { useToast } from '@/composables/useToast'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useClubStore } from '@/stores/club'
@@ -56,6 +57,7 @@ watch(() => clubStore.current?.id, () => { void loadSettings(); void loadTiers()
 type SectionKey =
   | 'club'
   | 'membership'
+  | 'custom-fields'
   | 'hours'
   | 'billing'
   | 'team'
@@ -69,6 +71,10 @@ type SectionKey =
 const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
   { key: 'club', label: 'Club & brand', hint: 'Logo, colour, tagline, contact, address.' },
   { key: 'membership', label: 'Membership types', hint: 'Tiers, pricing, cadence.' },
+  // Brief 105 — custom facets. Club-level config: define once, surfaces
+  // pick up automatically (join form renders active ones; Members list
+  // filters on searchable ones).
+  { key: 'custom-fields', label: 'Custom fields', hint: 'Extra questions for the join form + Members search.' },
   { key: 'hours', label: 'Opening hours', hint: 'Weekly schedule for the clubrooms.' },
   { key: 'billing', label: 'Billing', hint: 'Torny subscription + invoices.' },
   { key: 'team', label: 'Team access', hint: 'Who else can manage the CRM.' },
@@ -85,7 +91,7 @@ const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
 // to the right panel. `active` is a reactive view of the URL.
 const route = useRoute()
 const router = useRouter()
-const VALID_SECTIONS: SectionKey[] = ['club', 'membership', 'hours', 'billing', 'team', 'security', 'notifications', 'enquiries', 'email', 'integrations', 'danger']
+const VALID_SECTIONS: SectionKey[] = ['club', 'membership', 'custom-fields', 'hours', 'billing', 'team', 'security', 'notifications', 'enquiries', 'email', 'integrations', 'danger']
 const active = computed<SectionKey>(() => {
   const s = route.params.section
   if (typeof s === 'string' && (VALID_SECTIONS as string[]).includes(s)) return s as SectionKey
@@ -1330,6 +1336,13 @@ function toggleIntegration(id: string) {
               <button type="button" class="add-tier" @click="addTier">+ Add membership type</button>
             </ul>
           </div>
+        </template>
+
+        <!-- Custom fields (brief 105) — club-level facet CRUD. Consumers
+             (public join form, Members list chips) pick up what's
+             defined here without any per-surface wiring. -->
+        <template v-else-if="active === 'custom-fields'">
+          <CustomFieldsPanel />
         </template>
 
         <!-- Opening hours -->

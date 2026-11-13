@@ -1,10 +1,16 @@
 <script setup lang="ts">
 /**
- * JoinFormCustomFieldsTab — the Website builder's Custom fields tab on
- * the Membership page's Join form block. CRUD + reorder over custom
- * facets (brief 105 §3.2). Not block-prop state — facets are a
- * club-level config at /clubs/{id}/custom-facets, so the panel lives
- * next to the block editor but talks to its own endpoints.
+ * CustomFieldsPanel — Settings → Custom fields. Club-level CRUD over
+ * the custom facets defined in brief 105 §3.2. Facets defined here are
+ * consumed by:
+ *   - the public join form (active ones render under the Additional
+ *     questions section)
+ *   - the Members list (searchable ones render filter chips)
+ *   - future surfaces (email segmenter, member profile edit, …)
+ *
+ * Phase 3 originally shipped this inside the Website builder's Join
+ * form block editor; relocated here so facet definition is decoupled
+ * from any single consumer surface.
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import {
@@ -181,12 +187,14 @@ async function doDelete() {
   <section class="cfields">
     <header class="cfields__head">
       <div>
-        <div class="cfields__eyebrow">Brief 105</div>
+        <div class="cfields__eyebrow">Settings · 04</div>
         <h3 class="cfields__title">Custom fields</h3>
         <p class="cfields__sub">
-          Questions you want applicants to answer under the <strong>Additional questions</strong>
-          section of the join form. Answers land on the member record and
-          can be used to filter the Members list.
+          Define extra questions once — they'll appear on the public
+          <strong>join form</strong> (under Additional questions) and,
+          when marked <strong>searchable</strong>, as filter chips on
+          the <strong>Members list</strong>. Answers survive deletion, so
+          removing a field never loses data.
         </p>
       </div>
       <button type="button" class="cfields__add" @click="openCreate">

@@ -9,7 +9,7 @@
  *
  * Designed in Paper — mirrors the "Join · Full page (Desktop)" artboard.
  */
-import { computed, inject, isRef, ref, type Ref } from 'vue'
+import { computed, inject, isRef, ref, watch, type Ref } from 'vue'
 import { applications, ApiError } from '@torny/api-client'
 import type { CreateApplicationInput } from '@torny/api-client'
 import {
@@ -156,6 +156,114 @@ function toggleDay(day: (typeof DAY_KEYS)[number]) {
   form.value.playingDays = new Set(form.value.playingDays)
 }
 
+// ── Custom facets (brief 105) ──────────────────────────────────
+//
+// Context-provided per BlockContext.customFacets. The block renders a
+// single "Additional questions" section with every active facet — the
+// backend groups them by section_key but mapping those keys to the
+// hardcoded section numbers (01..06) can wait until a vertical actually
+// needs it. Default section is `additional` so this already matches
+// what owners configure today.
+
+type FacetCtx = NonNullable<BlockContext['customFacets']>[number]
+
+const facets = computed<FacetCtx[]>(() => (ctx.value?.customFacets ?? []).filter((f) => f.is_active))
+
+/** One answer per facet, keyed by slug. Shape depends on input type:
+ *  - string for select/radio/text/long_text/date
+ *  - number for number
+ *  - boolean for boolean
+ *  - string[] for multi_select/checkboxes
+ *  Uninitialised slugs are treated as "unanswered" when validating. */
+type FacetAnswer = string | number | boolean | string[] | null
+const facetValues = ref<Record<string, FacetAnswer>>({})
+
+function defaultValueFor(f: FacetCtx): FacetAnswer {
+  switch (f.input_type) {
+    case 'multi_select':
+    case 'checkboxes': return []
+    case 'boolean':    return false
+    case 'number':     return ''
+    default:           return ''
+  }
+}
+
+/** Ensure every facet has an entry — makes v-model binding simple. */
+watch(
+  facets,
+  (list) => {
+    const next = { ...facetValues.value }
+    for (const f of list) {
+      if (!(f.slug in next)) next[f.slug] = defaultValueFor(f)
+    }
+    // Drop entries for facets that were removed server-side.
+    for (const slug of Object.keys(next)) {
+      if (!list.some((f) => f.slug === slug)) delete next[slug]
+    }
+    facetValues.value = next
+  },
+  { immediate: true },
+)
+
+function toggleFacetValue(slug: string, value: string) {
+  const current = facetValues.value[slug]
+  const arr = Array.isArray(current) ? current : []
+  const next = arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value]
+  facetValues.value = { ...facetValues.value, [slug]: next }
+}
+
+function isMultiSelected(slug: string, value: string): boolean {
+  const v = facetValues.value[slug]
+  return Array.isArray(v) && v.includes(value)
+}
+
+/** Narrow a facet answer down to a value an `<input>` / `<textarea>` /
+ *  `<select>` can bind. Arrays + booleans use dedicated UI, so they
+ *  should never reach this helper. */
+function facetScalar(slug: string): string {
+  const v = facetValues.value[slug]
+  if (typeof v === 'string') return v
+  if (typeof v === 'number') return String(v)
+  return ''
+}
+
+function isFacetAnswered(f: FacetCtx): boolean {
+  const v = facetValues.value[f.slug]
+  if (v == null) return false
+  if (Array.isArray(v)) return v.length > 0
+  if (typeof v === 'string') return v.trim().length > 0
+  if (typeof v === 'number') return Number.isFinite(v)
+  if (typeof v === 'boolean') return true
+  return false
+}
+
+/** Build the `facet_values` payload — cast answers to the final shape
+ *  the backend expects, skipping unanswered + unknown slugs. */
+function buildFacetValues(): Record<string, string | number | boolean | string[] | null> {
+  const out: Record<string, string | number | boolean | string[] | null> = {}
+  for (const f of facets.value) {
+    const raw = facetValues.value[f.slug]
+    if (!isFacetAnswered(f) && !f.required) continue
+    switch (f.input_type) {
+      case 'multi_select':
+      case 'checkboxes':
+        out[f.slug] = Array.isArray(raw) ? raw : []
+        break
+      case 'number': {
+        const n = Number(raw)
+        out[f.slug] = Number.isFinite(n) ? n : null
+        break
+      }
+      case 'boolean':
+        out[f.slug] = Boolean(raw)
+        break
+      default:
+        out[f.slug] = typeof raw === 'string' ? raw.trim() : (raw ?? '')
+    }
+  }
+  return out
+}
+
 // ── Steps sidebar — flips complete as sections are filled ──────
 interface Step { key: string; label: string; complete: boolean }
 const steps = computed<Step[]>(() => [
@@ -180,6 +288,13 @@ function validate(): string | null {
   if (!form.value.dob) return 'Please enter your date of birth.'
   if (!form.value.street.trim() || !form.value.suburb.trim() || !form.value.postcode.trim()) return 'Please fill in your home address so we can post the handbook.'
   if (!form.value.emergencyName.trim() || !form.value.emergencyPhone.trim()) return 'Emergency contact name + phone are required.'
+  // Brief 105 — required custom facets. Points at the first missing
+  // one so the applicant can jump straight to it.
+  for (const f of facets.value) {
+    if (f.required && !isFacetAnswered(f)) {
+      return `Please answer "${f.label}" to continue.`
+    }
+  }
   if (!form.value.consentTerms) return 'Please agree to the code of conduct, bylaws, and privacy policy to submit.'
   return null
 }
@@ -226,6 +341,10 @@ async function onSubmit(evt: Event) {
         newsletter: form.value.consentNewsletter,
         photo: form.value.consentPhoto,
       },
+      // Brief 105 — only include the block when the club has configured
+      // any facets, otherwise send a lean payload the backend treats as
+      // "no custom fields".
+      ...(facets.value.length > 0 ? { facet_values: buildFacetValues() } : {}),
     }
     await applications.create(clubSlug.value, payload)
     submitted.value = true
@@ -494,6 +613,159 @@ function joinFormErrorMessage(err: unknown): string {
                 <input v-model="form.emergencyRelation" type="text" placeholder="Partner, family…" />
               </label>
             </div>
+          </div>
+        </section>
+
+        <!-- 05b · Additional questions (brief 105). Rendered only when
+             the club has configured one or more active facets. Keeps
+             the hardcoded numbering (01..06) stable; owners who add
+             questions see them land between Emergency contact and
+             Review & agree. -->
+        <section v-if="facets.length > 0" class="jf__section">
+          <div class="jf__section-head">
+            <div class="jf__section-no">+</div>
+            <div class="jf__section-copy">
+              <h2>Additional questions</h2>
+              <p>A few extra questions from the club.</p>
+            </div>
+          </div>
+          <div class="jf__fields">
+            <template v-for="f in facets" :key="f.facet_id">
+              <!-- Short text / long text / date / number -->
+              <label v-if="f.input_type === 'text'" class="jf__field">
+                <span>{{ f.label }} <em v-if="!f.required">(optional)</em></span>
+                <input
+                  :value="facetScalar(f.slug)"
+                  type="text"
+                  :required="f.required"
+                  @input="(e) => (facetValues[f.slug] = (e.target as HTMLInputElement).value)"
+                />
+                <span v-if="f.helper_text" class="jf__facet-hint">{{ f.helper_text }}</span>
+              </label>
+              <label v-else-if="f.input_type === 'long_text'" class="jf__field">
+                <span>{{ f.label }} <em v-if="!f.required">(optional)</em></span>
+                <textarea
+                  :value="facetScalar(f.slug)"
+                  rows="4"
+                  :required="f.required"
+                  @input="(e) => (facetValues[f.slug] = (e.target as HTMLTextAreaElement).value)"
+                />
+                <span v-if="f.helper_text" class="jf__facet-hint">{{ f.helper_text }}</span>
+              </label>
+              <label v-else-if="f.input_type === 'number'" class="jf__field jf__field--narrow">
+                <span>{{ f.label }} <em v-if="!f.required">(optional)</em></span>
+                <input
+                  :value="facetScalar(f.slug)"
+                  type="number"
+                  :required="f.required"
+                  @input="(e) => (facetValues[f.slug] = (e.target as HTMLInputElement).value)"
+                />
+                <span v-if="f.helper_text" class="jf__facet-hint">{{ f.helper_text }}</span>
+              </label>
+              <label v-else-if="f.input_type === 'date'" class="jf__field jf__field--narrow">
+                <span>{{ f.label }} <em v-if="!f.required">(optional)</em></span>
+                <input
+                  :value="facetScalar(f.slug)"
+                  type="date"
+                  :required="f.required"
+                  @input="(e) => (facetValues[f.slug] = (e.target as HTMLInputElement).value)"
+                />
+                <span v-if="f.helper_text" class="jf__facet-hint">{{ f.helper_text }}</span>
+              </label>
+
+              <!-- Single-select (dropdown or radio) -->
+              <label v-else-if="f.input_type === 'select'" class="jf__field">
+                <span>{{ f.label }} <em v-if="!f.required">(optional)</em></span>
+                <select
+                  :value="facetScalar(f.slug)"
+                  :required="f.required"
+                  class="jf__select"
+                  @change="(e) => (facetValues[f.slug] = (e.target as HTMLSelectElement).value)"
+                >
+                  <option value="" disabled>Choose…</option>
+                  <option v-for="opt in f.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+                <span v-if="f.helper_text" class="jf__facet-hint">{{ f.helper_text }}</span>
+              </label>
+              <div v-else-if="f.input_type === 'radio'" class="jf__group">
+                <span class="jf__group-label">
+                  {{ f.label }}
+                  <em v-if="!f.required">(optional)</em>
+                </span>
+                <div class="jf__chips">
+                  <label
+                    v-for="opt in f.options"
+                    :key="opt.value"
+                    class="jf__chip"
+                    :class="{ 'jf__chip--on': facetValues[f.slug] === opt.value }"
+                  >
+                    <input
+                      type="radio"
+                      :name="`facet_${f.slug}`"
+                      :value="opt.value"
+                      :checked="facetValues[f.slug] === opt.value"
+                      class="jf__tier-input"
+                      @change="facetValues[f.slug] = opt.value"
+                    />
+                    {{ opt.label }}
+                  </label>
+                </div>
+                <span v-if="f.helper_text" class="jf__facet-hint">{{ f.helper_text }}</span>
+              </div>
+
+              <!-- Multi-pick (multi_select rendered as chip group; checkboxes rendered as rows) -->
+              <div v-else-if="f.input_type === 'multi_select'" class="jf__group">
+                <span class="jf__group-label">
+                  {{ f.label }}
+                  <em v-if="!f.required">(optional)</em>
+                </span>
+                <div class="jf__chips">
+                  <button
+                    v-for="opt in f.options"
+                    :key="opt.value"
+                    type="button"
+                    class="jf__chip"
+                    :class="{ 'jf__chip--on': isMultiSelected(f.slug, opt.value) }"
+                    @click="toggleFacetValue(f.slug, opt.value)"
+                  >{{ opt.label }}</button>
+                </div>
+                <span v-if="f.helper_text" class="jf__facet-hint">{{ f.helper_text }}</span>
+              </div>
+              <div v-else-if="f.input_type === 'checkboxes'" class="jf__group">
+                <span class="jf__group-label">
+                  {{ f.label }}
+                  <em v-if="!f.required">(optional)</em>
+                </span>
+                <div class="jf__consent">
+                  <label
+                    v-for="opt in f.options"
+                    :key="opt.value"
+                    class="jf__consent-row"
+                  >
+                    <input
+                      type="checkbox"
+                      :checked="isMultiSelected(f.slug, opt.value)"
+                      @change="toggleFacetValue(f.slug, opt.value)"
+                    />
+                    <span>{{ opt.label }}</span>
+                  </label>
+                </div>
+                <span v-if="f.helper_text" class="jf__facet-hint">{{ f.helper_text }}</span>
+              </div>
+
+              <!-- Yes / No toggle -->
+              <label v-else-if="f.input_type === 'boolean'" class="jf__consent-row">
+                <input
+                  type="checkbox"
+                  :checked="Boolean(facetValues[f.slug])"
+                  @change="(e) => (facetValues[f.slug] = (e.target as HTMLInputElement).checked)"
+                />
+                <span>
+                  <span>{{ f.label }}</span>
+                  <span v-if="f.helper_text" class="jf__consent-hint">{{ f.helper_text }}</span>
+                </span>
+              </label>
+            </template>
           </div>
         </section>
 

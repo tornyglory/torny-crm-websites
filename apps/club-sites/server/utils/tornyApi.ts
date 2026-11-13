@@ -335,6 +335,55 @@ export async function fetchVariant(slug: string): Promise<VariantConfig | null> 
   }
 }
 
+// ── Public custom facets (brief 105) ──────────────────────────
+//
+// Mirrors the api-client's CustomFacet shape — kept local so the
+// Nuxt server bundle doesn't pull in the CRM client just for types.
+
+export type FacetInputType =
+  | 'select'
+  | 'multi_select'
+  | 'radio'
+  | 'checkboxes'
+  | 'text'
+  | 'long_text'
+  | 'number'
+  | 'date'
+  | 'boolean'
+
+export interface FacetOption {
+  value: string
+  label: string
+}
+
+export interface CustomFacet {
+  facet_id: number
+  slug: string
+  label: string
+  helper_text: string | null
+  input_type: FacetInputType
+  options: FacetOption[]
+  required: boolean
+  searchable: boolean
+  section_key: string
+  display_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export async function fetchCustomFacets(slug: string): Promise<CustomFacet[]> {
+  const config = useRuntimeConfig()
+  try {
+    const res = await $fetch<Envelope<CustomFacet[]>>(`/public/clubs/${encodeURIComponent(slug)}/custom-facets`, {
+      baseURL: config.tornyApiBaseUrl,
+    })
+    return res.data ?? []
+  } catch {
+    return []
+  }
+}
+
 // Generic passthrough for anything else on the public surface.
 export function tornyFetch<T>(path: string, opts?: Parameters<typeof $fetch>[1]): Promise<T> {
   const config = useRuntimeConfig()

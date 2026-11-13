@@ -193,6 +193,11 @@ export interface CreateApplicationInput {
     newsletter?: boolean
     photo?: boolean
   }
+  /** Brief 105 — answers to the club's custom facets, keyed by slug.
+   *  Value shape depends on the facet's input type (string, number,
+   *  boolean, array for multi-pick, YYYY-MM-DD for date). The backend
+   *  drops unknown slugs silently. */
+  facet_values?: Record<string, string | number | boolean | string[] | null>
 }
 
 export interface CreateApplicationResult {

@@ -840,6 +840,31 @@ export interface BlockContext {
       position: string | null
     }>
   }>
+  /** Brief 105 — owner-configured custom join-form facets (active only,
+   *  in display order). The MembershipJoinFormBlock groups them by
+   *  `section_key` and renders the matching input per `input_type`. */
+  customFacets?: Array<{
+    facet_id: number
+    slug: string
+    label: string
+    helper_text: string | null
+    input_type:
+      | 'select'
+      | 'multi_select'
+      | 'radio'
+      | 'checkboxes'
+      | 'text'
+      | 'long_text'
+      | 'number'
+      | 'date'
+      | 'boolean'
+    options: Array<{ value: string; label: string }>
+    required: boolean
+    searchable: boolean
+    section_key: string
+    display_order: number
+    is_active: boolean
+  }>
 }
 
 /** Injection key. Use `Symbol.for` so multiple package versions share the same key. */

@@ -15,7 +15,7 @@ import { useMemberSearch } from '@/composables/useMemberSearch'
 import { usePermissions } from '@/composables/usePermissions'
 import { useClubStore } from '@/stores/club'
 import { useAuthStore } from '@/stores/auth'
-import { members as membersApi, seasons as seasonsApi, ApiError, type PaymentMethod, type PositionGroup, type RosterMember, type MembersSummary, type MembershipTierListItem, type Season } from '@torny/api-client'
+import { members as membersApi, seasons as seasonsApi, ApiError, type PaymentMethod, type PositionGroup, type RosterMember, type MembersSummary, type MembershipTierListItem, type Season, type FacetAvailability, type FacetInputType } from '@torny/api-client'
 
 const toast = useToast()
 const clubStore = useClubStore()
@@ -109,6 +109,16 @@ const statusFilter = ref<'all' | MemberStatus>('all')
  *  `membership_type_slug=` on `/clubs/:id/members`. */
 const membershipFilter = ref<'all' | 'none' | string>('all')
 const duesFilter = ref<'all' | DuesStatus>('all')
+/** Brief 105 — active custom-facet filters keyed by facet slug. Each
+ *  entry is the set of picked option values. Empty arrays are stripped
+ *  before the API call so a cleared chip doesn't leak into the query. */
+const facetFilters = ref<Record<string, string[]>>({})
+/** Facets the club flagged `searchable: true` — echoed on every roster
+ *  response so the chip row stays in sync when an owner edits a facet. */
+const facetsAvailable = ref<FacetAvailability[]>([])
+/** Facet types this view renders chips for. Text/number/date facets
+ *  need their own controls and are out of scope for v1 (brief 105 §3.4). */
+const CHIP_FACET_TYPES: readonly FacetInputType[] = ['select', 'multi_select', 'radio', 'checkboxes']
 const MIN_SEARCH_CHARS = 2
 const isSearching = computed(() => search.value.trim().length >= MIN_SEARCH_CHARS)
 
@@ -122,18 +132,44 @@ const showTableSkeleton = computed(() => {
   return false
 })
 
+const activeFacetCount = computed(() =>
+  Object.values(facetFilters.value).reduce((n, v) => n + (v.length > 0 ? 1 : 0), 0),
+)
+
 const hasActiveFilter = computed(
   () =>
     statusFilter.value !== 'all' ||
     membershipFilter.value !== 'all' ||
     duesFilter.value !== 'all' ||
-    search.value.trim().length > 0,
+    search.value.trim().length > 0 ||
+    activeFacetCount.value > 0,
 )
 function resetFilters() {
   statusFilter.value = 'all'
   membershipFilter.value = 'all'
   duesFilter.value = 'all'
   search.value = ''
+  facetFilters.value = {}
+}
+
+/** Toggle an option value for a facet. Empty-arrays-removed invariant
+ *  so the request serialiser doesn't emit `facet_<slug>=` with no values. */
+function toggleFacetValue(slug: string, value: string) {
+  const current = facetFilters.value[slug] ?? []
+  const next = current.includes(value)
+    ? current.filter((v) => v !== value)
+    : [...current, value]
+  const copy = { ...facetFilters.value }
+  if (next.length === 0) delete copy[slug]
+  else copy[slug] = next
+  facetFilters.value = copy
+}
+
+function clearFacet(slug: string) {
+  if (!(slug in facetFilters.value)) return
+  const copy = { ...facetFilters.value }
+  delete copy[slug]
+  facetFilters.value = copy
 }
 
 const emptyTitle = computed(() => {
@@ -290,13 +326,21 @@ async function loadRoster() {
   rosterError.value = null
   try {
     const slug = membershipFilter.value === 'all' ? null : membershipFilter.value
+    // Only forward facets that actually have values selected — the
+    // serialiser already strips empty arrays but keeping the payload
+    // tight means the SWR cache key is also stable.
+    const facets = Object.fromEntries(
+      Object.entries(facetFilters.value).filter(([, v]) => v.length > 0),
+    )
     const res = await membersApi.listRoster(cid, {
       limit: 200,
       include_invites: false,
       ...(slug ? { membership_type_slug: slug } : {}),
+      ...(Object.keys(facets).length > 0 ? { facets } : {}),
     })
     members.value = res.members.map(rosterToView)
     rosterCounts.value = { total: res.counts.total, active: res.counts.active }
+    if (res.facets_available) facetsAvailable.value = res.facets_available
     // Broadcast so the shell's sidebar count refreshes without a duplicate fetch.
     window.dispatchEvent(new CustomEvent('torny:roster-count', { detail: res.counts.total }))
   } catch (err) {
@@ -321,6 +365,19 @@ watch(() => clubStore.current?.id, loadAll)
 // Server-side tier filter: refetch roster when the chip changes so the
 // backend returns the pre-filtered list (counts stay on the client view).
 watch(membershipFilter, () => { void loadRoster() })
+
+// Brief 105 — debounce facet chip changes 300ms so chip-mashing doesn't
+// fire a request per click. { deep: true } because facetFilters is a
+// Record with array values.
+let facetDebounceTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  facetFilters,
+  () => {
+    if (facetDebounceTimer) clearTimeout(facetDebounceTimer)
+    facetDebounceTimer = setTimeout(() => { void loadRoster() }, 300)
+  },
+  { deep: true },
+)
 
 const visibleSource = computed<Member[]>(() =>
   isSearching.value ? apiResults.value.map(rosterToView) : members.value,
@@ -1241,6 +1298,40 @@ async function submit() {
       </div>
     </div>
 
+    <!-- Brief 105 — searchable custom facet chips. One row per facet;
+         options render as toggleable pills. Text / number / date
+         facets are skipped (v1 — those need bespoke controls). -->
+    <div
+      v-if="facetsAvailable.filter((f) => CHIP_FACET_TYPES.includes(f.input_type)).length > 0"
+      class="facet-filters"
+    >
+      <div
+        v-for="facet in facetsAvailable.filter((f) => CHIP_FACET_TYPES.includes(f.input_type))"
+        :key="facet.slug"
+        class="facet-filters__row"
+      >
+        <div class="facet-filters__label">
+          {{ facet.label }}
+          <button
+            v-if="(facetFilters[facet.slug] ?? []).length > 0"
+            type="button"
+            class="facet-filters__clear"
+            @click="clearFacet(facet.slug)"
+          >Clear</button>
+        </div>
+        <div class="facet-filters__pills">
+          <button
+            v-for="opt in facet.options"
+            :key="opt.value"
+            type="button"
+            class="facet-chip"
+            :class="{ 'is-active': (facetFilters[facet.slug] ?? []).includes(opt.value) }"
+            @click="toggleFacetValue(facet.slug, opt.value)"
+          >{{ opt.label }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Bulk actions bar — appears once anything is ticked. Lives
          inline above the table so the primary action stays near the
          rows the admin just selected. -->
@@ -1785,6 +1876,79 @@ async function submit() {
 .filters__reset { background: none; border: 0; padding: 0; font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--color-accent); cursor: pointer; }
 .filters__reset:hover { text-decoration: underline; }
 .filters__selects { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Brief 105 — custom-facet filter chips. One block per facet, options
+ * flow horizontally; clicking toggles. "Clear" link to the right of the
+ * label resets a whole facet's picks. */
+.facet-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: 14px;
+}
+.facet-filters__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.facet-filters__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-fog);
+}
+.facet-filters__clear {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-accent, #2563eb);
+  cursor: pointer;
+}
+.facet-filters__clear:hover { text-decoration: underline; }
+.facet-filters__pills {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+.facet-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  background: #fff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.facet-chip:hover:not(.is-active) { border-color: var(--color-ink); }
+.facet-chip.is-active {
+  background: var(--color-ink);
+  color: #fff;
+  border-color: var(--color-ink);
+  font-weight: 600;
+}
 
 /* Table */
 .table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; overflow: hidden; }

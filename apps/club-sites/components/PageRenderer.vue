@@ -21,6 +21,10 @@ const props = defineProps<{ slug: PageSlug }>()
 
 const club = useClub()
 const { data: site } = await useSite()
+// Brief 105 — public custom facets. Hydrated once per tenant and
+// fed into the BlockContext so the MembershipJoinFormBlock renders
+// them under the Additional questions section.
+const { facets: publicFacets } = usePublicFacets()
 
 const blocks = computed<Block[] | null>(() => {
   const raw = site.value?.pages?.[props.slug]?.blocks
@@ -57,6 +61,7 @@ provide(BLOCK_CONTEXT_KEY, computed<BlockContext>(() => ({
   firstYearDiscount: site.value?.first_year_discount ?? false,
   contact: site.value?.contact ?? undefined,
   hours: site.value?.hours ?? [],
+  customFacets: publicFacets.value ?? [],
 })))
 </script>
 

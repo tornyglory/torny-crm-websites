@@ -138,7 +138,14 @@ const form = ref({
 
 type FacetCtx = NonNullable<BlockContext['customFacets']>[number]
 
-const facets = computed<FacetCtx[]>(() => (ctx.value?.customFacets ?? []).filter((f) => f.is_active))
+// The public endpoint already filters to is_active=true + omits the
+// field from the response (brief 105 §2.3), so an explicit `!== false`
+// check keeps active rows while tolerating the missing field. The CRM
+// preview surface (which sets ctx from the authed list) still gets
+// filtered correctly because is_active=false is explicit there.
+const facets = computed<FacetCtx[]>(() =>
+  (ctx.value?.customFacets ?? []).filter((f) => f.is_active !== false),
+)
 
 /** Brief 106 — section visibility map. Hosts that provide
  *  `joinFormSections` on BlockContext can toggle hardcoded sections off

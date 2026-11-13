@@ -323,6 +323,10 @@ async function addFacet() {
       required: false,
       searchable: true,
       section_key: 'additional',
+      // Backend defaults `is_active` to false when omitted, which hides
+      // the facet from the public endpoint. New fields should land
+      // live; admins can hide them later from Settings → Custom fields.
+      is_active: true,
     } as CreateFacetInput)
     facets.value = [row, ...facets.value]
     expandedFacetId.value = row.facet_id

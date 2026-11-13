@@ -208,15 +208,22 @@ function buildPayload(): CreateFacetInput | UpdateFacetInput {
     searchable: draft.searchable,
     section_key: draft.section_key,
   }
+  // Backend defaults `is_active` to false when omitted, which hides
+  // the facet from the public join form. Default new rows to active
+  // so admins don't have to toggle visibility on just to make a field
+  // appear. Edits keep whatever the row already has unless the admin
+  // explicitly flips it from the list (handled in CustomFieldsPanel).
+  const createExtras = props.facet == null ? { is_active: true } : {}
   if (currentTypeMeta.value.hasOptions) {
     return {
       ...base,
+      ...createExtras,
       options: draft.options
         .filter((o) => o.value.trim() && o.label.trim())
         .map((o) => ({ value: o.value.trim(), label: o.label.trim() })),
     }
   }
-  return { ...base, options: [] }
+  return { ...base, ...createExtras, options: [] }
 }
 
 /** Map typed error codes to admin-friendly copy. Falls back to the

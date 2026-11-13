@@ -381,8 +381,6 @@ const EDITORIAL_PALETTE = [
       eyebrow: 'MEMBERSHIP · 2026 SEASON',
       successHref: '',
       successHeadline: 'Application received.',
-      showBowlsNumber: true,
-      showPlayingDays: true,
       termsHref: '',
       privacyHref: '',
     }) },
@@ -672,8 +670,6 @@ const PALETTES: Record<SystemPageSlug, PaletteItem[]> = {
         eyebrow: 'MEMBERSHIP · 2026 SEASON',
         successHref: '',
         successHeadline: 'Application received.',
-        showBowlsNumber: true,
-        showPlayingDays: true,
         termsHref: '',
         privacyHref: '',
       }) },
@@ -2314,30 +2310,6 @@ const lastSavedLabel = computed(() => {
             <label class="field">
               <span class="field__label">Success headline (inline)</span>
               <input v-model="(selectedBlock.props as MembershipJoinFormProps).successHeadline" type="text" placeholder="Application received." />
-            </label>
-            <label class="switch-row">
-              <div>
-                <div class="switch-row__label">Show Bowls NZ number field</div>
-                <div class="switch-row__hint">Turn off for petanque or non-bowls clubs.</div>
-              </div>
-              <button
-                type="button"
-                class="switch"
-                :class="{ 'is-on': (selectedBlock.props as MembershipJoinFormProps).showBowlsNumber !== false }"
-                @click="(selectedBlock.props as MembershipJoinFormProps).showBowlsNumber = !((selectedBlock.props as MembershipJoinFormProps).showBowlsNumber !== false)"
-              ><span class="switch__knob" /></button>
-            </label>
-            <label class="switch-row">
-              <div>
-                <div class="switch-row__label">Show playing days section</div>
-                <div class="switch-row__hint">Ask which days the applicant is free to play.</div>
-              </div>
-              <button
-                type="button"
-                class="switch"
-                :class="{ 'is-on': (selectedBlock.props as MembershipJoinFormProps).showPlayingDays !== false }"
-                @click="(selectedBlock.props as MembershipJoinFormProps).showPlayingDays = !((selectedBlock.props as MembershipJoinFormProps).showPlayingDays !== false)"
-              ><span class="switch__knob" /></button>
             </label>
             <!-- Brief 105 — custom facets are configured in Settings →
                  Custom fields. They render automatically on the public

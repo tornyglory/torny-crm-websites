@@ -140,11 +140,15 @@ export const CLUB_DEFAULT_MODULES: VariantModules = {
   communications: true,
 }
 
+// Brief 106 follow-up — `your_bowls` dropped as a hardcoded section. It
+// was bowls-specific (not actually "built-in" like name + address),
+// which made no sense for non-bowls verticals. Admins who want
+// experience / position / playing-days capture now add them as custom
+// facets under Additional questions.
 export const CLUB_DEFAULT_JOIN_FORM_SECTIONS: JoinFormSection[] = [
   { key: 'tier',              label: 'Choose your tier',     visible: true },
   { key: 'about_you',         label: 'About you',            visible: true },
   { key: 'address',           label: 'Home address',         visible: true },
-  { key: 'your_bowls',        label: 'Your bowls',           visible: true },
   { key: 'emergency_contact', label: 'Emergency contact',    visible: true },
   { key: 'additional',        label: 'Additional questions', visible: true },
   { key: 'review',            label: 'Review & agree',       visible: true },

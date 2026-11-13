@@ -39,11 +39,12 @@ const CLUB_FALLBACK_MODULES: VariantModules = {
   communications: true,
 }
 
+// Brief 106 follow-up — `your_bowls` dropped as a hardcoded section
+// (owners re-add via custom facets if they want it).
 const CLUB_FALLBACK_JOIN_FORM_SECTIONS: JoinFormSection[] = [
   { key: 'tier',              label: 'Choose your tier' },
   { key: 'about_you',         label: 'About you' },
   { key: 'address',           label: 'Home address' },
-  { key: 'your_bowls',        label: 'Your bowls' },
   { key: 'emergency_contact', label: 'Emergency contact' },
   { key: 'additional',        label: 'Additional questions' },
   { key: 'review',            label: 'Review & agree' },

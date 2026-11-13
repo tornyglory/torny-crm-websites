@@ -522,10 +522,6 @@ export interface MembershipJoinFormProps {
   successHref?: string
   /** Optional inline confirmation copy — used if `successHref` is empty. */
   successHeadline?: string
-  /** Enable/disable the Bowls NZ number field (irrelevant for petanque etc.). */
-  showBowlsNumber?: boolean
-  /** Enable the "Playing days available" section. Off for non-club sites. */
-  showPlayingDays?: boolean
   /** URL of the terms document. Empty = link disabled. */
   termsHref?: string
   /** URL of the privacy document. Empty = link disabled. */

@@ -24,8 +24,6 @@ const props = withDefaults(defineProps<MembershipJoinFormProps>(), {
   description: "Fill in a few details and we'll be in touch within a week. Membership runs March to March. All new members get free coaching for their first season.",
   successHref: '',
   successHeadline: 'Application received.',
-  showBowlsNumber: true,
-  showPlayingDays: true,
   termsHref: '',
   privacyHref: '',
 })
@@ -119,10 +117,6 @@ const form = ref({
   suburb: '',
   postcode: '',
   country: 'New Zealand',
-  experience: 'social' as 'never' | 'social' | 'club' | 'pennant',
-  bowlsNumber: '',
-  position: 'no_preference' as 'lead' | 'second' | 'third' | 'skip' | 'no_preference',
-  playingDays: new Set<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'>(),
   emergencyName: '',
   emergencyPhone: '',
   emergencyRelation: '',
@@ -132,29 +126,6 @@ const form = ref({
   consentNewsletter: false,
   consentPhoto: false,
 })
-
-const EXPERIENCE_OPTIONS: Array<{ value: typeof form.value.experience; label: string; hint: string }> = [
-  { value: 'never', label: 'Never played', hint: "We'll pair you with a coach." },
-  { value: 'social', label: 'Social level', hint: 'A few seasons, casual play.' },
-  { value: 'club', label: 'Club level', hint: 'Regular club events.' },
-  { value: 'pennant', label: 'Pennant / open', hint: 'Rep or open tournament level.' },
-]
-
-const POSITION_OPTIONS: Array<{ value: typeof form.value.position; label: string }> = [
-  { value: 'lead', label: 'Lead' },
-  { value: 'second', label: 'Second' },
-  { value: 'third', label: 'Third' },
-  { value: 'skip', label: 'Skip' },
-  { value: 'no_preference', label: 'No preference' },
-]
-
-const DAY_KEYS: Array<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'> = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-
-function toggleDay(day: (typeof DAY_KEYS)[number]) {
-  if (form.value.playingDays.has(day)) form.value.playingDays.delete(day)
-  else form.value.playingDays.add(day)
-  form.value.playingDays = new Set(form.value.playingDays)
-}
 
 // ── Custom facets (brief 105) ──────────────────────────────────
 //
@@ -270,7 +241,6 @@ const steps = computed<Step[]>(() => [
   { key: 'tier', label: 'Tier', complete: !!selectedTier.value },
   { key: 'about', label: 'About you', complete: !!form.value.fullName && !!form.value.email && !!form.value.mobile && !!form.value.dob },
   { key: 'address', label: 'Address', complete: !!form.value.street && !!form.value.suburb && !!form.value.postcode },
-  { key: 'bowls', label: 'Your bowls', complete: true },
   { key: 'emergency', label: 'Emergency contact', complete: !!form.value.emergencyName && !!form.value.emergencyPhone },
   { key: 'review', label: 'Review & agree', complete: form.value.consentTerms },
 ])
@@ -323,11 +293,15 @@ async function onSubmit(evt: Event) {
         postcode: form.value.postcode.trim(),
         country: form.value.country.trim() || null,
       },
+      // Brief 106 follow-up — Your bowls section dropped from the form.
+      // Backend still accepts the `bowls` block on the application
+      // payload; sending empty-shaped defaults keeps it green until the
+      // server-side schema drops the requirement.
       bowls: {
-        experience: form.value.experience,
-        bowls_number: form.value.bowlsNumber.trim() || null,
-        position: form.value.position,
-        playing_days: Array.from(form.value.playingDays),
+        experience: 'never',
+        bowls_number: null,
+        position: 'no_preference',
+        playing_days: [],
       },
       emergency_contact: {
         name: form.value.emergencyName.trim(),
@@ -535,64 +509,15 @@ function joinFormErrorMessage(err: unknown): string {
           </div>
         </section>
 
-        <!-- 04 · Your bowls -->
+        <!-- Brief 106 follow-up — the hardcoded "Your bowls" section
+             was removed. Admins who want experience / position /
+             playing-days capture add them as custom facets under
+             Additional questions. -->
+
+        <!-- 04 · Emergency contact -->
         <section class="jf__section">
           <div class="jf__section-head">
             <div class="jf__section-no">04</div>
-            <div class="jf__section-copy">
-              <h2>Your bowls</h2>
-              <p>So the selectors and coaches know where to slot you in. Everything here is a starting point — plenty of members change it up.</p>
-            </div>
-          </div>
-          <div class="jf__fields">
-            <div class="jf__group">
-              <span class="jf__group-label">Experience</span>
-              <div class="jf__exp-grid">
-                <label v-for="opt in EXPERIENCE_OPTIONS" :key="opt.value" class="jf__exp" :class="{ 'jf__exp--selected': form.experience === opt.value }">
-                  <input type="radio" name="experience" :value="opt.value" v-model="form.experience" class="jf__tier-input" />
-                  <span class="jf__exp-title">{{ opt.label }}</span>
-                  <span class="jf__exp-hint">{{ opt.hint }}</span>
-                </label>
-              </div>
-            </div>
-            <div class="jf__row jf__row--top">
-              <div class="jf__group">
-                <span class="jf__group-label">Preferred position</span>
-                <div class="jf__chips">
-                  <label v-for="opt in POSITION_OPTIONS" :key="opt.value" class="jf__chip" :class="{ 'jf__chip--on': form.position === opt.value }">
-                    <input type="radio" name="position" :value="opt.value" v-model="form.position" class="jf__tier-input" />
-                    {{ opt.label }}
-                  </label>
-                </div>
-              </div>
-              <label v-if="props.showBowlsNumber" class="jf__field jf__field--narrow">
-                <span>Bowls NZ number <em>(optional)</em></span>
-                <input v-model="form.bowlsNumber" type="text" placeholder="BNZ-000000" />
-              </label>
-            </div>
-            <div v-if="props.showPlayingDays" class="jf__group">
-              <div class="jf__group-head">
-                <span class="jf__group-label">Playing days available</span>
-                <span class="jf__group-hint">Pick as many as work for you</span>
-              </div>
-              <div class="jf__days">
-                <button
-                  v-for="d in DAY_KEYS"
-                  :key="d"
-                  type="button"
-                  class="jf__day"
-                  :class="{ 'jf__day--on': form.playingDays.has(d) }"
-                  @click="toggleDay(d)"
-                >{{ d.toUpperCase() }}</button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- 05 · Emergency contact -->
-        <section class="jf__section">
-          <div class="jf__section-head">
-            <div class="jf__section-no">05</div>
             <div class="jf__section-copy">
               <h2>Emergency contact</h2>
               <p>Someone we can call if you have an accident on the green. Used only in emergencies.</p>
@@ -616,9 +541,9 @@ function joinFormErrorMessage(err: unknown): string {
           </div>
         </section>
 
-        <!-- 05b · Additional questions (brief 105). Rendered only when
+        <!-- 04b · Additional questions (brief 105). Rendered only when
              the club has configured one or more active facets. Keeps
-             the hardcoded numbering (01..06) stable; owners who add
+             the hardcoded numbering (01..05) stable; owners who add
              questions see them land between Emergency contact and
              Review & agree. -->
         <section v-if="facets.length > 0" class="jf__section">
@@ -769,10 +694,10 @@ function joinFormErrorMessage(err: unknown): string {
           </div>
         </section>
 
-        <!-- 06 · Review & agree -->
+        <!-- 05 · Review & agree -->
         <section class="jf__section">
           <div class="jf__section-head">
-            <div class="jf__section-no">06</div>
+            <div class="jf__section-no">05</div>
             <div class="jf__section-copy">
               <h2>Review &amp; agree</h2>
               <p>One last look. Add anything you want the committee to know, then submit.</p>

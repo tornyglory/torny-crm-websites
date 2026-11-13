@@ -15,6 +15,7 @@ import {
   tournaments as tournamentsApi,
   venueBookings as venueBookingsApi,
   teamSelections as teamSelectionsApi,
+  type VariantModules,
 } from '@torny/api-client'
 import { useHonourCategoriesStore } from '@/stores/honourCategories'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -227,6 +228,10 @@ interface NavItem {
    *  gated). Used for the Settings entry which contains sub-sections like
    *  Billing / Danger / Team access that are role-gated. */
   requiresTeamManager?: boolean
+  /** Brief 105 — variant module key. When set and the club's variant
+   *  config reports `modules[key] === false`, the item is hidden. Omit
+   *  for items that aren't vertical-gated (Dashboard, Website, Settings). */
+  module?: keyof VariantModules
 }
 // Live counts pulled once per active club. Falls back to '—' while loading
 // so the sidebar never flashes stale numbers when the user switches clubs.
@@ -497,12 +502,13 @@ const sidebarGroups = computed<NavGroup[]>(() => [
     label: 'People',
     skipMobileMore: true,
     items: [
-      { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? '—', countTone: 'neutral', permission: 'members:read' },
+      { to: '/crm/members', label: club.terminology.member_plural, icon: 'members', count: memberCount.value ?? '—', countTone: 'neutral', permission: 'members:read', module: 'members' },
       {
         to: '/crm/applications',
-        label: 'Applications',
+        label: club.terminology.application_plural,
         icon: 'applications',
         permission: 'applications:read',
+        module: 'applications',
         ...(applicationsPendingCount.value != null
           ? { count: applicationsPendingCount.value, countTone: applicationsPendingCount.value > 0 ? 'accent' as const : 'neutral' as const }
           : {}),
@@ -512,6 +518,7 @@ const sidebarGroups = computed<NavGroup[]>(() => [
         label: 'Enquiries',
         icon: 'enquiries',
         permission: 'enquiries:read',
+        module: 'enquiries',
         ...(enquiriesNewCount.value != null
           ? { count: enquiriesNewCount.value, countTone: enquiriesNewCount.value > 0 ? 'accent' as const : 'neutral' as const }
           : {}),
@@ -526,6 +533,7 @@ const sidebarGroups = computed<NavGroup[]>(() => [
         label: 'Events',
         icon: 'events',
         permission: 'events:read',
+        module: 'events',
         ...(eventsUpcomingCount.value != null
           ? { count: eventsUpcomingCount.value, countTone: 'neutral' as const }
           : {}),
@@ -536,6 +544,7 @@ const sidebarGroups = computed<NavGroup[]>(() => [
         icon: 'teams',
         permission: 'team_selections:read',
         requiresPro: true,
+        module: 'team_selections',
         ...(teamSelectionsUpcomingCount.value != null
           ? { count: teamSelectionsUpcomingCount.value, countTone: 'neutral' as const }
           : {}),
@@ -546,6 +555,7 @@ const sidebarGroups = computed<NavGroup[]>(() => [
         icon: 'tournaments',
         permission: 'tournaments:read',
         requiresPro: true,
+        module: 'tournaments',
         ...(tournamentsActiveCount.value != null
           ? { count: tournamentsActiveCount.value, countTone: tournamentsActiveCount.value > 0 ? 'accent' as const : 'neutral' as const }
           : {}),
@@ -556,6 +566,7 @@ const sidebarGroups = computed<NavGroup[]>(() => [
         icon: 'honour',
         permission: 'honour_board:read',
         requiresPro: true,
+        module: 'honour_board',
         ...(honourCategoriesStore.loadedClubId != null
           ? { count: honourCategoriesStore.count, countTone: 'neutral' as const }
           : {}),
@@ -571,18 +582,19 @@ const sidebarGroups = computed<NavGroup[]>(() => [
         icon: 'venue-bookings',
         permission: 'venue_bookings:read',
         requiresPro: true,
+        module: 'venue_bookings',
         ...(venueBookingsNewCount.value != null
           ? { count: venueBookingsNewCount.value, countTone: venueBookingsNewCount.value > 0 ? 'accent' as const : 'neutral' as const }
           : {}),
       },
-      { to: '/crm/venue-packages', label: 'Venue packages', icon: 'venue-packages', permission: 'venue_packages:read', requiresPro: true },
+      { to: '/crm/venue-packages', label: 'Venue packages', icon: 'venue-packages', permission: 'venue_packages:read', requiresPro: true, module: 'venue_packages' },
     ],
   },
   {
     label: 'Reach',
     items: [
       { to: '/crm/website', label: 'Website', icon: 'website', permission: 'website:view' },
-      { to: '/crm/communications', label: 'Communications', icon: 'communications', permission: 'communications:read' },
+      { to: '/crm/communications', label: 'Communications', icon: 'communications', permission: 'communications:read', module: 'communications' },
     ],
   },
   {
@@ -604,8 +616,9 @@ const SETTINGS_SUBSECTION_PERMS = [
   'settings:integrations',
 ]
 
-/** Filter sidebar items by the active club's permission bundle + plan. Empty
- *  groups collapse out so the user doesn't see orphan section headers. */
+/** Filter sidebar items by the active club's permission bundle + plan + the
+ *  variant config's module map. Empty groups collapse out so the user doesn't
+ *  see orphan section headers. */
 const visibleSidebarGroups = computed<NavGroup[]>(() =>
   sidebarGroups.value
     .map((g) => ({
@@ -618,6 +631,9 @@ const visibleSidebarGroups = computed<NavGroup[]>(() =>
         }
         if (item.requiresPro && !isPro.value) return false
         if (item.permission && !can(item.permission)) return false
+        // Brief 105: hide items whose variant module is disabled. All
+        // true for the `club` vertical so this is a no-op today.
+        if (item.module && !club.modules[item.module]) return false
         return true
       }),
     }))
@@ -637,15 +653,23 @@ async function signOut() {
   await router.push({ name: 'sign-in' })
 }
 
-interface TabItem { to: string; label: string; count?: number; icon: 'home' | 'members' | 'apps' | 'enquiries' | 'more'; permission?: string }
+interface TabItem { to: string; label: string; count?: number; icon: 'home' | 'members' | 'apps' | 'enquiries' | 'more'; permission?: string; module?: keyof VariantModules }
 const bottomTabs = computed<TabItem[]>(() => {
+  // Mobile tab labels stay short — use the terminology singular rather
+  // than cramming the plural (e.g. "Contact" over "Contacts" if a future
+  // vertical ships longer labels). Members stays as the plural because
+  // the icon slot is already wide enough for it.
   const all: TabItem[] = [
     { to: '/crm/dashboard', label: 'Home', icon: 'home' },
-    { to: '/crm/members', label: 'Members', icon: 'members', count: memberCount.value ?? undefined, permission: 'members:read' },
-    { to: '/crm/applications', label: 'Apps', count: applicationsPendingCount.value ?? undefined, icon: 'apps', permission: 'applications:read' },
-    { to: '/crm/enquiries', label: 'Enquiries', count: enquiriesNewCount.value ?? undefined, icon: 'enquiries', permission: 'enquiries:read' },
+    { to: '/crm/members', label: club.terminology.member_plural, icon: 'members', count: memberCount.value ?? undefined, permission: 'members:read', module: 'members' },
+    { to: '/crm/applications', label: club.terminology.application_plural, count: applicationsPendingCount.value ?? undefined, icon: 'apps', permission: 'applications:read', module: 'applications' },
+    { to: '/crm/enquiries', label: 'Enquiries', count: enquiriesNewCount.value ?? undefined, icon: 'enquiries', permission: 'enquiries:read', module: 'enquiries' },
   ]
-  return all.filter((t) => !t.permission || can(t.permission))
+  return all.filter((t) => {
+    if (t.permission && !can(t.permission)) return false
+    if (t.module && !club.modules[t.module]) return false
+    return true
+  })
 })
 </script>
 

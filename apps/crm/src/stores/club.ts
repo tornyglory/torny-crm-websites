@@ -1,14 +1,22 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
   authedFetch,
   CRM_BASE,
+  variant as variantApi,
+  CLUB_DEFAULT_TERMINOLOGY,
+  CLUB_DEFAULT_MODULES,
+  CLUB_DEFAULT_JOIN_FORM_SECTIONS,
   type Club,
   type ClubColorScheme,
   type ClubFonts,
   type ClubStyle,
   type ClubNavigation,
   type UserClub,
+  type VariantConfig,
+  type VariantTerminology,
+  type VariantModules,
+  type JoinFormSection,
 } from '@torny/api-client'
 
 interface Envelope<T> { status: string; data: T }
@@ -29,14 +37,38 @@ export const useClubStore = defineStore('club', () => {
   const current = ref<Club | null>(loadCurrent())
   const memberships = ref<Club[]>([])
 
+  // Brief 105 — variant config: terminology, module visibility, and the
+  // ordered join-form sections. Hydrated after the current club is set;
+  // falls back to the `club` vertical defaults if the fetch fails so
+  // the CRM renders sensibly offline / pre-hydration.
+  const variant = ref<VariantConfig | null>(null)
+
+  const terminology = computed<VariantTerminology>(
+    () => variant.value?.terminology ?? CLUB_DEFAULT_TERMINOLOGY,
+  )
+  const modules = computed<VariantModules>(
+    () => variant.value?.modules ?? CLUB_DEFAULT_MODULES,
+  )
+  const joinFormSections = computed<JoinFormSection[]>(
+    () => variant.value?.join_form_sections ?? CLUB_DEFAULT_JOIN_FORM_SECTIONS,
+  )
+
   function setCurrent(club: Club) {
+    const changed = current.value?.id !== club.id
     current.value = club
     localStorage.setItem(STORAGE_KEY, JSON.stringify(club))
+    // Club context changed — refresh variant so terminology + modules
+    // line up with whichever club the admin just switched to.
+    if (changed) {
+      variant.value = null
+      void hydrateVariant()
+    }
   }
 
   function clear() {
     current.value = null
     memberships.value = []
+    variant.value = null
     localStorage.removeItem(STORAGE_KEY)
   }
 
@@ -69,6 +101,9 @@ export const useClubStore = defineStore('club', () => {
     // Fire-and-forget slug backfill. The stub above renders instantly; the
     // full record (slug, brand, logo) fills in a moment later.
     void hydrateFull()
+    // Variant config is also safe to fire-and-forget — terminology
+    // getters fall back to CLUB defaults while the fetch is in flight.
+    void hydrateVariant()
   }
 
   /**
@@ -108,6 +143,33 @@ export const useClubStore = defineStore('club', () => {
       })
     } catch {
       /* transport failure — leave slug null, caller falls back */
+    }
+  }
+
+  /**
+   * Brief 105 — fetch variant config for the current club and cache for
+   * the session. Falls back silently on transport failure; the computed
+   * `terminology` / `modules` / `joinFormSections` will serve the `club`
+   * defaults so the CRM renders sensibly either way.
+   *
+   * Fire-and-forget: callers don't await. The reactive refs update when
+   * the fetch lands, so Vue re-renders sidebar labels + module gates
+   * automatically.
+   */
+  async function hydrateVariant(): Promise<void> {
+    const c = current.value
+    if (!c) return
+    // Don't refetch if we already have the right club's variant.
+    if (variant.value && variant.value.club_id === c.id) return
+    try {
+      const config = await variantApi.getVariant(c.id)
+      // Guard against a stale response arriving after the user switched
+      // clubs — only commit when the fetch still matches the live club.
+      if (current.value?.id === config.club_id) {
+        variant.value = config
+      }
+    } catch {
+      /* transport failure — computed getters fall back to CLUB defaults */
     }
   }
 
@@ -180,6 +242,10 @@ export const useClubStore = defineStore('club', () => {
   return {
     current,
     memberships,
+    variant,
+    terminology,
+    modules,
+    joinFormSections,
     setCurrent,
     setFonts,
     setStyle,
@@ -189,5 +255,6 @@ export const useClubStore = defineStore('club', () => {
     clear,
     syncFromUserClubs,
     hydrateFull,
+    hydrateVariant,
   }
 })

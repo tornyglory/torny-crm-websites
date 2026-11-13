@@ -279,6 +279,62 @@ export async function fetchSite(slug: string): Promise<Site | null> {
   }
 }
 
+// ── Public variant config (brief 105) ─────────────────────────
+//
+// Mirrors the api-client's VariantConfig shape but kept local so SSR
+// doesn't need to import the client bundle just for types.
+
+export interface VariantTerminology {
+  member_singular: string
+  member_plural: string
+  application_singular: string
+  application_plural: string
+  join_cta: string
+  join_page_title: string
+}
+
+export interface VariantModules {
+  members: boolean
+  applications: boolean
+  enquiries: boolean
+  events: boolean
+  teams: boolean
+  team_selections: boolean
+  tournaments: boolean
+  honour_board: boolean
+  venue_bookings: boolean
+  venue_packages: boolean
+  communications: boolean
+}
+
+export interface JoinFormSection {
+  key: string
+  label: string
+}
+
+export interface VariantConfig {
+  club_id: number
+  name: string
+  subdomain: string
+  vertical: string
+  label: string
+  terminology: VariantTerminology
+  modules: VariantModules
+  join_form_sections: JoinFormSection[]
+}
+
+export async function fetchVariant(slug: string): Promise<VariantConfig | null> {
+  const config = useRuntimeConfig()
+  try {
+    const res = await $fetch<Envelope<VariantConfig>>(`/public/clubs/${encodeURIComponent(slug)}/variant`, {
+      baseURL: config.tornyApiBaseUrl,
+    })
+    return res.data ?? null
+  } catch {
+    return null
+  }
+}
+
 // Generic passthrough for anything else on the public surface.
 export function tornyFetch<T>(path: string, opts?: Parameters<typeof $fetch>[1]): Promise<T> {
   const config = useRuntimeConfig()

@@ -12,6 +12,9 @@ import type {
 const club = useClub()
 await useTheme()
 const { data: site } = await useSite()
+// Brief 105: terminology drives the "Join the club" CTA label so the
+// header + drawer swap when the backend ships a new vertical.
+const { terminology } = useVariant()
 const route = useRoute()
 
 const drawerOpen = ref(false)
@@ -80,7 +83,7 @@ const clubPlan = computed<'starter' | 'pro' | undefined>(() => {
   return undefined
 })
 
-const primaryCta = { label: 'Join the club', href: '/membership' }
+const primaryCta = computed(() => ({ label: terminology.value.join_cta, href: '/membership' }))
 
 // Footer content. Same structure per tenant — the CMS will surface a
 // "site settings" panel later for clubs to override the contact block

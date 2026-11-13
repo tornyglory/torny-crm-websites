@@ -112,23 +112,38 @@ interface Envelope<T> {
   data: T
 }
 
+/** Unwrap a facets list payload. The backend uses `{data: [...]}` on
+ *  some endpoints and `{data: {facets: [...]}}` on others; accept
+ *  either so the FE doesn't silently drop rows when the shape shifts.
+ *  Falls back to `[]` for any other value (null, undefined, scalar). */
+function unwrapFacets(data: unknown): CustomFacet[] {
+  if (Array.isArray(data)) return data as CustomFacet[]
+  if (data && typeof data === 'object') {
+    const candidate = (data as Record<string, unknown>).facets
+      ?? (data as Record<string, unknown>).rows
+      ?? (data as Record<string, unknown>).items
+    if (Array.isArray(candidate)) return candidate as CustomFacet[]
+  }
+  return []
+}
+
 // ── Endpoints ─────────────────────────────────────────────────────
 
 /** GET /clubs/{id}/custom-facets — member+ read. Returns active and
  *  inactive facets in display order; the Website builder uses this.
  *
- *  Backend returns null / an empty object for clubs with no facets yet;
- *  coerce to `[]` so callers can `.filter` / `.map` without a defensive
- *  array check every time. */
+ *  Backend uses two different envelope shapes across endpoints
+ *  (bare array vs `{facets: [...]}` object). `unwrapFacets` accepts
+ *  either so the FE doesn't silently drop rows when the shape shifts. */
 export async function listFacets(
   clubId: number,
   opts: { signal?: AbortSignal } = {},
 ): Promise<CustomFacet[]> {
-  const res = await authedFetch<Envelope<CustomFacet[]>>(
+  const res = await authedFetch<Envelope<CustomFacet[] | { facets: CustomFacet[] }>>(
     `${VENUE_BASE}/clubs/${clubId}/custom-facets`,
     { method: 'GET', signal: opts.signal },
   )
-  return Array.isArray(res.data) ? res.data : []
+  return unwrapFacets(res.data)
 }
 
 /** POST /clubs/{id}/custom-facets — owner-only create. */
@@ -193,7 +208,7 @@ export async function reorderFacets(
   input: ReorderFacetsInput,
   opts: { signal?: AbortSignal } = {},
 ): Promise<CustomFacet[]> {
-  const res = await authedFetch<Envelope<CustomFacet[]>>(
+  const res = await authedFetch<Envelope<CustomFacet[] | { facets: CustomFacet[] }>>(
     `${VENUE_BASE}/clubs/${clubId}/custom-facets/reorder`,
     {
       method: 'POST',
@@ -201,7 +216,7 @@ export async function reorderFacets(
       signal: opts.signal,
     },
   )
-  return Array.isArray(res.data) ? res.data : []
+  return unwrapFacets(res.data)
 }
 
 /** GET /public/clubs/{slug}/custom-facets — no-auth read for the
@@ -211,9 +226,9 @@ export async function listPublicFacets(
   slug: string,
   opts: { signal?: AbortSignal } = {},
 ): Promise<CustomFacet[]> {
-  const res = await publicFetch<Envelope<CustomFacet[]>>(
+  const res = await publicFetch<Envelope<CustomFacet[] | { facets: CustomFacet[] }>>(
     `${VENUE_BASE}/public/clubs/${encodeURIComponent(slug)}/custom-facets`,
     { method: 'GET', signal: opts.signal },
   )
-  return Array.isArray(res.data) ? res.data : []
+  return unwrapFacets(res.data)
 }

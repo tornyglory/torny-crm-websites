@@ -31,6 +31,7 @@ import CrmSpinner from '@/components/CrmSpinner.vue'
 import Skeleton from '@/components/Skeleton.vue'
 import BlockPaletteDialog from '@/components/BlockPaletteDialog.vue'
 import WebsiteSettingsPanel, { type WebsiteSettingsSection } from '@/components/WebsiteSettingsPanel.vue'
+import JoinFormCustomFieldsTab from '@/components/website/JoinFormCustomFieldsTab.vue'
 import { ApiError, pages, isValidPageSlug, RESERVED_PAGE_SLUGS, slugifyTitle, type PageBlock } from '@torny/api-client'
 import { usePagesStore } from '@/stores/pages'
 import type {
@@ -1201,6 +1202,13 @@ async function submitDelete(): Promise<void> {
 
 const selectedBlock = computed<Block | null>(() => state.blocks.find((b) => b.id === selectedId.value) ?? null)
 
+// Brief 105 — the Membership Join form block editor has two tabs
+// ("Content" for the existing block props, "Custom fields" for the
+// club-level facet CRUD). Reset to Content whenever the selection
+// changes so the admin doesn't land on an unexpected tab.
+const joinFormTab = ref<'content' | 'custom'>('content')
+watch(selectedId, () => { joinFormTab.value = 'content' })
+
 const hasUnpublishedChanges = computed(() => state.hasUnpublishedChanges)
 
 // ── Autosave (real API + offline mirror) ──────────────────
@@ -2245,6 +2253,27 @@ const lastSavedLabel = computed(() => {
 
           <!-- Membership join form -->
           <template v-else-if="selectedBlock.type === 'membershipJoinForm'">
+            <!-- Brief 105 · segmented tabs so the admin can switch
+                 between block content and the club-level Custom fields
+                 CRUD without leaving the right rail. -->
+            <div class="block-tabs" role="tablist">
+              <button
+                type="button"
+                class="block-tabs__btn"
+                :class="{ 'is-active': joinFormTab === 'content' }"
+                role="tab"
+                @click="joinFormTab = 'content'"
+              >Content</button>
+              <button
+                type="button"
+                class="block-tabs__btn"
+                :class="{ 'is-active': joinFormTab === 'custom' }"
+                role="tab"
+                @click="joinFormTab = 'custom'"
+              >Custom fields</button>
+            </div>
+
+            <template v-if="joinFormTab === 'content'">
             <label class="field">
               <span class="field__label">Eyebrow</span>
               <input v-model="(selectedBlock.props as MembershipJoinFormProps).eyebrow" type="text" placeholder="e.g. MEMBERSHIP · 2026 SEASON" />
@@ -2309,6 +2338,12 @@ const lastSavedLabel = computed(() => {
                 @click="(selectedBlock.props as MembershipJoinFormProps).showPlayingDays = !((selectedBlock.props as MembershipJoinFormProps).showPlayingDays !== false)"
               ><span class="switch__knob" /></button>
             </label>
+            </template>
+
+            <!-- Brief 105 — custom facets live at the club level, not on
+                 the block prop. Mounted lazily so the list fetches only
+                 when the admin opens the tab. -->
+            <JoinFormCustomFieldsTab v-else />
           </template>
 
           <!-- Contact form -->
@@ -4015,6 +4050,34 @@ const lastSavedLabel = computed(() => {
 .field--inline { flex-direction: row; align-items: flex-start; gap: 10px; }
 .field--inline input[type="checkbox"] { width: 16px; height: 16px; margin-top: 2px; padding: 0; }
 .field__inline-copy { display: flex; flex-direction: column; gap: 2px; }
+
+/* Brief 105 — segmented tabs inside a block editor. Only used on the
+ * Membership Join form today (Content / Custom fields) but factored so
+ * other multi-surface blocks can reuse it later. */
+.block-tabs {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--color-surface);
+  border-radius: 999px;
+  margin-bottom: 10px;
+  align-self: flex-start;
+}
+.block-tabs__btn {
+  padding: 6px 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-fog);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+.block-tabs__btn:hover:not(.is-active) { color: var(--color-ink); }
+.block-tabs__btn.is-active { background: var(--color-ink); color: #fff; font-weight: 600; }
 
 .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .switch-row__label { font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-ink); }

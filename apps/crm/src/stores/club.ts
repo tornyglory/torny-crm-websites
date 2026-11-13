@@ -7,6 +7,7 @@ import {
   CLUB_DEFAULT_TERMINOLOGY,
   CLUB_DEFAULT_MODULES,
   CLUB_DEFAULT_JOIN_FORM_SECTIONS,
+  filterLegacyJoinFormSections,
   type Club,
   type ClubColorScheme,
   type ClubFonts,
@@ -50,7 +51,7 @@ export const useClubStore = defineStore('club', () => {
     () => variant.value?.modules ?? CLUB_DEFAULT_MODULES,
   )
   const joinFormSections = computed<JoinFormSection[]>(
-    () => variant.value?.join_form_sections ?? CLUB_DEFAULT_JOIN_FORM_SECTIONS,
+    () => filterLegacyJoinFormSections(variant.value?.join_form_sections ?? CLUB_DEFAULT_JOIN_FORM_SECTIONS),
   )
 
   function setCurrent(club: Club) {

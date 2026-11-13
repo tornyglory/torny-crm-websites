@@ -19,6 +19,8 @@ export {
   CLUB_DEFAULT_TERMINOLOGY,
   CLUB_DEFAULT_MODULES,
   CLUB_DEFAULT_JOIN_FORM_SECTIONS,
+  LEGACY_JOIN_FORM_SECTION_KEYS,
+  filterLegacyJoinFormSections,
 } from './resources/variant'
 export * as customFacets from './resources/customFacets'
 export type {

@@ -21,6 +21,7 @@ import {
   customFacets as customFacetsApi,
   ApiError,
   CLUB_DEFAULT_JOIN_FORM_SECTIONS,
+  filterLegacyJoinFormSections,
   type VariantConfig,
   type JoinFormSection,
   type JoinFormSectionOverride,
@@ -58,6 +59,11 @@ const facets = ref<CustomFacet[]>([])
 
 interface SectionRow {
   key: string
+  /** The default label from the variant — what the row renders at if
+   *  the admin hasn't overridden it. Never mutated after load. */
+  defaultLabel: string
+  /** The admin's chosen label. Diff vs `defaultLabel` → send
+   *  `label_override` on save; equal → send `null` (clear override). */
   label: string
   visible: boolean
 }
@@ -80,12 +86,18 @@ async function load() {
       customFacetsApi.listFacets(cid),
     ])
     variant.value = v
-    const list = (v.join_form_sections?.length ? v.join_form_sections : CLUB_DEFAULT_JOIN_FORM_SECTIONS)
-      .map<SectionRow>((s: JoinFormSection) => ({
-        key: s.key,
-        label: s.label,
-        visible: s.visible !== false,
-      }))
+    // Strip retired section keys (brief 106 follow-up — `your_bowls`)
+    // before taking the first element with a value. Shrinks to no-op
+    // once the backend variant registry drops them.
+    const source = filterLegacyJoinFormSections(
+      v.join_form_sections?.length ? v.join_form_sections : CLUB_DEFAULT_JOIN_FORM_SECTIONS,
+    )
+    const list = source.map<SectionRow>((s: JoinFormSection) => ({
+      key: s.key,
+      defaultLabel: s.label,
+      label: s.label,
+      visible: s.visible !== false,
+    }))
     sections.value = list
     initialSections.value = list.map((r) => ({ ...r }))
     // Backend returns `null` / an empty object for clubs with no facets
@@ -126,7 +138,7 @@ const sectionsDirty = computed<boolean>(() => {
   for (let i = 0; i < sections.value.length; i++) {
     const a = sections.value[i]!
     const b = initialSections.value[i]!
-    if (a.key !== b.key || a.visible !== b.visible) return true
+    if (a.key !== b.key || a.visible !== b.visible || a.label !== b.label) return true
   }
   return false
 })
@@ -152,6 +164,29 @@ const selectedSection = computed<SectionRow | null>(() => {
 
 const selectedSectionIndex = computed<number>(() => {
   return sections.value.findIndex((s) => s.key === selectedKey.value)
+})
+
+/** v-model bridge so editing the heading in the right panel mutates
+ *  the selected row immutably — straight mutation of
+ *  `selectedSection.value.label` would work, but routing through a
+ *  writable computed keeps reactivity + dirty tracking predictable. */
+const selectedSectionLabel = computed<string>({
+  get() { return selectedSection.value?.label ?? '' },
+  set(next) {
+    const key = selectedKey.value
+    sections.value = sections.value.map((r) => (r.key === key ? { ...r, label: next } : r))
+  },
+})
+
+function resetSelectedLabel() {
+  const row = selectedSection.value
+  if (!row) return
+  selectedSectionLabel.value = row.defaultLabel
+}
+
+const selectedLabelOverridden = computed<boolean>(() => {
+  const row = selectedSection.value
+  return !!row && row.label.trim() !== row.defaultLabel.trim() && row.label.trim().length > 0
 })
 
 // ── Facets (only used when `additional` is selected) ───────────
@@ -395,11 +430,16 @@ async function save() {
   savingAll.value = true
   saveError.value = null
   const payload = {
-    sections: sections.value.map<JoinFormSectionOverride>((s, i) => ({
-      key: s.key,
-      order: i,
-      visible: s.visible,
-    })),
+    sections: sections.value.map<JoinFormSectionOverride>((s, i) => {
+      const trimmed = s.label.trim()
+      const override = trimmed && trimmed !== s.defaultLabel ? trimmed : null
+      return {
+        key: s.key,
+        order: i,
+        visible: s.visible,
+        label_override: override,
+      }
+    }),
   }
   try {
     const updated = await variantApi.updateJoinFormConfig(cid, payload)
@@ -560,7 +600,25 @@ const facetsForSelected = computed<CustomFacet[]>(() => {
                   · {{ facetsForSelected.length }} {{ facetsForSelected.length === 1 ? 'field' : 'fields' }}
                 </template>
               </div>
-              <h3 class="jfe__insp-title">{{ selectedSection.label }}</h3>
+              <!-- Brief 107 — inline label editor. Clubs can rename
+                   every section (e.g. "Additional questions" →
+                   "Tell us more"). Diff vs the variant default commits
+                   as `label_override` on save. -->
+              <div class="jfe__insp-title-row">
+                <input
+                  v-model="selectedSectionLabel"
+                  class="jfe__insp-title-input"
+                  :placeholder="selectedSection.defaultLabel"
+                  :aria-label="`Rename ${selectedSection.defaultLabel}`"
+                  maxlength="60"
+                />
+                <button
+                  v-if="selectedLabelOverridden"
+                  type="button"
+                  class="jfe__insp-reset"
+                  @click="resetSelectedLabel"
+                >Reset</button>
+              </div>
               <p v-if="selectedKey === 'additional'" class="jfe__insp-sub">
                 Custom fields members fill in when they join. Searchable
                 fields also appear as filter chips on the Members list.
@@ -935,6 +993,48 @@ const facetsForSelected = computed<CustomFacet[]>(() => {
   letter-spacing: -0.01em;
   color: var(--color-ink);
 }
+/* Brief 107 — editable section title. Input visually matches the
+ * display title; only reveals a border/background when focused so the
+ * resting state still reads as a heading. */
+.jfe__insp-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.jfe__insp-title-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 4px 8px;
+  margin-left: -8px;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.jfe__insp-title-input:hover { border-color: var(--color-hairline); }
+.jfe__insp-title-input:focus {
+  border-color: var(--color-ink);
+  background: #fff;
+}
+.jfe__insp-reset {
+  flex-shrink: 0;
+  background: transparent;
+  border: 0;
+  padding: 4px 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent, #2563eb);
+  cursor: pointer;
+  border-radius: 999px;
+}
+.jfe__insp-reset:hover { background: var(--color-surface); }
 .jfe__insp-sub {
   margin: 4px 0 0;
   font-family: var(--font-body);

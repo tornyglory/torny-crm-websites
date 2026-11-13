@@ -140,6 +140,19 @@ export const CLUB_DEFAULT_MODULES: VariantModules = {
   communications: true,
 }
 
+/** Section keys the FE has retired but the backend may still echo back
+ *  on `/variant`. Consumers filter them out at ingestion so they never
+ *  render in the CRM modal or on the public form. Shrinks to empty once
+ *  the backend variant registry drops them. */
+export const LEGACY_JOIN_FORM_SECTION_KEYS: readonly string[] = ['your_bowls']
+
+/** Drop section keys that the FE no longer renders (currently just
+ *  `your_bowls` — Option A of the brief-106 follow-up). Safe to call on
+ *  any variant response; returns a fresh array. */
+export function filterLegacyJoinFormSections(sections: readonly JoinFormSection[]): JoinFormSection[] {
+  return sections.filter((s) => !LEGACY_JOIN_FORM_SECTION_KEYS.includes(s.key))
+}
+
 // Brief 106 follow-up — `your_bowls` dropped as a hardcoded section. It
 // was bowls-specific (not actually "built-in" like name + address),
 // which made no sense for non-bowls verticals. Admins who want

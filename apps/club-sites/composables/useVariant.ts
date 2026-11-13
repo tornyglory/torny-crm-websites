@@ -1,5 +1,14 @@
 import type { VariantConfig, VariantTerminology, VariantModules, JoinFormSection } from '~/server/utils/tornyApi'
 
+/** Section keys the FE has retired but the backend may still echo back
+ *  on `/variant`. Kept in sync with the api-client's list (brief 106
+ *  follow-up). Shrinks to [] once the backend variant registry drops them. */
+const LEGACY_JOIN_FORM_SECTION_KEYS = ['your_bowls'] as const
+
+function filterLegacy(list: JoinFormSection[]): JoinFormSection[] {
+  return list.filter((s) => !(LEGACY_JOIN_FORM_SECTION_KEYS as readonly string[]).includes(s.key))
+}
+
 /**
  * Brief 105 — per-tenant variant config. Fetches once per slug and
  * caches via Nuxt's data layer. Consumers read `terminology.join_cta` /
@@ -79,7 +88,7 @@ export function useVariant() {
     () => variant.value?.modules ?? CLUB_FALLBACK_MODULES,
   )
   const joinFormSections = computed<JoinFormSection[]>(
-    () => variant.value?.join_form_sections ?? CLUB_FALLBACK_JOIN_FORM_SECTIONS,
+    () => filterLegacy(variant.value?.join_form_sections ?? CLUB_FALLBACK_JOIN_FORM_SECTIONS),
   )
 
   return { variant, terminology, modules, joinFormSections }

@@ -31,9 +31,14 @@ const toast = useToast()
 const clubStore = useClubStore()
 const notificationsStore = useNotificationsStore()
 
-/** Coerce a backend kind to the local UI kind (only `member_milestone` differs). */
+/** Coerce a backend kind to the local UI kind. `member_milestone` renames
+ *  to `milestone`; anything the local union doesn't know about (backend
+ *  ships ahead of the client) falls through to `milestone` too so the
+ *  `kindMeta` lookup can't return undefined. */
+const KNOWN_UI_KINDS: readonly Kind[] = ['application', 'enquiry', 'rsvp', 'team', 'publish', 'payment', 'milestone']
 function toUiKind(kind: NotificationKind): Kind {
-  return kind === 'member_milestone' ? 'milestone' : kind
+  if (kind === 'member_milestone') return 'milestone'
+  return (KNOWN_UI_KINDS as readonly string[]).includes(kind) ? (kind as Kind) : 'milestone'
 }
 
 /** Relative time — the backend sends ISO 8601 UTC, we render short strings

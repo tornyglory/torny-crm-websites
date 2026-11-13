@@ -88,7 +88,11 @@ async function load() {
       }))
     sections.value = list
     initialSections.value = list.map((r) => ({ ...r }))
-    facets.value = f
+    // Backend returns `null` / an empty object for clubs with no facets
+    // configured yet — the typed signature says `CustomFacet[]` but the
+    // envelope can be sparse. Coerce defensively so the computed `.filter`
+    // never hits a non-array.
+    facets.value = Array.isArray(f) ? f : []
     // Default to additional so the facet editor is up front — the
     // whole point of the modal for most sessions.
     const hasAdditional = list.some((s) => s.key === 'additional')
@@ -474,7 +478,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 const facetsForSelected = computed<CustomFacet[]>(() => {
   if (selectedKey.value !== 'additional') return []
-  return facets.value.filter((f) => f.section_key === 'additional')
+  const list = Array.isArray(facets.value) ? facets.value : []
+  return list.filter((f) => f.section_key === 'additional')
 })
 </script>
 

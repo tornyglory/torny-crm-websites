@@ -4057,13 +4057,14 @@ const lastSavedLabel = computed(() => {
 /* Brief 106 — primary CTA at the top of the Join form block's right
  * rail that opens the full structure editor modal. */
 .block-primary-cta {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
   justify-content: center;
-  height: 38px;
-  padding: 0 16px;
+  min-height: 40px;
+  padding: 10px 16px;
+  box-sizing: border-box;
   background: var(--color-ink);
   color: #fff;
   border: 0;
@@ -4071,11 +4072,14 @@ const lastSavedLabel = computed(() => {
   font-family: var(--font-body);
   font-size: 13px;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
   margin-bottom: 4px;
+  flex-shrink: 0;
   transition: background 0.12s ease;
 }
 .block-primary-cta:hover { background: var(--color-graphite); }
+.block-primary-cta svg { flex-shrink: 0; }
 
 /* Brief 105 — inline hint linking to Settings → Custom fields from the
  * Join form block editor. Keeps editors who come looking for the field

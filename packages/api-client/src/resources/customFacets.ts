@@ -115,7 +115,11 @@ interface Envelope<T> {
 // ── Endpoints ─────────────────────────────────────────────────────
 
 /** GET /clubs/{id}/custom-facets — member+ read. Returns active and
- *  inactive facets in display order; the Website builder uses this. */
+ *  inactive facets in display order; the Website builder uses this.
+ *
+ *  Backend returns null / an empty object for clubs with no facets yet;
+ *  coerce to `[]` so callers can `.filter` / `.map` without a defensive
+ *  array check every time. */
 export async function listFacets(
   clubId: number,
   opts: { signal?: AbortSignal } = {},
@@ -124,7 +128,7 @@ export async function listFacets(
     `${VENUE_BASE}/clubs/${clubId}/custom-facets`,
     { method: 'GET', signal: opts.signal },
   )
-  return res.data
+  return Array.isArray(res.data) ? res.data : []
 }
 
 /** POST /clubs/{id}/custom-facets — owner-only create. */
@@ -197,7 +201,7 @@ export async function reorderFacets(
       signal: opts.signal,
     },
   )
-  return res.data
+  return Array.isArray(res.data) ? res.data : []
 }
 
 /** GET /public/clubs/{slug}/custom-facets — no-auth read for the
@@ -211,5 +215,5 @@ export async function listPublicFacets(
     `${VENUE_BASE}/public/clubs/${encodeURIComponent(slug)}/custom-facets`,
     { method: 'GET', signal: opts.signal },
   )
-  return res.data
+  return Array.isArray(res.data) ? res.data : []
 }

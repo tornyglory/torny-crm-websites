@@ -31,6 +31,7 @@ import CrmSpinner from '@/components/CrmSpinner.vue'
 import Skeleton from '@/components/Skeleton.vue'
 import BlockPaletteDialog from '@/components/BlockPaletteDialog.vue'
 import WebsiteSettingsPanel, { type WebsiteSettingsSection } from '@/components/WebsiteSettingsPanel.vue'
+import JoinFormEditorModal from '@/components/modals/JoinFormEditorModal.vue'
 import { ApiError, pages, isValidPageSlug, RESERVED_PAGE_SLUGS, slugifyTitle, type PageBlock } from '@torny/api-client'
 import { usePagesStore } from '@/stores/pages'
 import type {
@@ -1201,6 +1202,11 @@ async function submitDelete(): Promise<void> {
 
 const selectedBlock = computed<Block | null>(() => state.blocks.find((b) => b.id === selectedId.value) ?? null)
 
+// Brief 106 — Join form editor modal. Owner clicks "Edit sections &
+// fields" on the Join form block's right rail to open.
+const joinFormEditorOpen = ref(false)
+const currentClubId = computed<number | null>(() => clubStore.current?.id ?? null)
+
 const hasUnpublishedChanges = computed(() => state.hasUnpublishedChanges)
 
 // ── Autosave (real API + offline mirror) ──────────────────
@@ -1670,6 +1676,16 @@ const lastSavedLabel = computed(() => {
         :items="paletteFor(currentPage)"
         @close="paletteOpen = null"
         @select="(t) => addBlock(t, paletteOpen?.after ?? null)"
+      />
+
+      <!-- Brief 106 — Edit join form modal. Scoped to the Join form
+           block; mounted at the editor root so it overlays the whole
+           page (the right-rail is only ~340px wide, not enough for the
+           split layout). -->
+      <JoinFormEditorModal
+        :open="joinFormEditorOpen"
+        :club-id="currentClubId"
+        @close="joinFormEditorOpen = false"
       />
 
       <!-- Inspector -->
@@ -2245,6 +2261,20 @@ const lastSavedLabel = computed(() => {
 
           <!-- Membership join form -->
           <template v-else-if="selectedBlock.type === 'membershipJoinForm'">
+            <!-- Brief 106 — primary entry point into the join-form
+                 structure editor (sections visibility + custom fields
+                 CRUD). The right-rail stays for copy edits. -->
+            <button
+              type="button"
+              class="block-primary-cta"
+              @click="joinFormEditorOpen = true"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M11 2.5l2.5 2.5-8 8-3 .5.5-3 8-8z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              </svg>
+              Edit sections &amp; fields
+            </button>
+
             <label class="field">
               <span class="field__label">Eyebrow</span>
               <input v-model="(selectedBlock.props as MembershipJoinFormProps).eyebrow" type="text" placeholder="e.g. MEMBERSHIP · 2026 SEASON" />
@@ -4023,6 +4053,29 @@ const lastSavedLabel = computed(() => {
 .field--inline { flex-direction: row; align-items: flex-start; gap: 10px; }
 .field--inline input[type="checkbox"] { width: 16px; height: 16px; margin-top: 2px; padding: 0; }
 .field__inline-copy { display: flex; flex-direction: column; gap: 2px; }
+
+/* Brief 106 — primary CTA at the top of the Join form block's right
+ * rail that opens the full structure editor modal. */
+.block-primary-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+  height: 38px;
+  padding: 0 16px;
+  background: var(--color-ink);
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 4px;
+  transition: background 0.12s ease;
+}
+.block-primary-cta:hover { background: var(--color-graphite); }
 
 /* Brief 105 — inline hint linking to Settings → Custom fields from the
  * Join form block editor. Keeps editors who come looking for the field

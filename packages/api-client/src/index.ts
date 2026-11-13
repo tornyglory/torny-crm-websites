@@ -3,6 +3,7 @@ export type { TornyClient, TornyClientOptions } from './client'
 export * from './types'
 
 // Brief 105 — variant + custom facets
+// Brief 106 extends with join-form-config overrides (same resource file).
 export * as variant from './resources/variant'
 export type {
   VerticalSlug,
@@ -10,6 +11,9 @@ export type {
   VariantModules,
   JoinFormSection,
   VariantConfig,
+  JoinFormSectionOverride,
+  JoinFormConfigPayload,
+  JoinFormConfigErrorCode,
 } from './resources/variant'
 export {
   CLUB_DEFAULT_TERMINOLOGY,

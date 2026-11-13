@@ -52,10 +52,16 @@ export interface VariantModules {
 }
 
 /** Ordered sections of the public join form. Facets (brief 105 §3.3)
- *  render under the matching `key` — default `additional`. */
+ *  render under the matching `key` — default `additional`.
+ *
+ *  Brief 106 adds the optional `visible` flag — once the backend ships
+ *  the join-form-config endpoint, the variant merges per-club overrides
+ *  into this list so sections can be hidden without being reordered or
+ *  renamed. Public join form filters out `visible: false`. */
 export interface JoinFormSection {
   key: string
   label: string
+  visible?: boolean
 }
 
 /** The whole config payload for one club. Fetch once per session and
@@ -135,11 +141,59 @@ export const CLUB_DEFAULT_MODULES: VariantModules = {
 }
 
 export const CLUB_DEFAULT_JOIN_FORM_SECTIONS: JoinFormSection[] = [
-  { key: 'tier',              label: 'Choose your tier' },
-  { key: 'about_you',         label: 'About you' },
-  { key: 'address',           label: 'Home address' },
-  { key: 'your_bowls',        label: 'Your bowls' },
-  { key: 'emergency_contact', label: 'Emergency contact' },
-  { key: 'additional',        label: 'Additional questions' },
-  { key: 'review',            label: 'Review & agree' },
+  { key: 'tier',              label: 'Choose your tier',     visible: true },
+  { key: 'about_you',         label: 'About you',            visible: true },
+  { key: 'address',           label: 'Home address',         visible: true },
+  { key: 'your_bowls',        label: 'Your bowls',           visible: true },
+  { key: 'emergency_contact', label: 'Emergency contact',    visible: true },
+  { key: 'additional',        label: 'Additional questions', visible: true },
+  { key: 'review',            label: 'Review & agree',       visible: true },
 ]
+
+// ── Join form config (brief 106 §3) ───────────────────────────────
+
+/** One row in the per-club section overrides payload. `order` is the
+ *  effective index after overrides apply; `visible` toggles the section
+ *  on/off; `label_override` optionally renames it (FE skips this control
+ *  in v1 per brief 106 §7). */
+export interface JoinFormSectionOverride {
+  key: string
+  order: number
+  visible: boolean
+  label_override?: string | null
+}
+
+export interface JoinFormConfigPayload {
+  sections: JoinFormSectionOverride[]
+}
+
+export type JoinFormConfigErrorCode =
+  | 'unknown_section'
+  | 'bad_order'
+  | 'sections_required'
+  | 'forbidden'
+  | 'not_found'
+
+/** PATCH /clubs/{club_id}/join-form-config — owner-only write of the
+ *  section visibility + order overrides. Updated variant response is
+ *  returned so callers don't need a follow-up GET.
+ *
+ *  Backend ships this with brief 106 (see §3.2). While the endpoint is
+ *  pre-live, calls return 404; callers can either show a friendly
+ *  "saving sections is coming soon" toast or retry when the endpoint
+ *  lands — the FE doesn't need to know. */
+export async function updateJoinFormConfig(
+  clubId: number,
+  payload: JoinFormConfigPayload,
+  opts: { signal?: AbortSignal } = {},
+): Promise<VariantConfig> {
+  const res = await authedFetch<Envelope<VariantConfig>>(
+    `${VENUE_BASE}/clubs/${clubId}/join-form-config`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+      signal: opts.signal,
+    },
+  )
+  return res.data
+}

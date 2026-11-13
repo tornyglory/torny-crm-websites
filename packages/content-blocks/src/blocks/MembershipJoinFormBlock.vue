@@ -158,6 +158,19 @@ function sectionVisible(key: string): boolean {
   return match ? match.visible !== false : true
 }
 
+/** Brief 106 §5 — per-club section label overrides. Backend merges
+ *  `label_override` into the `label` field on the variant response, so
+ *  this lookup picks up both the variant default and any admin rename
+ *  without the block having to know which is which. Falls back to the
+ *  hardcoded copy when the host hasn't wired `joinFormSections` yet. */
+function sectionLabel(key: string, fallback: string): string {
+  const sections = ctx.value?.joinFormSections
+  if (!sections || sections.length === 0) return fallback
+  const match = sections.find((s) => s.key === key)
+  const label = match?.label?.trim()
+  return label && label.length > 0 ? label : fallback
+}
+
 /** One answer per facet, keyed by slug. Shape depends on input type:
  *  - string for select/radio/text/long_text/date
  *  - number for number
@@ -424,7 +437,7 @@ function joinFormErrorMessage(err: unknown): string {
           <div class="jf__section-head">
             <div class="jf__section-no">01</div>
             <div class="jf__section-copy">
-              <h2>Choose your tier</h2>
+              <h2>{{ sectionLabel('tier', 'Choose your tier') }}</h2>
               <p>Change or cancel any time. Pricing runs March to March.</p>
             </div>
           </div>
@@ -464,7 +477,7 @@ function joinFormErrorMessage(err: unknown): string {
           <div class="jf__section-head">
             <div class="jf__section-no">02</div>
             <div class="jf__section-copy">
-              <h2>About you</h2>
+              <h2>{{ sectionLabel('about_you', 'About you') }}</h2>
               <p>Only the membership committee sees this — we never share your details.</p>
             </div>
           </div>
@@ -501,7 +514,7 @@ function joinFormErrorMessage(err: unknown): string {
           <div class="jf__section-head">
             <div class="jf__section-no">03</div>
             <div class="jf__section-copy">
-              <h2>Home address</h2>
+              <h2>{{ sectionLabel('address', 'Home address') }}</h2>
               <p>For AGM notices and the annual handbook.</p>
             </div>
           </div>
@@ -537,7 +550,7 @@ function joinFormErrorMessage(err: unknown): string {
           <div class="jf__section-head">
             <div class="jf__section-no">04</div>
             <div class="jf__section-copy">
-              <h2>Emergency contact</h2>
+              <h2>{{ sectionLabel('emergency_contact', 'Emergency contact') }}</h2>
               <p>Someone we can call if you have an accident on the green. Used only in emergencies.</p>
             </div>
           </div>
@@ -568,7 +581,7 @@ function joinFormErrorMessage(err: unknown): string {
           <div class="jf__section-head">
             <div class="jf__section-no">+</div>
             <div class="jf__section-copy">
-              <h2>Additional questions</h2>
+              <h2>{{ sectionLabel('additional', 'Additional questions') }}</h2>
               <p>A few extra questions from the club.</p>
             </div>
           </div>
@@ -720,7 +733,7 @@ function joinFormErrorMessage(err: unknown): string {
           <div class="jf__section-head">
             <div class="jf__section-no">05</div>
             <div class="jf__section-copy">
-              <h2>Review &amp; agree</h2>
+              <h2>{{ sectionLabel('review', 'Review & agree') }}</h2>
               <p>One last look. Add anything you want the committee to know, then submit.</p>
             </div>
           </div>

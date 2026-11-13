@@ -372,13 +372,30 @@ export interface CustomFacet {
   updated_at: string
 }
 
+/** Unwrap a facets list payload. The backend uses `{data: [...]}` on
+ *  some endpoints and `{data: {facets: [...]}}` on others; accept
+ *  either so the FE doesn't silently drop rows when the shape shifts.
+ *  Mirrors the equivalent helper in the api-client's customFacets
+ *  resource (kept inline here so the server bundle stays slim). */
+function unwrapFacets(data: unknown): CustomFacet[] {
+  if (Array.isArray(data)) return data as CustomFacet[]
+  if (data && typeof data === 'object') {
+    const candidate = (data as Record<string, unknown>).facets
+      ?? (data as Record<string, unknown>).rows
+      ?? (data as Record<string, unknown>).items
+    if (Array.isArray(candidate)) return candidate as CustomFacet[]
+  }
+  return []
+}
+
 export async function fetchCustomFacets(slug: string): Promise<CustomFacet[]> {
   const config = useRuntimeConfig()
   try {
-    const res = await $fetch<Envelope<CustomFacet[]>>(`/public/clubs/${encodeURIComponent(slug)}/custom-facets`, {
-      baseURL: config.tornyApiBaseUrl,
-    })
-    return res.data ?? []
+    const res = await $fetch<Envelope<CustomFacet[] | { facets: CustomFacet[] }>>(
+      `/public/clubs/${encodeURIComponent(slug)}/custom-facets`,
+      { baseURL: config.tornyApiBaseUrl },
+    )
+    return unwrapFacets(res.data)
   } catch {
     return []
   }

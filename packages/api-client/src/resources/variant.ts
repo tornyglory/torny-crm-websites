@@ -185,20 +185,25 @@ export interface JoinFormConfigPayload {
 }
 
 export type JoinFormConfigErrorCode =
-  | 'unknown_section'
-  | 'bad_order'
+  // 400s
   | 'sections_required'
+  | 'bad_section'
+  // 403 / 404
   | 'forbidden'
   | 'not_found'
+  // 422s
+  | 'unknown_section'
+  | 'duplicate_section'
+  | 'bad_order'
+  | 'bad_label'
 
 /** PATCH /clubs/{club_id}/join-form-config — owner-only write of the
  *  section visibility + order overrides. Updated variant response is
- *  returned so callers don't need a follow-up GET.
+ *  returned so callers don't need a follow-up GET. Live since the
+ *  brief-106 backend deploy (commit `3ec7be4`).
  *
- *  Backend ships this with brief 106 (see §3.2). While the endpoint is
- *  pre-live, calls return 404; callers can either show a friendly
- *  "saving sections is coming soon" toast or retry when the endpoint
- *  lands — the FE doesn't need to know. */
+ *  Payload must ship the full list every time; backend validates that
+ *  `order` values form a contiguous 0..N-1 set (see brief 106 §8.3). */
 export async function updateJoinFormConfig(
   clubId: number,
   payload: JoinFormConfigPayload,

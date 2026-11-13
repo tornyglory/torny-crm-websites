@@ -140,6 +140,17 @@ type FacetCtx = NonNullable<BlockContext['customFacets']>[number]
 
 const facets = computed<FacetCtx[]>(() => (ctx.value?.customFacets ?? []).filter((f) => f.is_active))
 
+/** Brief 106 — section visibility map. Hosts that provide
+ *  `joinFormSections` on BlockContext can toggle hardcoded sections off
+ *  without any block-level opt-in. Missing entry defaults to `true`
+ *  (backward compat for hosts that haven't plumbed brief 106 yet). */
+function sectionVisible(key: string): boolean {
+  const sections = ctx.value?.joinFormSections
+  if (!sections || sections.length === 0) return true
+  const match = sections.find((s) => s.key === key)
+  return match ? match.visible !== false : true
+}
+
 /** One answer per facet, keyed by slug. Shape depends on input type:
  *  - string for select/radio/text/long_text/date
  *  - number for number
@@ -402,7 +413,7 @@ function joinFormErrorMessage(err: unknown): string {
       <!-- Right column — the actual form. -->
       <div class="jf__form">
         <!-- 01 · Tier -->
-        <section class="jf__section">
+        <section v-if="sectionVisible('tier')" class="jf__section">
           <div class="jf__section-head">
             <div class="jf__section-no">01</div>
             <div class="jf__section-copy">
@@ -442,7 +453,7 @@ function joinFormErrorMessage(err: unknown): string {
         </section>
 
         <!-- 02 · About you -->
-        <section class="jf__section">
+        <section v-if="sectionVisible('about_you')" class="jf__section">
           <div class="jf__section-head">
             <div class="jf__section-no">02</div>
             <div class="jf__section-copy">
@@ -479,7 +490,7 @@ function joinFormErrorMessage(err: unknown): string {
         </section>
 
         <!-- 03 · Address -->
-        <section class="jf__section">
+        <section v-if="sectionVisible('address')" class="jf__section">
           <div class="jf__section-head">
             <div class="jf__section-no">03</div>
             <div class="jf__section-copy">
@@ -515,7 +526,7 @@ function joinFormErrorMessage(err: unknown): string {
              Additional questions. -->
 
         <!-- 04 · Emergency contact -->
-        <section class="jf__section">
+        <section v-if="sectionVisible('emergency_contact')" class="jf__section">
           <div class="jf__section-head">
             <div class="jf__section-no">04</div>
             <div class="jf__section-copy">
@@ -546,7 +557,7 @@ function joinFormErrorMessage(err: unknown): string {
              the hardcoded numbering (01..05) stable; owners who add
              questions see them land between Emergency contact and
              Review & agree. -->
-        <section v-if="facets.length > 0" class="jf__section">
+        <section v-if="facets.length > 0 && sectionVisible('additional')" class="jf__section">
           <div class="jf__section-head">
             <div class="jf__section-no">+</div>
             <div class="jf__section-copy">
@@ -694,7 +705,10 @@ function joinFormErrorMessage(err: unknown): string {
           </div>
         </section>
 
-        <!-- 05 · Review & agree -->
+        <!-- 05 · Review & agree — always rendered, even when the
+             admin has toggled it off in the modal. This is where the
+             submit button + consent live; hiding it would break every
+             application attempt, so the block keeps it as a safety. -->
         <section class="jf__section">
           <div class="jf__section-head">
             <div class="jf__section-no">05</div>

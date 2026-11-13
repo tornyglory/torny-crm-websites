@@ -25,6 +25,10 @@ const { data: site } = await useSite()
 // fed into the BlockContext so the MembershipJoinFormBlock renders
 // them under the Additional questions section.
 const { facets: publicFacets } = usePublicFacets()
+// Brief 106 — join form section overrides. The merged variant list
+// drives per-section visibility on the public MembershipJoinFormBlock
+// (admins can hide About you / Address / etc. from the modal).
+const { variant: publicVariant } = useVariant()
 
 const blocks = computed<Block[] | null>(() => {
   const raw = site.value?.pages?.[props.slug]?.blocks
@@ -62,6 +66,7 @@ provide(BLOCK_CONTEXT_KEY, computed<BlockContext>(() => ({
   contact: site.value?.contact ?? undefined,
   hours: site.value?.hours ?? [],
   customFacets: publicFacets.value ?? [],
+  joinFormSections: publicVariant.value?.join_form_sections ?? [],
 })))
 </script>
 

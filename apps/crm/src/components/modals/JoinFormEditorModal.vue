@@ -152,9 +152,15 @@ function moveSection(i: number, dir: -1 | 1) {
   sections.value = next
 }
 
+/** Keys the FE never lets the admin hide, even if the backend accepts
+ *  a visible:false override. `review` holds the submit button + consent
+ *  — hiding it would break every application. */
+const LOCKED_VISIBLE_KEYS: readonly string[] = ['review']
+
 function toggleSection(i: number) {
   const row = sections.value[i]
   if (!row) return
+  if (LOCKED_VISIBLE_KEYS.includes(row.key)) return
   sections.value = sections.value.map((r, k) => (k === i ? { ...r, visible: !r.visible } : r))
 }
 
@@ -449,17 +455,29 @@ async function save() {
     emit('saved')
     emit('close')
   } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
-      // Backend hasn't shipped brief 106's endpoint yet — surface a
-      // clear hint rather than a mystery error. Facet changes already
-      // persisted individually so closing without a section save still
-      // commits most of the user's work.
-      saveError.value = 'Section visibility + order needs the brief-106 backend endpoint. Field edits are already saved.'
-    } else {
-      saveError.value = messageFor(err, 'Could not save section changes.')
-    }
+    saveError.value = sectionConfigMessageFor(err, 'Could not save section changes.')
   } finally {
     savingAll.value = false
+  }
+}
+
+/** Brief 106 §8.2 — map the live PATCH /join-form-config error codes
+ *  to admin-friendly copy. Falls back to the server's own message for
+ *  anything we haven't typed yet. Kept separate from the facet
+ *  messageFor so the two sets stay readable. */
+function sectionConfigMessageFor(err: unknown, fallback: string): string {
+  if (!(err instanceof ApiError)) return err instanceof Error ? err.message : fallback
+  const code = err.code as import('@torny/api-client').JoinFormConfigErrorCode | undefined
+  switch (code) {
+    case 'sections_required':  return 'Nothing to save — the sections list came through empty.'
+    case 'bad_section':        return 'One of the sections is malformed. Refresh and try again.'
+    case 'forbidden':          return 'Only the club owner can change the join form layout.'
+    case 'not_found':          return 'This club no longer exists — please refresh.'
+    case 'unknown_section':    return 'One of the sections is no longer available. Refresh the page and retry.'
+    case 'duplicate_section':  return 'The same section appears twice in the list — refresh and try again.'
+    case 'bad_order':          return 'The section order looks wrong. Refresh the modal to resync and retry.'
+    case 'bad_label':          return 'A section label is too long — keep custom names under 80 characters.'
+    default:                   return err.message || fallback
   }
 }
 
@@ -582,8 +600,10 @@ const facetsForSelected = computed<CustomFacet[]>(() => {
               <button
                 type="button"
                 class="jfe__toggle"
-                :class="{ 'is-on': sec.visible }"
+                :class="{ 'is-on': sec.visible, 'is-locked': LOCKED_VISIBLE_KEYS.includes(sec.key) }"
                 :aria-label="sec.visible ? 'Hide section' : 'Show section'"
+                :disabled="LOCKED_VISIBLE_KEYS.includes(sec.key)"
+                :title="LOCKED_VISIBLE_KEYS.includes(sec.key) ? 'Can’t hide — this section holds the submit button.' : ''"
                 @click.stop="toggleSection(i)"
               ><span class="jfe__toggle-knob" /></button>
             </li>
@@ -610,7 +630,7 @@ const facetsForSelected = computed<CustomFacet[]>(() => {
                   class="jfe__insp-title-input"
                   :placeholder="selectedSection.defaultLabel"
                   :aria-label="`Rename ${selectedSection.defaultLabel}`"
-                  maxlength="60"
+                  maxlength="80"
                 />
                 <button
                   v-if="selectedLabelOverridden"
@@ -975,6 +995,7 @@ const facetsForSelected = computed<CustomFacet[]>(() => {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 .jfe__toggle.is-on .jfe__toggle-knob { transform: translateX(18px); }
+.jfe__toggle.is-locked { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Right panel ─────────────────────────────────────────────── */
 .jfe__inspector {

@@ -836,6 +836,17 @@ export interface BlockContext {
       position: string | null
     }>
   }>
+  /** Brief 106 — merged join-form sections (variant defaults plus any
+   *  per-club overrides). Public MembershipJoinFormBlock reads this to
+   *  decide which hardcoded sections to render; sections with
+   *  `visible: false` are hidden end-to-end. Omitted = render every
+   *  section unconditionally (backward compat for hosts that haven't
+   *  wired brief 106 yet). */
+  joinFormSections?: Array<{
+    key: string
+    label: string
+    visible?: boolean
+  }>
   /** Brief 105 — owner-configured custom join-form facets (active only,
    *  in display order). The MembershipJoinFormBlock groups them by
    *  `section_key` and renders the matching input per `input_type`. */

@@ -3095,7 +3095,8 @@ async function submitEdit() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 12px 16px;
   padding: 0 0 12px;
   margin-top: 4px;
 }
@@ -3104,7 +3105,9 @@ async function submitEdit() {
   align-items: center;
   gap: 10px;
   padding: 9px 14px;
-  width: 360px;
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 360px;
   background: var(--color-surface);
   border-radius: 999px;
   color: var(--color-fog);
@@ -3128,9 +3131,10 @@ async function submitEdit() {
   padding: 3px;
   background: var(--color-surface);
   border-radius: 999px;
+  flex-shrink: 0;
 }
 .inbox-filter {
-  padding: 7px 14px;
+  padding: 7px 12px;
   border: 0;
   background: transparent;
   border-radius: 999px;
@@ -3139,6 +3143,7 @@ async function submitEdit() {
   font-weight: 500;
   color: var(--color-fog);
   cursor: pointer;
+  white-space: nowrap;
   transition: background 120ms ease, color 120ms ease;
 }
 .inbox-filter:hover:not(.is-active) { color: var(--color-ink); }
@@ -3160,6 +3165,8 @@ async function submitEdit() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--color-mute);

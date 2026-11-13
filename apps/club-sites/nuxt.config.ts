@@ -10,6 +10,12 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     tornyApiBaseUrl: process.env.NUXT_TORNY_API_BASE_URL ?? 'http://localhost:3000',
+    // Brief 105 / 106 endpoints (variant + custom-facets) live on the
+    // Venue API stack, not the SAM CRM base. Fallback is the prod
+    // deploy; override locally via NUXT_TORNY_VENUE_BASE_URL if you
+    // need to point at a staging stack.
+    tornyVenueBaseUrl: process.env.NUXT_TORNY_VENUE_BASE_URL
+      ?? 'https://tbqlfxlc0e.execute-api.ap-southeast-2.amazonaws.com/Prod',
     revalidateSecret: process.env.NUXT_REVALIDATE_SECRET ?? 'dev-secret-change-me',
     public: {
       siteUrl: process.env.NUXT_PUBLIC_SITE_URL ?? 'http://localhost:3001',

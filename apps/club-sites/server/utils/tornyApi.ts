@@ -327,7 +327,9 @@ export async function fetchVariant(slug: string): Promise<VariantConfig | null> 
   const config = useRuntimeConfig()
   try {
     const res = await $fetch<Envelope<VariantConfig>>(`/public/clubs/${encodeURIComponent(slug)}/variant`, {
-      baseURL: config.tornyApiBaseUrl,
+      // Brief 105/106 endpoints live on the Venue API stack. Using
+      // tornyApiBaseUrl (the SAM/CRM base) returns 404/403.
+      baseURL: config.tornyVenueBaseUrl as string,
     })
     return res.data ?? null
   } catch {
@@ -393,7 +395,8 @@ export async function fetchCustomFacets(slug: string): Promise<CustomFacet[]> {
   try {
     const res = await $fetch<Envelope<CustomFacet[] | { facets: CustomFacet[] }>>(
       `/public/clubs/${encodeURIComponent(slug)}/custom-facets`,
-      { baseURL: config.tornyApiBaseUrl },
+      // Brief 105 endpoint lives on the Venue API stack.
+      { baseURL: config.tornyVenueBaseUrl as string },
     )
     return unwrapFacets(res.data)
   } catch {

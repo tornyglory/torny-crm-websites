@@ -883,6 +883,20 @@ function joinFormErrorMessage(err: unknown): string {
   box-sizing: border-box;
   resize: vertical;
 }
+/* Replace the OS-native select caret with a design-aligned chevron so
+ * the arrow sits at the same inset across browsers. Padding-right
+ * reserves space for the chevron so long option labels don't overlap
+ * it. */
+.jf__field select,
+.jf__select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 44px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'><path d='M4 6l4 4 4-4' stroke='%230A0A0B' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  background-size: 14px 14px;
+}
 .jf__field input:focus, .jf__field textarea:focus, .jf__field select:focus { outline: none; border-color: var(--color-ink); box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 15%, transparent); }
 .jf__field textarea { min-height: 96px; line-height: 150%; }
 .jf__field input::placeholder, .jf__field textarea::placeholder { color: var(--color-mute); }

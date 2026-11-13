@@ -1,6 +1,35 @@
 export { createTornyClient } from './client'
 export type { TornyClient, TornyClientOptions } from './client'
 export * from './types'
+
+// Brief 105 — variant + custom facets
+export * as variant from './resources/variant'
+export type {
+  VerticalSlug,
+  VariantTerminology,
+  VariantModules,
+  JoinFormSection,
+  VariantConfig,
+} from './resources/variant'
+export {
+  CLUB_DEFAULT_TERMINOLOGY,
+  CLUB_DEFAULT_MODULES,
+  CLUB_DEFAULT_JOIN_FORM_SECTIONS,
+} from './resources/variant'
+export * as customFacets from './resources/customFacets'
+export type {
+  FacetInputType,
+  FacetOption,
+  CustomFacet,
+  FacetValueInput,
+  FacetValuesPayload,
+  FacetAvailability,
+  CreateFacetInput,
+  UpdateFacetInput,
+  ReorderFacetsInput,
+  FacetErrorCode,
+} from './resources/customFacets'
+
 export * as members from './resources/members'
 export type {
   MemberStatus,

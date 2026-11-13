@@ -8,6 +8,8 @@
 
 import { CRM_BASE, MEDIA_BASE } from '../config'
 import { authedFetch, publicFetch } from '../http'
+import type { FacetAvailability } from './customFacets'
+export type { FacetAvailability }
 // The CDK stack (same host as media + block uploads) carries a few routes
 // that overflowed the CRM stack's CloudFormation resource cap. `DELETE
 // /payments/{id}` is one — reuse MEDIA_BASE until the backend unifies.
@@ -168,6 +170,10 @@ export interface RosterFilters {
   status: 'all' | MemberStatus
   role: MemberRole | null
   search: string | null
+  /** Active custom-facet filters (brief 105 §2.4). Each entry is a
+   *  `{slug, values}` pair where values is the raw comma-list the client
+   *  sent — the server echoes it back so callers can rehydrate state. */
+  facets?: Array<{ slug: string; values: string[] }>
 }
 
 export interface PendingInvite {
@@ -185,6 +191,10 @@ export interface RosterResponse {
   counts: RosterCounts
   pagination: RosterPagination
   filters: RosterFilters
+  /** Facets the club has marked `searchable: true` — the Members list
+   *  renders one filter chip per entry (brief 105 §3.4). Present on
+   *  every response so chips stay in sync with the config. */
+  facets_available?: FacetAvailability[]
 }
 
 interface Envelope<T> {
@@ -214,6 +224,10 @@ export interface ListRosterParams {
   /** Same as `membership_type_id` but by slug (e.g. `student-member`).
    *  Both filters union when combined. */
   membership_type_slug?: MembershipSlugFilter
+  /** Custom-facet filters (brief 105 §2.4). Keys are facet slugs,
+   *  values are the picked option values. The serialiser emits
+   *  `facet_<slug>=v1,v2` per entry. OR within a facet, AND across. */
+  facets?: Record<string, string[]>
 }
 
 function serialiseFilter(value: MembershipTypeFilter | MembershipSlugFilter): string {
@@ -250,6 +264,14 @@ export async function listRoster(
   if (params.membership_type_slug != null) {
     const v = serialiseFilter(params.membership_type_slug)
     if (v.length > 0) qs.set('membership_type_slug', v)
+  }
+  // Brief 105: each entry becomes `facet_<slug>=v1,v2`. Empty arrays
+  // are skipped so clearing a chip doesn't leave a dangling filter.
+  if (params.facets) {
+    for (const [slug, values] of Object.entries(params.facets)) {
+      if (!Array.isArray(values) || values.length === 0) continue
+      qs.set(`facet_${slug}`, values.join(','))
+    }
   }
 
   const url = qs.toString().length > 0

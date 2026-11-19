@@ -504,6 +504,7 @@ export type {
   VenueBookingDeleteResult,
   VenueBookingErrorCode,
   SlotUnavailableData,
+  LeadTimeViolatedData,
   VenueBookingCheckoutResult,
   ClubNotPaymentReadyData,
   TakenSlot,

@@ -180,22 +180,51 @@ export type VenueBookingErrorCode =
   | 'bad_status_transition'
   | 'forbidden'
   | 'not_found'
-  /** Slot is at capacity for the requested date — brief 85 §4. Fires on
-   *  both `/checkout` and the direct submit when live bookings for
-   *  `(slot_id, booking_date)` have hit the slot's `max_bookings`. The
-   *  response carries `data: SlotUnavailableData` so the FE can tell
-   *  the renter which slot + date + capacity blocked the booking. */
+  /** Slot is at capacity for the requested date OR an overlapping
+   *  sibling slot is booked — brief 85 §4 + brief 109 §7 Q3. Fires on
+   *  both `/checkout` and the direct submit. The response carries
+   *  `data: SlotUnavailableData` so the FE can tell the renter which
+   *  slot + date + capacity (capacity flavour) or which overlapping
+   *  slot (overlap flavour) blocked the booking. */
   | 'slot_unavailable'
+  /** Brief 109 §7 Q2 — the renter's computed slot start is earlier
+   *  than the club's minimum-notice window. Response carries
+   *  `data: { min_lead_hours, earliest_bookable_at }` so the FE can
+   *  surface a specific message and refresh the calendar. */
+  | 'lead_time_violated'
+  /** Brief 109 §7 Q4 — defensive backstop. FE should pre-filter addons
+   *  by `applies_to_slot_ids`; this fires if the payload still names an
+   *  addon that's out-of-scope for the chosen slot. */
+  | 'addon_not_in_scope'
 
-/** The `data` block on a 409 `slot_unavailable`. Brief 85 §4. */
+/** The `data` block on a 409 `slot_unavailable`. Brief 85 §4 for the
+ *  capacity flavour, brief 109 §7 Q3 for the overlap flavour. Both
+ *  share the code but carry different shapes — capacity returns
+ *  `{ slot_id, date, capacity }`, overlap returns
+ *  `{ slot_id, date, conflict_slot_id, conflict_label }`. */
 export interface SlotUnavailableData {
   slot_id: number
-  /** `YYYY-MM-DD` — the booking date that's full. */
+  /** `YYYY-MM-DD` — the booking date that's blocked. */
   date: string
-  /** The slot's current `max_bookings` — rendered in the "already
-   *  booked" copy so the renter understands how many simultaneous
-   *  bookings the venue allows. */
-  capacity: number
+  /** Capacity flavour — the slot's current `max_bookings`. Absent on
+   *  overlap-flavour responses. */
+  capacity?: number
+  /** Overlap flavour — the sibling slot id whose booking collides with
+   *  the requested slot. Absent on capacity-flavour responses. */
+  conflict_slot_id?: number
+  /** Overlap flavour — the sibling slot's human label, rendered in the
+   *  user-facing error ("That slot overlaps Afternoon which is already
+   *  booked on this date."). */
+  conflict_label?: string
+}
+
+/** The `data` block on a 422 `lead_time_violated`. Brief 109 §7 Q2. */
+export interface LeadTimeViolatedData {
+  min_lead_hours: number
+  /** ISO-8601 UTC — the earliest instant the requested slot can be
+   *  booked. Returned so FE can surface a specific "earliest available
+   *  is X" copy rather than just the hour count. */
+  earliest_bookable_at: string
 }
 
 interface Envelope<T> {
@@ -393,7 +422,21 @@ export interface TakenSlot {
 }
 
 export interface VenueAvailabilityResult {
+  /** Brief 85 + brief 109 — slots that can't be booked on `date`. A row
+   *  joins the list when either (a) the slot is directly booked and
+   *  capacity is used up, or (b) a different slot in the same package
+   *  overlaps its window. Public read filters out stale rows. */
   taken: TakenSlot[]
+  /** Brief 109 §2.2 — per-club minimum-notice window. Any slot whose
+   *  computed start (`booking_date` + `default_start_time` in the
+   *  club's tz) is earlier than this ISO-8601 UTC timestamp is
+   *  server-rejected on submit with 422 `lead_time_violated`. FE
+   *  should mirror the gate client-side. Null = backend hasn't shipped
+   *  the field yet; FE falls back to its own guess (zero gate). */
+  lead_blocked_until?: string | null
+  /** Brief 109 §2.2 — the integer that produced `lead_blocked_until`.
+   *  Useful for copy ("Bookings need at least 48 hours notice"). */
+  min_lead_hours?: number | null
 }
 
 /** `GET /public/clubs/:slug/venue-availability?from=…&to=…[&package_id=…]`

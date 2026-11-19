@@ -27,6 +27,7 @@ import {
   type VenueBookingProps,
   type VenueBookingPackage,
   type VenueBookingSlot,
+  type VenueBookingAddon,
 } from '../types'
 
 const props = withDefaults(defineProps<VenueBookingProps>(), {
@@ -92,7 +93,15 @@ function mapFetchedPackage(p: PublicVenuePackage): VenueBookingPackage {
       id: s.id,
       label: s.label,
       sub: s.sub ?? undefined,
+      // Brief 109 — owner-managed marketing pill + scheduling fields
+      // for lead-time gating.
+      badge: s.badge ?? null,
       price: Math.round(s.price_cents / 100),
+      durationHours: typeof s.duration_hours === 'string'
+        ? parseFloat(s.duration_hours)
+        : s.duration_hours ?? null,
+      defaultStartTime: s.default_start_time ?? null,
+      maxBookings: s.max_bookings ?? 1,
     })),
     addons: p.addons.map((a) => ({
       id: a.id,
@@ -103,6 +112,8 @@ function mapFetchedPackage(p: PublicVenuePackage): VenueBookingPackage {
       countable: a.countable,
       defaultQuantity: a.default_quantity ?? undefined,
       defaultSelected: a.default_selected,
+      // Brief 109 — slot-scope filter. null = applies to every slot.
+      appliesToSlotIds: a.applies_to_slot_ids ?? null,
     })),
     bondAmount: p.bond_cents > 0 ? Math.round(p.bond_cents / 100) : undefined,
     bondLabel: p.bond_label ?? undefined,
@@ -195,11 +206,18 @@ const monthLabel = computed(() =>
   }),
 )
 
-// ── Availability lookup (brief 84) ────────────────────────────
+// ── Availability lookup (brief 84 + brief 109) ────────────────
 // Map of YYYY-MM-DD → set of slot_ids that are already taken for the
 // currently-fetched month + package. Populated by fetchAvailability();
 // consumed by calendarCells (grey out) + the slot picker at step 2.
 const takenByDate = ref<Map<string, Set<number>>>(new Map())
+/** Brief 109 §2.2 — ISO-8601 UTC. Slots whose computed start is earlier
+ *  than this are server-rejected. null while the first fetch is in
+ *  flight or when the backend hasn't shipped the field yet. */
+const leadBlockedUntil = ref<Date | null>(null)
+/** Brief 109 §2.2 — paired integer, surfaced in copy
+ *  ("Bookings need at least 48 hours notice"). */
+const minLeadHours = ref<number | null>(null)
 let availabilityController: AbortController | null = null
 
 function ymd(d: Date): string {
@@ -243,6 +261,16 @@ async function fetchAvailability() {
       next.set(t.date, set)
     }
     takenByDate.value = next
+    // Brief 109 §2.2 — mirror the server's lead-time window so slots
+    // start-before-the-cutoff can't be clicked. ISO string → Date; null
+    // if the backend hasn't shipped the field yet (older deploys).
+    if (res.lead_blocked_until) {
+      const parsed = new Date(res.lead_blocked_until)
+      leadBlockedUntil.value = Number.isNaN(parsed.getTime()) ? null : parsed
+    } else {
+      leadBlockedUntil.value = null
+    }
+    minLeadHours.value = res.min_lead_hours ?? null
   } catch {
     // Network blip — leave the previous map in place. Worst case the
     // renter clicks an already-taken date and the backend bounces on submit.
@@ -311,6 +339,51 @@ function isSlotTakenForSelectedDate(slotId: number | null | undefined): boolean 
   return taken?.has(slotId) ?? false
 }
 
+/** Brief 109 §3.4 — compute a slot's start instant from the picked
+ *  date + `defaultStartTime` (HH:MM:SS in the club's local tz) and
+ *  compare against the server's lead-time cutoff. The Date arithmetic
+ *  runs in the browser's tz; for clubs in Pacific/Auckland served from
+ *  NZ-timezoned browsers the result is identical. Clubs with heavy
+ *  cross-tz traffic may need a luxon pass but that's a follow-up. */
+function slotStartInstant(date: Date, slot: VenueBookingSlot): Date | null {
+  if (!slot.defaultStartTime) return null
+  const [hRaw, mRaw] = slot.defaultStartTime.split(':')
+  const h = Number(hRaw)
+  const m = Number(mRaw ?? '0')
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null
+  const instant = new Date(date)
+  instant.setHours(h, m, 0, 0)
+  return instant
+}
+
+/** Brief 109 §3.3 — grey any slot whose computed start is earlier than
+ *  the server's `lead_blocked_until` cutoff. Falls open (false) when
+ *  the backend hasn't shipped the field — don't over-block. */
+function isSlotLeadTimeBlocked(slot: VenueBookingSlot): boolean {
+  const cutoff = leadBlockedUntil.value
+  if (!cutoff) return false
+  const date = selectedDate.value
+  if (!date) return false
+  const start = slotStartInstant(date, slot)
+  if (!start) return false
+  return start.getTime() < cutoff.getTime()
+}
+
+/** Brief 109 §3.2 — per-cell free-count data for the calendar legend.
+ *  Returns `{ free, total, allFree, allTaken }`. Disabled slots are
+ *  excluded from the total so a 4-slot package with 1 disabled reads
+ *  as "/ 3" in the legend, not "/ 4". */
+function dayAvailability(date: Date): { free: number; total: number; allFree: boolean; allTaken: boolean } {
+  const pkg = selectedPackage.value
+  if (!pkg) return { free: 0, total: 0, allFree: false, allTaken: false }
+  const openSlots = pkg.slots.filter((s) => !s.disabled && s.id != null)
+  const total = openSlots.length
+  if (total === 0) return { free: 0, total: 0, allFree: false, allTaken: false }
+  const taken = takenByDate.value.get(ymd(date)) ?? new Set<number>()
+  const free = openSlots.reduce((n, s) => (taken.has(s.id as number) ? n : n + 1), 0)
+  return { free, total, allFree: free === total, allTaken: free === 0 }
+}
+
 const selectedDate = ref<Date | null>(null)
 function pickDate(cell: CalendarCell) {
   if (!cell.bookable) return
@@ -340,11 +413,26 @@ const selectedSlot = ref<VenueBookingSlot | null>(null)
 function pickSlot(s: VenueBookingSlot) {
   if (s.disabled) return
   if (isSlotTakenForSelectedDate(s.id)) return
+  if (isSlotLeadTimeBlocked(s)) return
   selectedSlot.value = s
 }
 function isSelectedSlot(s: VenueBookingSlot): boolean {
   return selectedSlot.value?.label === s.label
 }
+
+/** Brief 109 §3.3 — the add-on grid shows every addon with
+ *  `appliesToSlotIds === null` plus addons whose scope includes the
+ *  currently-picked slot. Before a slot is picked, show everything so
+ *  the renter can preview the package. */
+const visibleAddons = computed<VenueBookingAddon[]>(() => {
+  const all = selectedPackage.value?.addons ?? []
+  const slotId = selectedSlot.value?.id
+  if (slotId == null) return all
+  return all.filter((a) => {
+    if (a.appliesToSlotIds == null) return true
+    return a.appliesToSlotIds.includes(slotId)
+  })
+})
 
 // ── Step 2 state ──────────────────────────────────────────────
 const form = reactive({
@@ -361,29 +449,34 @@ function bumpGuests(delta: number) {
   form.guests = Math.max(1, form.guests + delta)
 }
 
-// Add-on state is a map keyed by addon index for the selected package.
+// Add-on state is a map keyed by addon identity for the selected
+// package. Keyed on addon id when available (fetch mode) + the package
+// slug as a namespace, otherwise name as a fallback for props-mode
+// demos. Brief 109 filters the visible list by applies_to_slot_ids,
+// so index-based keys would collide when the filter kicks in; identity
+// keys stay stable.
 interface AddonState { checked: boolean; quantity: number }
 const addonState = ref<Record<string, AddonState>>({})
-function addonKey(i: number): string {
-  return `${selectedPackage.value?.slug ?? 'pkg'}:${i}`
+function addonKey(a: VenueBookingAddon): string {
+  const pkg = selectedPackage.value?.slug ?? 'pkg'
+  return `${pkg}:${a.id ?? a.name}`
 }
-function addonFor(i: number): AddonState {
-  const key = addonKey(i)
+function addonFor(a: VenueBookingAddon): AddonState {
+  const key = addonKey(a)
   if (!addonState.value[key]) {
-    const a = selectedPackage.value?.addons?.[i]
     addonState.value[key] = {
-      checked: Boolean(a?.defaultSelected),
-      quantity: a?.defaultQuantity ?? (a?.countable ? 1 : 1),
+      checked: Boolean(a.defaultSelected),
+      quantity: a.defaultQuantity ?? 1,
     }
   }
   return addonState.value[key]!
 }
-function toggleAddon(i: number) {
-  const s = addonFor(i)
+function toggleAddon(a: VenueBookingAddon) {
+  const s = addonFor(a)
   s.checked = !s.checked
 }
-function bumpAddon(i: number, delta: number) {
-  const s = addonFor(i)
+function bumpAddon(a: VenueBookingAddon, delta: number) {
+  const s = addonFor(a)
   if (!s.checked) s.checked = true
   s.quantity = Math.max(1, s.quantity + delta)
 }
@@ -395,15 +488,16 @@ const lineItems = computed<LineItem[]>(() => {
   const pkg = selectedPackage.value
   const slot = selectedSlot.value
   if (pkg && slot) items.push({ label: `${pkg.name} · ${slot.label}`, amount: slot.price })
-  if (pkg?.addons) {
-    pkg.addons.forEach((a, i) => {
-      const s = addonFor(i)
-      if (!s.checked) return
-      const qty = a.countable ? s.quantity : 1
-      items.push({
-        label: a.countable ? `${a.name} × ${qty}` : a.name,
-        amount: a.price * qty,
-      })
+  // Brief 109 — iterate the visible addon set so filtered-out addons
+  // don't sneak into the line items if the user had them pre-checked
+  // before the slot narrowed the list.
+  for (const a of visibleAddons.value) {
+    const s = addonFor(a)
+    if (!s.checked) continue
+    const qty = a.countable ? s.quantity : 1
+    items.push({
+      label: a.countable ? `${a.name} × ${qty}` : a.name,
+      amount: a.price * qty,
     })
   }
   if (pkg?.bondAmount) {
@@ -457,8 +551,8 @@ function buildMessage(): string {
     selectedDateLabel.value,
     `Setup: ${form.setupStyle}`,
   ].join('\n')
-  const addons = (pkg?.addons ?? [])
-    .map((a, i) => ({ addon: a, state: addonFor(i) }))
+  const addons = visibleAddons.value
+    .map((a) => ({ addon: a, state: addonFor(a) }))
     .filter((x) => x.state.checked)
     .map(({ addon, state }) =>
       addon.countable ? `• ${addon.name} × ${state.quantity}` : `• ${addon.name}`,
@@ -479,8 +573,8 @@ function buildVenueBookingsPayload() {
   const slot = selectedSlot.value!
   const date = selectedDate.value!
   const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-  const checkedAddons = (pkg.addons ?? [])
-    .map((addon, i) => ({ addon, state: addonFor(i) }))
+  const checkedAddons = visibleAddons.value
+    .map((addon) => ({ addon, state: addonFor(addon) }))
     .filter((x) => x.state.checked && x.addon.id != null)
     .map(({ addon, state }) => ({
       addon_id: addon.id as number,
@@ -570,13 +664,43 @@ async function submit() {
     }
     await submitWithoutPayment()
   } catch (err) {
-    if (err instanceof ApiError) {
-      submitError.value = err.message || "We couldn't send that. Try again."
-    } else {
-      submitError.value = "We couldn't send that. Try again."
-    }
+    submitError.value = messageForSubmitError(err)
+    // Brief 109 — most failures mean the public calendar is stale;
+    // refresh so the next attempt sees the live state. Harmless to
+    // run on generic errors too.
+    void fetchAvailability()
   } finally {
     submitting.value = false
+  }
+}
+
+/** Brief 109 §7 — map the submit error codes to specific copy. The
+ *  409 `slot_unavailable` carries two different data shapes — capacity
+ *  flavour (`capacity` present) vs overlap flavour (`conflict_label`
+ *  present) — so the message swaps on which field the server returned. */
+function messageForSubmitError(err: unknown): string {
+  if (!(err instanceof ApiError)) return "We couldn't send that. Try again."
+  const code = err.code
+  const data = (err.body?.data ?? undefined) as
+    | { min_lead_hours?: number; conflict_label?: string; capacity?: number }
+    | undefined
+  switch (code) {
+    case 'lead_time_violated': {
+      const hours = data?.min_lead_hours ?? minLeadHours.value ?? 0
+      return hours > 0
+        ? `Bookings need at least ${hours} hours notice — try a later date or slot.`
+        : 'That slot is too soon to book — try a later date or slot.'
+    }
+    case 'slot_unavailable': {
+      if (data?.conflict_label) {
+        return `That slot overlaps ${data.conflict_label}, which is already booked on this date. Pick another slot or date.`
+      }
+      return 'That slot is fully booked — please choose a different time or date.'
+    }
+    case 'addon_not_in_scope':
+      return "One of your add-ons isn't available for that slot. We've refreshed the list — give it another go."
+    default:
+      return err.message || "We couldn't send that. Try again."
   }
 }
 
@@ -678,7 +802,15 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
               @click="pickDate(cell)"
             >
               <span class="vb__cal-day-n">{{ cell.day }}</span>
-              <span v-if="cell.inMonth && cell.bookable" class="vb__cal-day-sub">Free</span>
+              <!-- Brief 109 §3.2 — per-cell free-count. "FREE" when
+                   every slot is open, "N/M FREE" for partial availability,
+                   "BOOKED" when every slot is taken. -->
+              <template v-if="cell.inMonth && cell.bookable">
+                <span class="vb__cal-day-sub">
+                  <template v-if="dayAvailability(cell.date).allFree">Free</template>
+                  <template v-else>{{ dayAvailability(cell.date).free }}/{{ dayAvailability(cell.date).total }} free</template>
+                </span>
+              </template>
               <span v-else-if="cell.inMonth && cell.fullyBooked" class="vb__cal-day-sub vb__cal-day-sub--full">Booked</span>
             </button>
           </div>
@@ -706,15 +838,23 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
               class="vb__slot"
               :class="{
                 'vb__slot--selected': isSelectedSlot(s),
-                'vb__slot--disabled': s.disabled || isSlotTakenForSelectedDate(s.id),
+                'vb__slot--disabled': s.disabled || isSlotTakenForSelectedDate(s.id) || isSlotLeadTimeBlocked(s),
               }"
-              :title="isSlotTakenForSelectedDate(s.id) ? 'Already booked' : undefined"
+              :title="isSlotTakenForSelectedDate(s.id)
+                ? 'Already booked'
+                : isSlotLeadTimeBlocked(s)
+                  ? `Bookings need at least ${minLeadHours ?? 0} hours notice`
+                  : undefined"
               @click="pickSlot(s)"
             >
               <div class="vb__slot-copy">
+                <!-- Brief 109 §3.3 — owner-managed marketing pill;
+                     never fabricated, renders only when `badge` present. -->
+                <div v-if="s.badge" class="vb__slot-badge">{{ s.badge }}</div>
                 <div class="vb__slot-label">{{ s.label }}</div>
                 <div v-if="s.sub" class="vb__slot-sub">{{ s.sub }}</div>
                 <div v-if="isSlotTakenForSelectedDate(s.id)" class="vb__slot-sub vb__slot-sub--taken">Already booked</div>
+                <div v-else-if="isSlotLeadTimeBlocked(s)" class="vb__slot-sub vb__slot-sub--taken">Needs {{ minLeadHours ?? 0 }}h notice</div>
               </div>
               <div class="vb__slot-check" aria-hidden="true">
                 <svg v-if="isSelectedSlot(s)" width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -790,18 +930,20 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
             </div>
           </section>
 
-          <!-- Add-ons -->
-          <section v-if="(selectedPackage?.addons?.length ?? 0) > 0" class="vb__card">
+          <!-- Add-ons — brief 109 §3.3 filters by `appliesToSlotIds`
+               once a slot is picked so renters never see add-ons
+               that aren't bookable with their chosen slot. -->
+          <section v-if="visibleAddons.length > 0" class="vb__card">
             <div class="vb__card-head"><span class="vb__card-num">02</span><h2 class="vb__card-title">Add-ons</h2></div>
             <ul class="vb__addons">
               <li
-                v-for="(a, i) in (selectedPackage?.addons ?? [])"
-                :key="a.name"
+                v-for="a in visibleAddons"
+                :key="addonKey(a)"
                 class="vb__addon"
-                :class="{ 'vb__addon--on': addonFor(i).checked }"
+                :class="{ 'vb__addon--on': addonFor(a).checked }"
               >
-                <button type="button" class="vb__addon-check" @click="toggleAddon(i)" :aria-pressed="addonFor(i).checked">
-                  <svg v-if="addonFor(i).checked" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6l2.5 2.5L9.5 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <button type="button" class="vb__addon-check" @click="toggleAddon(a)" :aria-pressed="addonFor(a).checked">
+                  <svg v-if="addonFor(a).checked" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6l2.5 2.5L9.5 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
                 <div class="vb__addon-copy">
                   <div class="vb__addon-name">{{ a.name }}</div>
@@ -811,9 +953,9 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
                   ${{ a.price }}<span v-if="a.priceSuffix" class="vb__addon-suffix">{{ a.priceSuffix }}</span>
                 </div>
                 <div v-if="a.countable" class="vb__addon-qty">
-                  <button type="button" class="vb__step-btn" @click="bumpAddon(i, -1)" aria-label="Less">–</button>
-                  <span>{{ addonFor(i).quantity }}</span>
-                  <button type="button" class="vb__step-btn vb__step-btn--dark" @click="bumpAddon(i, 1)" aria-label="More">+</button>
+                  <button type="button" class="vb__step-btn" @click="bumpAddon(a, -1)" aria-label="Less">–</button>
+                  <span>{{ addonFor(a).quantity }}</span>
+                  <button type="button" class="vb__step-btn vb__step-btn--dark" @click="bumpAddon(a, 1)" aria-label="More">+</button>
                 </div>
               </li>
             </ul>
@@ -1074,6 +1216,19 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 .vb__slot--selected { background: var(--color-accent-soft); border-color: var(--color-accent); }
 .vb__slot--disabled { opacity: 0.4; cursor: not-allowed; }
 .vb__slot-copy { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.vb__slot-badge {
+  align-self: flex-start;
+  margin-bottom: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-accent, #2563EB);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
 .vb__slot-label { font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--color-ink); }
 .vb__slot-sub { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: var(--color-fog); text-transform: uppercase; }
 .vb__slot-sub--taken { color: #B91C1C; margin-top: 2px; }

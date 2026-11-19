@@ -393,8 +393,23 @@ export interface VenueBookingSlot {
   label: string
   /** Mono eyebrow under the label — e.g. "4 hours · $720 · Most booked". */
   sub?: string
+  /** Brief 109 §2.1 — owner-managed marketing badge (max 40 char).
+   *  Rendered as a pill above the card title when present. Never
+   *  fabricated — null/undefined means "no badge". */
+  badge?: string | null
   /** Base price for this slot. Added to the running total. */
   price: number
+  /** Brief 109 §3.4 — slot duration in hours (e.g. `4` for "9am – 1pm").
+   *  Combined with `defaultStartTime` to compute the slot's start
+   *  instant for lead-time gating. */
+  durationHours?: number | null
+  /** Brief 109 §3.4 — slot start as `HH:MM:SS` in the club's tz. Used
+   *  with the picked date to compute the start instant (vs
+   *  `lead_blocked_until`). */
+  defaultStartTime?: string | null
+  /** Brief 85 §5 — simultaneous bookings the slot can hold. Almost
+   *  always 1 for exclusive venue slots. */
+  maxBookings?: number
   /** Hidden from the picker when true (sold out / dark hours). */
   disabled?: boolean
   /** Pre-selects this slot when the wizard mounts. */
@@ -419,6 +434,10 @@ export interface VenueBookingAddon {
   defaultQuantity?: number
   /** Starts checked / counted. */
   defaultSelected?: boolean
+  /** Brief 109 §2.1 — optional slot-scope filter. `null`/undefined =
+   *  applies to every slot. `number[]` = only render when the chosen
+   *  slot's id is in the array. */
+  appliesToSlotIds?: number[] | null
 }
 
 export interface VenueBookingPackage {

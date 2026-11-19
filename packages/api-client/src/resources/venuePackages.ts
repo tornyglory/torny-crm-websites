@@ -202,8 +202,17 @@ export interface PublicVenueSlot {
   id: number
   label: string
   sub: string | null
+  /** Brief 109 §2.1 — owner-managed marketing badge (VARCHAR 40).
+   *  Rendered as a pill above the card title when non-null. Owners
+   *  set/clear via the CRM package editor; `null` = no badge. The FE
+   *  must not fabricate defaults — a null value means intentionally
+   *  blank, not "pick something reasonable". */
+  badge: string | null
   price_cents: number
-  duration_hours: number | null
+  /** MySQL DECIMAL arrives as a string on the wire (e.g. `"4.00"`).
+   *  Older payloads may ship as number; callers should coerce via
+   *  `parseFloat()` before rendering. */
+  duration_hours: number | string | null
   default_start_time: string | null
   display_order: number
   /** Simultaneous bookings per date — brief 85 §5. The public venue-
@@ -223,6 +232,13 @@ export interface PublicVenueAddon {
   default_quantity: number | null
   default_selected: boolean
   display_order: number
+  /** Brief 109 §2.1 — optional slot-scope filter. `null` = applies to
+   *  every slot (default + back-compat for pre-brief-109 rows).
+   *  `number[]` = only render this addon when the chosen slot's id is
+   *  in the array. Backend is defensive (submit returns 400
+   *  `addon_not_in_scope` on out-of-scope rows), but the FE should be
+   *  the primary filter so renters never see them. */
+  applies_to_slot_ids: number[] | null
 }
 
 export interface PublicVenuePackage {

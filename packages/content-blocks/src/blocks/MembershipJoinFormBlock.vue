@@ -17,6 +17,7 @@ import {
   type BlockContext,
   type MembershipJoinFormProps,
 } from '../types'
+import TornyDatePicker from '../components/TornyDatePicker.vue'
 
 const props = withDefaults(defineProps<MembershipJoinFormProps>(), {
   eyebrow: 'MEMBERSHIP · 2026 SEASON',
@@ -495,7 +496,7 @@ function joinFormErrorMessage(err: unknown): string {
             <div class="jf__row">
               <label class="jf__field jf__field--narrow">
                 <span>Date of birth</span>
-                <input v-model="form.dob" type="date" required />
+                <TornyDatePicker v-model="form.dob" placeholder="dd mmm yyyy" />
               </label>
               <label class="jf__field">
                 <span>Email</span>
@@ -620,11 +621,10 @@ function joinFormErrorMessage(err: unknown): string {
               </label>
               <label v-else-if="f.input_type === 'date'" class="jf__field jf__field--narrow">
                 <span>{{ f.label }} <em v-if="!f.required">(optional)</em></span>
-                <input
-                  :value="facetScalar(f.slug)"
-                  type="date"
-                  :required="f.required"
-                  @input="(e) => (facetValues[f.slug] = (e.target as HTMLInputElement).value)"
+                <TornyDatePicker
+                  :model-value="facetScalar(f.slug)"
+                  placeholder="dd mmm yyyy"
+                  @update:model-value="(v) => (facetValues[f.slug] = v ?? '')"
                 />
                 <span v-if="f.helper_text" class="jf__facet-hint">{{ f.helper_text }}</span>
               </label>

@@ -592,12 +592,15 @@ function initialsFor(name: string): string {
 // ── View calendar (link out to public site) ───────────────────
 
 function openPublicCalendar() {
-  const slug = clubStore.current?.slug
-  if (!slug) {
-    toast.error("Couldn't get this club's slug — try refreshing.")
+  // Brief 110 — subdomain is the tenant-routing key; slug is the
+  // venue-lookup key. For the ~2 clubs where the two differ, passing
+  // slug here would 404 the public preview.
+  const subdomain = clubStore.current?.subdomain ?? clubStore.current?.slug
+  if (!subdomain) {
+    toast.error("Couldn't get this club's subdomain — try refreshing.")
     return
   }
-  window.open(sitePreviewUrl(slug, '/events'), '_blank', 'noopener')
+  window.open(sitePreviewUrl(subdomain, '/events'), '_blank', 'noopener')
 }
 
 // ── Error helper ──────────────────────────────────────────────

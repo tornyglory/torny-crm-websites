@@ -64,13 +64,18 @@ export function useVariant() {
   const nuxtApp = useNuxtApp()
 
   const { data: variant } = useAsyncData<VariantConfig | null>(
-    () => `variant:${club.value?.slug ?? 'unknown'}`,
+    // Brief 110 — variant + custom-facets endpoints still key on
+    // subdomain (not clubs_data.slug). Prefer `subdomain` so the ~2
+    // drift clubs resolve; fall back to `slug` for older payloads
+    // that predate the field.
+    () => `variant:${club.value?.subdomain ?? club.value?.slug ?? 'unknown'}`,
     async () => {
-      if (!club.value?.slug) return null
-      return await $fetch<VariantConfig | null>(`/api/variant/${encodeURIComponent(club.value.slug)}`)
+      const key = club.value?.subdomain ?? club.value?.slug
+      if (!key) return null
+      return await $fetch<VariantConfig | null>(`/api/variant/${encodeURIComponent(key)}`)
     },
     {
-      watch: [() => club.value?.slug],
+      watch: [() => club.value?.subdomain, () => club.value?.slug],
       getCachedData: (key) => {
         const cached = nuxtApp.payload?.data?.[key] ?? nuxtApp.static?.data?.[key]
         return cached ?? undefined

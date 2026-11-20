@@ -44,18 +44,22 @@ function slugify(s: string): string {
 }
 
 async function previewSite(): Promise<void> {
-  if (!onboarding.data.subdomain && !clubStore.current?.slug) {
+  if (!onboarding.data.subdomain && !clubStore.current?.subdomain && !clubStore.current?.slug) {
     await Promise.all([onboarding.hydrate(), clubStore.hydrateFull()])
   }
-  const slug =
+  // Brief 110 — prefer `subdomain` (tenant-routing key) over `slug`
+  // (venue-lookup key). For the ~2 clubs where the two differ, slug
+  // wouldn't resolve a tenant.
+  const subdomain =
     (onboarding.data.subdomain?.trim() || null) ??
+    clubStore.current?.subdomain ??
     clubStore.current?.slug ??
     (clubStore.current?.name ? slugify(clubStore.current.name) : null)
-  if (!slug) {
-    toast.error("Couldn't get this club's slug — try refreshing.")
+  if (!subdomain) {
+    toast.error("Couldn't get this club's subdomain — try refreshing.")
     return
   }
-  window.open(sitePreviewUrl(slug, '/'), '_blank', 'noopener')
+  window.open(sitePreviewUrl(subdomain, '/'), '_blank', 'noopener')
 }
 
 function openBulkEmail(): void {

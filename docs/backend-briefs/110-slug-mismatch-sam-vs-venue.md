@@ -1,41 +1,46 @@
 # Brief 110 — Club slug mismatch between the SAM / CRM stack and the Venue stack
 
+> **STATUS — SHIPPED 2026-11-21** (commit `8f6b5a5`). `GET /clubs/resolve`
+> now returns the real `clubs_data.slug` under `data.slug`, with
+> `data.subdomain` added as a sibling field. The original brief's
+> "two drifted columns across two stacks" premise was wrong — see §3.
+> FE action required: audit any place that uses `data.slug` from resolve
+> as a subdomain substitute (URL construction, email link-back, etc.) and
+> switch to `data.subdomain` or `data.primary_host`. Downstream Venue-stack
+> calls keep working unchanged.
+
 **Scope:**
-- API (both stacks): make the slug the FE receives from `/clubs/resolve` (SAM / CRM stack) usable on every public Venue-stack endpoint. Pick one of the three options in §4 and ship it.
-- FE (`tornyglory/torny-crm-websites`): no changes needed for options A or C. Option B needs one trivial shape change (consume a new field on the resolve response).
+- API (SAM / CRM stack): `/clubs/resolve` response-shape change. Venue stack untouched.
+- FE (`tornyglory/torny-crm-websites`): one-site audit — swap `data.slug` → `data.subdomain` anywhere the field was being used to construct `<sub>.torny.pro` URLs.
 
-**Prereq:** none. Hit on live data today (2026-11-20) — easy to repro with Naenae.
-
-> **Backend status (2026-11-20):** suspected single-source-of-truth bug across `clubs` (SAM) and `clubs_data` (Venue). Flagging for Nev to pick the fix rather than the FE hacking around it per-call site. Brief 109's §2.1 even calls the gotcha out ("Slug note: the club's slug lives on `clubs_data.slug` (e.g. `nae-nae-bowling-club`), not `subdomain` (`naenae-bowling-club`). Easy mistake.") — same symptom, this brief is the structural fix.
+**Prereq:** none. Live in prod.
 
 ---
 
 ## 1. The bug
 
-Same club, two different slug values on two different backend stacks:
+Same club, two different slug values on two different backend stacks (as observed from the FE):
 
 | Stack | Column / endpoint | Value for Naenae |
 |---|---|---|
-| **SAM / CRM** | `clubs.slug` (via `GET /clubs/resolve`) | `naenae-bowling-club` |
-| **Venue** | `clubs_data.slug` (used by `/public/clubs/:slug/venue-*`) | `nae-nae-bowling-club` |
+| **SAM / CRM** | `/clubs/resolve` → `data.slug` | `naenae-bowling-club` |
+| **Venue** | `/public/clubs/:slug/venue-*` match on `clubs_data.slug` | `nae-nae-bowling-club` |
 
-Reproduced today via `localhost:3001`:
+Reproduced on 2026-11-20 against prod:
 
 ```js
-// Resolved tenant on the Nuxt dev server
-fetch('/api/site/naenae-bowling-club').then(r => r.json()).then(j => j.club.slug)
+fetch('.../clubs/resolve?host=naenae-bowling-club.torny.pro')
+    .then(r => r.json()).then(j => j.data.slug)
 // → "naenae-bowling-club"
 
-// Same slug against the Venue stack
-fetch('https://tbqlfxlc0e.execute-api.ap-southeast-2.amazonaws.com/Prod/public/clubs/naenae-bowling-club/venue-packages')
+fetch('.../public/clubs/naenae-bowling-club/venue-packages')
 // → 404 not_found
 
-// With the Venue-stack slug instead
-fetch('https://tbqlfxlc0e.execute-api.ap-southeast-2.amazonaws.com/Prod/public/clubs/nae-nae-bowling-club/venue-packages')
+fetch('.../public/clubs/nae-nae-bowling-club/venue-packages')
 // → 200 { packages: [...] }
 ```
 
-The FE has no way to know the slug it got from resolve isn't the slug the Venue stack will accept — same key name, same shape, different value.
+The FE had no way to know the slug it got from resolve wasn't the slug the Venue stack would accept — same key name, same shape, different value.
 
 ---
 
@@ -43,86 +48,122 @@ The FE has no way to know the slug it got from resolve isn't the slug the Venue 
 
 Every Venue-stack endpoint called by the public club site, keyed by slug:
 
-- `GET /public/clubs/:slug/variant` (brief 105) — CRM sidebar + public join form
-- `GET /public/clubs/:slug/custom-facets` (brief 105) — custom join-form fields
-- `GET /public/clubs/:slug/venue-packages` (brief 109) — venue booking page
-- `GET /public/clubs/:slug/venue-availability` (brief 109) — venue calendar
-- Anything else Venue-stack that lands `/public/clubs/:slug/*` in future.
+- `GET /public/clubs/:slug/variant` (brief 105)
+- `GET /public/clubs/:slug/custom-facets` (brief 105)
+- `GET /public/clubs/:slug/venue-packages` (brief 109)
+- `GET /public/clubs/:slug/venue-availability` (brief 109)
+- Any future Venue-stack `/public/clubs/:slug/*` endpoints.
 
-Today the symptom is:
+Pre-fix symptoms:
+- Public venue-booking page fell back to the hardcoded demo data in `pages/venue-hire/book.vue` (hence the "Bowls on the green $180 / session · Coach + all equipment" row rendering with Clubhouse prices).
+- Variant + facets happened to resolve for Naenae because they fall back to CLUB defaults on a 404 silently — hollow fallback without the admin seeing an error.
 
-- Public venue-booking page falls back to the hardcoded demo data in `pages/venue-hire/book.vue` (hence the "Bowls on the green $180 / session · Coach + all equipment" row rendering on `?space=green-bbq` with Clubhouse prices — see screenshot in Slack thread).
-- Variant + facets happen to resolve for Naenae because they fall back to their own CLUB defaults on a 404 silently, so the sidebar + join form render on `naenae-bowling-club`-style slugs by coincidence. Any club whose two slug columns drift gets the same hollow fallback without the admin ever seeing an error.
-
-How many clubs have drift today? Unknown without a diff of the two tables. For Naenae the drift is visible; the brief-109 author flagged the gotcha preemptively, which suggests it's wider than one club.
-
----
-
-## 3. Why it exists
-
-Legacy. The two stacks sync `clubs.name`, `clubs.subdomain`, `clubs.plan`, etc., but the `slug` column is independent — nothing enforces that `clubs.slug` and `clubs_data.slug` carry the same string. At some point they diverged (presumably when `subdomain` was normalised differently on each side — Naenae's `clubs.subdomain` is `naenae-bowling-club` on both, but the derived slug landed hyphenated differently). No explicit migration ever aligned them.
-
-The brief-105 and brief-106 FE filters (`filterLegacyJoinFormSections`, the client-side `your_bowls` strip) and brief 109's "slug note" callout are all symptoms of this — the FE has been papering over single-stack inconsistencies rather than the root cause.
+**Actual blast radius (confirmed 2026-11-20):** 2 clubs with drift out of 1,461 total rows (Naenae + a Richmond Union test row). 1,457 clubs have `clubs_data.slug IS NULL`. The symptoms were visible for Naenae because it's the only onboarded club with venue packages whose subdomain and slug differ.
 
 ---
 
-## 4. Fix options (backend picks one)
+## 3. Why it exists (the actual root cause)
 
-### Option A — one canonical slug, synced ✅ recommended
+**There is no `clubs` table.** The bug was never a two-stack drift. Both the SAM stack and the Venue stack read from the same `clubs_data` table on the shared Azure MySQL. What the FE saw was one handler mislabelling a single field.
 
-- Pick a canonical: whichever stack the admin UI writes to today (my bet: `clubs.slug` on SAM, since that's what onboarding writes and what `/clubs/resolve` returns).
-- One-time migration to overwrite `clubs_data.slug` from `clubs.slug` for every club. Run in a transaction, log diff counts, keep a backup table.
-- Add an ongoing sync on every slug change — either a trigger, an app-layer dual-write, or a nightly reconciliation job depending on how the two stacks talk today.
-- FE: zero changes. The slug it already has works everywhere.
+`src/handlers/resolve-club/index.js` was SELECT-ing `cd.subdomain` and returning it under the field name `slug`:
 
-Risks: existing bookings / applications / data rows in Venue-stack tables that reference `clubs_data.slug` need to rehome. Scan first; most reference `club_id`, not slug, so this should be clean.
+```js
+// pre-fix
+slug: club.subdomain,
+```
 
-### Option B — resolve returns both slugs
+So for Naenae, the FE's `data.slug` always contained the subdomain value (`naenae-bowling-club`), while the Venue stack's `/public/clubs/:slug/...` endpoints match on the actual `clubs_data.slug` column (`nae-nae-bowling-club`). One row, two different fields — the resolve handler just sent the wrong one.
 
-- `/clubs/resolve` response gains a `venue_slug: string | null` field alongside the current `slug`. FE uses `venue_slug ?? slug` on every Venue-stack call.
-- Zero data migration, zero behaviour change on the slug columns.
-- FE changes: `Club` interface + `BlockContext.clubSlug` need a sibling `venueClubSlug`. Easy, but introduces two names for the same concept forever.
+The brief-105 FE filter helpers (`filterLegacyJoinFormSections`, the client-side `your_bowls` strip) and brief 109's "slug note" callout were all workarounds for this single mislabel.
 
-Risks: perpetuates the drift. Every future Venue-stack contract repeats the "pass the right slug" dance. Doesn't fix the admin UX if they rename a club.
+---
 
-### Option C — Venue stack accepts either slug
+## 4. What shipped (2026-11-21, commit `8f6b5a5`)
 
-- Venue-stack `/public/clubs/:slug/*` handlers lookup by `clubs_data.slug` first, fall back to `clubs_data.subdomain` (or a join with SAM's `clubs.slug` if the stacks share the DB, or a resolve-map if they don't).
-- Zero data migration, zero FE changes.
-- Risks: hides the drift forever behind a tolerant lookup. Harder to spot related bugs. Slower per-request if the fallback is a second DB hit.
+A single handler change in `src/handlers/resolve-club/index.js`. No schema change, no migration, no backfill.
 
-### My recommendation
+The SELECT now pulls `cd.slug` as well, and the response exposes both fields:
 
-**Option A.** Cleanest end state, same slug everywhere, the FE's current slug-from-resolve path keeps working. B and C are both forms of living with the drift.
+```diff
+  return respond(200, {
+      status: 'success',
+      data: {
+          id: club.club_id,
+-         slug: club.subdomain,
++         slug: club.slug_col || club.subdomain,   // real clubs_data.slug (falls back to subdomain when null)
++         subdomain: club.subdomain,               // NEW: the tenant-routing key
+          name: club.name,
+          primary_host: club.primary_host,
+          custom_hosts: customRows.map(r => r.hostname),
+          brand_primary: club.accent_colour,
+          brand_accent:  club.brand_accent || null,
+          logo_url: club.logo_url,
+          plan: club.plan || 'starter',
+          onboarded_at: club.onboarded_at,
+      },
+  }, CACHE_HEADERS);
+```
+
+### What this means
+
+- `data.slug` is now "the key you pass to every `/public/clubs/:slug/*` call" — the canonical venue/content lookup key. For the 2 clubs whose subdomain and slug differ, this value is **different from before**.
+- `data.subdomain` is new. It's the tenant-routing key (`<sub>.torny.pro`). FE code that was using `slug` for URL construction should move here.
+- For the 1,457 clubs where `clubs_data.slug IS NULL`, the fallback returns the subdomain under `slug`, so behaviour is unchanged.
+- For the 2 drift clubs (Naenae + Richmond Union), `slug` now returns the real slug. Downstream calls that were failing now succeed.
+
+### Why not Options A / B / C from the original brief
+
+- **A (one canonical slug synced across two tables):** there are no two tables to sync. One mislabelled field, not drifted columns.
+- **B (resolve returns both slugs):** almost what we did, but the brief framed it as "venue_slug alongside slug forever." The real shape is `slug` (canonical) + `subdomain` (routing key) — different semantics, not two names for the same concept.
+- **C (Venue stack tolerant lookup):** would hide the real bug behind a fallback and add a DB hit per request.
+
+---
+
+## 4.1 Addendum (2026-11-21, discovered while wiring the FE)
+
+The resolve handler fix is right, but three Venue-stack `/public/clubs/:slug/*` endpoints turn out to key on **different** slug shapes. Observed against prod:
+
+| Endpoint | Accepts `clubs_data.slug` (`nae-nae-bowling-club`) | Accepts subdomain (`naenae-bowling-club`) |
+|---|---|---|
+| `venue-packages` | ✅ 200 | 404 |
+| `venue-availability` | ✅ 200 | 404 |
+| `variant` | 404 | ✅ 200 |
+| `custom-facets` | 404 | ✅ 200 |
+
+So the brief's §6 claim "`GET /clubs/resolve` → `data.slug` and `GET /public/clubs/:slug/*` on the Venue stack accept the same value for every club" holds **only for venue-packages + venue-availability**. The `variant` and `custom-facets` handlers still look up by subdomain, which means:
+
+- Passing the new `data.slug` through to variant / custom-facets 404s for the ~2 drift clubs.
+- Pre-brief-110 code that blindly passed `data.slug` to all endpoints used to work for variant + custom-facets (because `data.slug` was the subdomain) and 404'd on venue-packages. Post-brief-110 it's flipped.
+
+**FE workaround shipped today:** the public club-sites composables for variant + custom-facets prefer `club.subdomain ?? club.slug`; venue-packages + venue-availability keep passing `club.slug`. Each caller picks the key the endpoint expects. Code is explicit about which, with a brief-110 comment at every call site.
+
+**Backend ask:** align the `variant` + `custom-facets` handlers to look up by `clubs_data.slug` (same as venue-packages). Once that ships, every Venue-stack endpoint accepts `data.slug` and the FE can drop the per-call `subdomain` fallback. Zero data migration — purely a handler change mirroring brief 110 across the other two endpoints.
+
+Secondary observation while verifying: the variant endpoint still returns `your_bowls` in the `club` vertical's `join_form_sections`. Brief 107 asked for it to be dropped; that's independent of this brief but worth flagging. Until it ships, the FE keeps `filterLegacyJoinFormSections` + `LEGACY_JOIN_FORM_SECTION_KEYS` as defensive scaffolding (brief-105 wiring).
 
 ---
 
 ## 5. Verification
 
 ```bash
-VENUE="https://tbqlfxlc0e.execute-api.ap-southeast-2.amazonaws.com/Prod"
 SAM="https://byi59x19m4.execute-api.ap-southeast-2.amazonaws.com/Prod"
+VENUE="https://tbqlfxlc0e.execute-api.ap-southeast-2.amazonaws.com/Prod"
 
-# 1. Current drift — before fix
-curl -s "$SAM/clubs/resolve?host=naenae-bowling-club.torny.co" | jq '.data.slug'
-# → "naenae-bowling-club"
+# 1. Resolve now returns both fields
+curl -s "$SAM/clubs/resolve?host=naenae-bowling-club.torny.pro" | jq '.data | {slug, subdomain, primary_host}'
+# → { "slug": "nae-nae-bowling-club", "subdomain": "naenae-bowling-club", "primary_host": "naenae-bowling-club.torny.pro" }
 
-curl -s "$VENUE/public/clubs/naenae-bowling-club/venue-packages" | jq '.status, .data.packages | length'
-# → "error", null
+# 2. The resolved slug works end-to-end on the Venue stack
+curl -s "$VENUE/public/clubs/nae-nae-bowling-club/venue-packages" | jq '.status, (.data.packages | length)'
+# → "success", 3
 
-# 2. After Option A ships — both endpoints agree
-curl -s "$SAM/clubs/resolve?host=naenae-bowling-club.torny.co" | jq '.data.slug'
-# → "naenae-bowling-club"
-
-curl -s "$VENUE/public/clubs/naenae-bowling-club/venue-packages" | jq '.data.packages | length'
-# → 3
-
-# 3. Audit — how many clubs still have drift before the migration?
-SELECT c.id, c.subdomain, c.slug AS sam_slug, cd.slug AS venue_slug
-FROM clubs c
-JOIN clubs_data cd ON cd.club_id = c.id
-WHERE c.slug <> cd.slug;
-# Report the count so we know the blast radius before picking the plan.
+# 3. Audit — how many clubs have drift today?
+#    (Only 2 of 1 461 rows; 1 457 have null slug and use the fallback.)
+SELECT COUNT(*) AS total,
+       SUM(slug <> subdomain) AS drift,
+       SUM(slug IS NULL) AS null_slug
+  FROM clubs_data;
 ```
 
 ---
@@ -130,31 +171,33 @@ WHERE c.slug <> cd.slug;
 ## 6. Pass criteria
 
 - ✓ `GET /clubs/resolve` → `data.slug` and `GET /public/clubs/:slug/*` on the Venue stack accept the same value for every club.
-- ✓ Naenae specifically: the public venue-booking page at `localhost:3001/venue-hire/book?space=green-bbq` renders $220 / $220 / $400 from live data (not the hardcoded demo fallback).
-- ✓ Legacy data in Venue-stack tables (bookings, applications, custom facets, etc.) continues to map to the right club after the migration — no orphans.
-- ✓ Future slug renames don't resurrect the drift (sync mechanism tested on at least one dev club).
-- ✓ The brief-105 `filterLegacyJoinFormSections` and brief-109 slug-note become historical — can be ripped out on the FE in a follow-up once the fix ships.
+- ✓ Naenae specifically: `localhost:3001/venue-hire/book?space=the-clubhouse` renders live data (3 packages × their slot cards) instead of the hardcoded demo fallback.
+- ✓ The brief-109 slug-note caveat in §2.1 is now historical; it can be removed on the next edit of that doc.
+- ✓ The brief-105 FE helper `filterLegacyJoinFormSections` / `LEGACY_JOIN_FORM_SECTION_KEYS` can be deleted in a follow-up PR — the backend will serve a clean list.
+- ✓ No regression for the 1,457 null-slug clubs — the fallback returns subdomain under `slug`.
 
 ---
 
 ## 7. Non-goals
 
-- **Changing the `clubs.subdomain` column.** That's a separate concern (tenant routing). Only the `slug` columns are in scope.
-- **Public custom domains.** Already covered by `custom_hosts` on the resolve response and brief 99; they're keyed by host, not slug.
-- **Admin UI for renaming a slug.** Brief 98 handles subdomain changes via `/clubs/{id}/change-subdomain`; an equivalent for slug can come later if needed, but this brief only cares about aligning the existing columns.
+- Backfilling `clubs_data.slug` where null. Not needed; the fallback handles it and no onboarded club with venue features has a null slug today. Open a follow-up brief if we want the slug to be authoritative.
+- Changing `clubs_data.subdomain`. Separate concern (tenant routing).
+- Admin UI for renaming a slug. Brief 98 handles subdomain changes; an equivalent for slug can come later if needed.
+- Cross-stack sync or triggers. There's only one table.
 
 ---
 
-## 8. FE follow-up after this ships
+## 8. FE follow-up checklist
 
-Once Option A (or equivalent) lands and the audit confirms zero drift:
-
-1. Remove the brief-105 FE filter helpers (`filterLegacyJoinFormSections`, `LEGACY_JOIN_FORM_SECTION_KEYS`) — they're defensive only; the backend will serve a clean list.
-2. Remove the brief-109 slug-note from the committed brief doc (`docs/backend-briefs/109-public-venue-booking-live-data.md` §2.1) with a note that it's historical.
-3. Full roster audit: `grep -r "slug" packages/content-blocks apps/club-sites` to confirm no other call site has baked in a hyphenated-variant workaround.
+1. **Downstream API calls** (`/public/clubs/:slug/venue-packages`, `/variant`, `/custom-facets`, `/venue-availability`, future Venue-stack endpoints): continue passing `data.slug`. Nothing to change — this is why we did the fix.
+2. **URL construction** (building `<sub>.torny.pro` links back to the tenant, link-back emails, etc.): switch from `data.slug` to `data.subdomain` or `data.primary_host`. For 2 clubs (Naenae + Richmond Union) this is a behaviour fix; for everyone else it's a no-op.
+3. **Display copy**: audit any place that renders `data.slug` as human-visible text. If it should be the tenant identity, use `name` or `subdomain`; if it's the venue-lookup key, keep `slug`.
+4. Remove `filterLegacyJoinFormSections` + `LEGACY_JOIN_FORM_SECTION_KEYS` from the brief-105 wiring.
+5. Remove the brief-109 §2.1 slug-note from the committed brief doc.
+6. `grep -r "slug" packages/content-blocks apps/club-sites` to confirm no other call site has baked in a hyphenated-variant workaround.
 
 ---
 
 ## 9. Contact
 
-Nev on Slack (`#torny-eng`). Reproduces on Naenae today. Related briefs: 15 (public site endpoints), 93 (plan on session hydrate), 98 (change subdomain), 99 (custom domain), 105 (variant + custom facets), 106 (join-form config), 109 (public venue booking).
+Nev on Slack (`#torny-eng`). Related briefs: 15 (public site endpoints), 93 (plan on session hydrate), 98 (change subdomain), 99 (custom domain), 105 (variant + custom facets), 106 (join-form config), 109 (public venue booking).

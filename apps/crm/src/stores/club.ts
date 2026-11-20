@@ -130,6 +130,11 @@ export const useClubStore = defineStore('club', () => {
         id: full.id,
         name: full.name ?? c.name,
         slug: full.slug ?? null,
+        // Brief 110 — tenant-routing key, exposed on the resolve +
+        // GET /clubs/:id payloads since the 2026-11-21 fix. Falls
+        // back to the existing slug for older responses that didn't
+        // ship the field.
+        subdomain: full.subdomain ?? full.slug ?? c.subdomain ?? null,
         domain: full.domain ?? null,
         emailHandle: full.emailHandle ?? c.emailHandle ?? null,
         brandPrimary: full.brandPrimary ?? c.brandPrimary ?? null,

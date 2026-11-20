@@ -11,13 +11,16 @@ export function usePublicFacets() {
   const nuxtApp = useNuxtApp()
 
   const { data: facets } = useAsyncData<CustomFacet[]>(
-    () => `facets:${club.value?.slug ?? 'unknown'}`,
+    // Brief 110 — custom-facets endpoint still keys on subdomain
+    // (not clubs_data.slug). Prefer `subdomain`; fall back to `slug`.
+    () => `facets:${club.value?.subdomain ?? club.value?.slug ?? 'unknown'}`,
     async () => {
-      if (!club.value?.slug) return []
-      return await $fetch<CustomFacet[]>(`/api/custom-facets/${encodeURIComponent(club.value.slug)}`)
+      const key = club.value?.subdomain ?? club.value?.slug
+      if (!key) return []
+      return await $fetch<CustomFacet[]>(`/api/custom-facets/${encodeURIComponent(key)}`)
     },
     {
-      watch: [() => club.value?.slug],
+      watch: [() => club.value?.subdomain, () => club.value?.slug],
       default: () => [],
       getCachedData: (key) => {
         const cached = nuxtApp.payload?.data?.[key] ?? nuxtApp.static?.data?.[key]

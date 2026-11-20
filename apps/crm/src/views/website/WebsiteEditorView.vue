@@ -1376,27 +1376,31 @@ function slugify(s: string): string {
 }
 
 async function preview(): Promise<void> {
-  // Always force-refresh clubStore.current.slug on Preview — a brief-98
-  // subdomain change in another tab, or a slug cached in localStorage
-  // from before a rename, would otherwise generate the wrong URL. Cheap
-  // (one GET /clubs/:id per click). Onboarding snapshot stays as a
-  // secondary fallback for fresh signups where the backend hasn't yet
-  // written slug on /clubs/:id.
+  // Always force-refresh clubStore.current on Preview — a brief-98
+  // subdomain change in another tab, or a stale localStorage copy
+  // from before a rename, would otherwise generate the wrong URL.
+  // Cheap (one GET /clubs/:id per click). Onboarding snapshot stays
+  // as a secondary fallback for fresh signups where the backend
+  // hasn't yet written the subdomain on /clubs/:id.
   await clubStore.hydrateFull({ force: true })
-  if (!clubStore.current?.slug && !onboarding.data.subdomain) {
+  if (!clubStore.current?.subdomain && !clubStore.current?.slug && !onboarding.data.subdomain) {
     await onboarding.hydrate()
   }
-  const slug =
+  // Brief 110 — prefer `subdomain` (tenant-routing key) over `slug`
+  // (venue-lookup key). For the ~2 clubs where the two differ, slug
+  // wouldn't resolve a tenant.
+  const subdomain =
+    (clubStore.current?.subdomain?.trim() || null) ??
     (clubStore.current?.slug?.trim() || null) ??
     (onboarding.data.subdomain?.trim() || null) ??
     (clubStore.current?.name ? slugify(clubStore.current.name) : null)
 
-  if (!slug) {
-    toast.error("Couldn't get this club's slug — try refreshing.")
+  if (!subdomain) {
+    toast.error("Couldn't get this club's subdomain — try refreshing.")
     return
   }
   const path = previewPathFor(currentPage.value)
-  window.open(sitePreviewUrl(slug, path), '_blank', 'noopener')
+  window.open(sitePreviewUrl(subdomain, path), '_blank', 'noopener')
 }
 
 // ── Block summary (shown in the list row) ─────────────────

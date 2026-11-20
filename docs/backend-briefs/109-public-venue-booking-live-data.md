@@ -42,7 +42,7 @@ Both endpoints are public — no `Authorization` header, no CORS auth shenanigan
 
 ### 2.1 `GET /public/clubs/{slug}/venue-packages`
 
-**Slug note:** the club's slug lives on `clubs_data.slug` (e.g. `nae-nae-bowling-club`), **not** `subdomain` (`naenae-bowling-club`). Easy mistake — you'll get `{status:"error",code:"not_found"}` if you pass the subdomain. The FE presumably already has the right slug on hand from however it routes the public site.
+**Slug note (historical — see brief 110):** this endpoint keys on `clubs_data.slug` (e.g. `nae-nae-bowling-club`), **not** `subdomain` (`naenae-bowling-club`). The /clubs/resolve handler fix in brief 110 (2026-11-21) made `data.slug` return `clubs_data.slug`, so modern FE code can just pass `data.slug` through. Note that the sibling `variant` and `custom-facets` endpoints on the same Venue stack still key on **subdomain**, not `clubs_data.slug` — brief 110's addendum tracks aligning them.
 
 Response (truncated to one package):
 

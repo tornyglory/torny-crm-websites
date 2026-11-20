@@ -5,7 +5,16 @@ import { useRuntimeConfig } from '#imports'
 
 export interface Club {
   id: number
+  /** Canonical `clubs_data.slug` — brief 110 (2026-11-21). Accepted by
+   *  the Venue-stack `venue-packages` + `venue-availability` endpoints.
+   *  NOT accepted by `variant` + `custom-facets` on the same stack
+   *  (they still key on subdomain, pending a follow-up alignment on
+   *  the backend). Use `subdomain` for those two. */
   slug: string
+  /** Tenant-routing key — leftmost label on the public `.torny.pro`
+   *  URL. Also the only slug `variant` + `custom-facets` accept today
+   *  (see §4.1 of brief 110's addendum). Present since 2026-11-21. */
+  subdomain?: string
   name: string
   primary_host: string
   custom_hosts: string[]

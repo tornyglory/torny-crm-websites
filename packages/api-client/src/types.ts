@@ -141,7 +141,18 @@ export interface ClubNavigation {
 export interface Club {
   id: number
   name: string
+  /** Canonical `clubs_data.slug` — the key used for every Venue-stack
+   *  public endpoint (`/public/clubs/:slug/*`). Brief 110 (2026-11-21)
+   *  fixed a resolve-handler mislabel so this now returns the real
+   *  slug rather than the subdomain. Prefer `subdomain` for
+   *  tenant-routing URLs. */
   slug?: string | null
+  /** Tenant routing key — the leftmost label on the public site's
+   *  `<subdomain>.torny.pro` URL. For most clubs this equals `slug`;
+   *  for the ~2 clubs where the two differ (brief 110), this is the
+   *  value to build preview URLs against. Absent on older response
+   *  shapes that predate brief 110. */
+  subdomain?: string | null
   domain?: string | null
   /** The local part of the club's receive-and-send mailbox (brief 100).
    *  Full address is `<email_handle>@torny.pro`. Null when the backend

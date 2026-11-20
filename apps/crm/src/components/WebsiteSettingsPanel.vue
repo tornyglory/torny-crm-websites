@@ -649,10 +649,13 @@ function replaceUpload(what: string) {
 const { isOwner } = usePermissions()
 const onboarding = useOnboardingStore()
 
-/** Current slug from the club store. Preview / sitePreviewUrl uses this
- *  same value, so updating the store after a successful PATCH keeps the
- *  Preview button in sync without a page refresh. */
-const currentSubdomain = computed<string>(() => clubStore.current?.slug ?? '')
+/** Current subdomain from the club store. Preview / sitePreviewUrl
+ *  uses this same value, so updating the store after a successful
+ *  PATCH keeps the Preview button in sync without a page refresh.
+ *  Brief 110 — prefer `subdomain` (tenant-routing key) over `slug`
+ *  (venue-lookup key); falls back to `slug` for older payloads that
+ *  predate the resolve-handler fix. */
+const currentSubdomain = computed<string>(() => clubStore.current?.subdomain ?? clubStore.current?.slug ?? '')
 const currentHost = computed<string>(() =>
   currentSubdomain.value ? `${currentSubdomain.value}.torny.pro` : '',
 )
@@ -771,14 +774,16 @@ async function commitSubdomainChange() {
     const res = await clubs.changeSubdomain(clubId, next)
     // Keep both stores in sync so every downstream link lights up without a
     // refresh:
-    // - clubStore.current.slug — read by sitePreviewUrl() + any /clubs/<slug>
-    //   anchor.
+    // - clubStore.current.subdomain (brief 110) — read by sitePreviewUrl()
+    //   for every preview URL. Also mirror into `slug` for the ~1,457 clubs
+    //   whose backend slug is null and whose preview URL still falls back
+    //   through slug when subdomain is missing.
     // - onboarding.data.subdomain — read by the Website editor's Preview
-    //   button, which prefers this value over clubStore.current.slug (see
+    //   button, which prefers this value over the club store (see
     //   WebsiteEditorView.preview()). Stale here would keep the Preview
     //   button pointing at the old host after a change.
     if (clubStore.current) {
-      clubStore.setCurrent({ ...clubStore.current, slug: res.subdomain })
+      clubStore.setCurrent({ ...clubStore.current, subdomain: res.subdomain, slug: res.subdomain })
     }
     onboarding.data.subdomain = res.subdomain
     toast.success(`Subdomain changed to ${res.primary_host}.`)

@@ -509,6 +509,9 @@ export type {
   ClubNotPaymentReadyData,
   TakenSlot,
   VenueAvailabilityResult,
+  VenueBookingStatus,
+  VenueBookingPaymentStatus,
+  PublicVenueBookingRead,
 } from './resources/venueBookings'
 
 export * as stripeConnect from './resources/stripeConnect'

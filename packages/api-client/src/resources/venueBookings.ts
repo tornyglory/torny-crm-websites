@@ -457,3 +457,75 @@ export async function publicAvailability(
   )
   return res.data
 }
+
+// ── Public read-by-ref (brief 111) ──────────────────────────────
+
+/** Booking status — matches the server enum. */
+export type VenueBookingStatus =
+  | 'pending'
+  | 'pending_payment'
+  | 'confirmed'
+  | 'declined'
+  | 'cancelled'
+  | 'completed'
+
+/** Payment status — matches the server enum. `deposit_paid` is the
+ *  post-Stripe-webhook state the confirmation page sees after a
+ *  successful deposit; `paid` only lights up after the balance is
+ *  also settled (admin-recorded, not Stripe-automated today). */
+export type VenueBookingPaymentStatus =
+  | 'unpaid'
+  | 'deposit_paid'
+  | 'paid'
+  | 'refunded'
+  | 'partially_refunded'
+
+/** Renter-safe subset of a venue booking row — brief 111 §1.1. The
+ *  admin notes / Stripe object ids / decline reason etc. are
+ *  deliberately absent. */
+export interface PublicVenueBookingRead {
+  booking_ref: string
+  status: VenueBookingStatus
+  payment_status: VenueBookingPaymentStatus
+  package: { name: string | null; slug: string | null }
+  slot: {
+    id: number | null
+    label: string | null
+    sub: string | null
+    duration_hours: number | null
+    default_start_time: string | null
+  }
+  addons: Array<{ name: string; quantity: number; amount_cents: number }>
+  bond_cents: number
+  bond_label: string | null
+  booking_date: string
+  attendee_count: number | null
+  subtotal_cents: number
+  deposit_cents: number
+  deposit_paid_cents: number
+  balance_cents: number
+  balance_due_days_before: number | null
+  balance_due_date: string | null
+  full_name: string
+  email: string
+  paid_at: string | null
+  received_at: string
+}
+
+/** `GET /public/clubs/:slug/venue-bookings/:booking_ref` — brief 111.
+ *  Public, no auth, no-store cache. Slug keys on `clubs_data.slug`
+ *  (same as venue-packages / venue-availability — brief 110 §4.1).
+ *  Returns a renter-safe booking summary; throws ApiError with code
+ *  `bad_booking_ref` for malformed refs or `not_found` for unknown /
+ *  wrong-club refs. */
+export async function publicGetByRef(
+  slug: string,
+  bookingRef: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<PublicVenueBookingRead> {
+  const res = await publicFetch<Envelope<PublicVenueBookingRead>>(
+    `${VENUE_BASE}/public/clubs/${encodeURIComponent(slug)}/venue-bookings/${encodeURIComponent(bookingRef)}`,
+    { method: 'GET', signal: opts.signal },
+  )
+  return res.data
+}

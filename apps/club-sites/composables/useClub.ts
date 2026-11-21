@@ -4,7 +4,15 @@
  */
 export interface Club {
   id: number
+  /** Canonical `clubs_data.slug` — the key the Venue-stack
+   *  `venue-packages` / `venue-availability` / `venue-bookings`
+   *  endpoints accept. Brief 110 (2026-11-21) — for ~2 drift clubs
+   *  this differs from the subdomain. */
   slug: string
+  /** Tenant-routing subdomain. Accepted by the SAM endpoints
+   *  (`site`, `events`) and the Venue-stack `variant` +
+   *  `custom-facets`. Brief 110. */
+  subdomain?: string
   name: string
   primary_host: string
   custom_hosts: string[]

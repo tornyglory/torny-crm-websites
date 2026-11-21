@@ -779,9 +779,20 @@ export type Block =
  */
 export interface BlockContext {
   brandPrimary?: string | null
-  /** Public club slug — used by data-hydrated blocks that hit the public
-   *  honour-board / events endpoints (need the slug to construct URLs). */
+  /** Canonical `clubs_data.slug` — the key the Venue-stack
+   *  `venue-packages` / `venue-availability` endpoints accept
+   *  (brief 109). Pre-brief-110 this matched the subdomain for
+   *  every club, but post-fix the two can differ (~2 drift clubs).
+   *  Prefer `clubSubdomain` for SAM-side endpoints (events, site,
+   *  variant, custom-facets) which still key on subdomain. */
   clubSlug?: string | null
+  /** Tenant-routing subdomain. Brief 110 — accepted by the SAM
+   *  endpoints (`site`, `events`, `tournaments`) and the Venue-stack
+   *  `variant` + `custom-facets`. The majority of public endpoints
+   *  key on this; only venue-packages / venue-availability key on
+   *  `clubSlug`. Falls back to `clubSlug` when the host hasn't
+   *  wired brief 110 yet. */
+  clubSubdomain?: string | null
   events?: Array<{
     id: number | string
     title: string

@@ -57,7 +57,13 @@ const accent = computed(() => site.value?.club.brand_primary ?? club.value?.bran
 // wiring at the page level. Non-data blocks ignore this.
 provide(BLOCK_CONTEXT_KEY, computed<BlockContext>(() => ({
   brandPrimary: accent.value,
+  // Brief 110 — two sibling keys. clubSlug is the venue-lookup key
+  // (venue-packages / venue-availability); clubSubdomain is accepted
+  // by every other public endpoint. Pre-brief-110 both resolved to the
+  // same value; post-fix the ~2 drift clubs flip clubSlug to the
+  // canonical slug and the subdomain lives here.
   clubSlug: club.value?.slug ?? site.value?.club?.slug ?? null,
+  clubSubdomain: club.value?.subdomain ?? club.value?.slug ?? site.value?.club?.slug ?? null,
   events: site.value?.events_upcoming ?? [],
   honourEntries: site.value?.honour_board_recent ?? [],
   membershipTiers: site.value?.membership_tiers ?? [],

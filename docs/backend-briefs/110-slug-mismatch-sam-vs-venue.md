@@ -122,23 +122,30 @@ The SELECT now pulls `cd.slug` as well, and the response exposes both fields:
 
 ## 4.1 Addendum (2026-11-21, discovered while wiring the FE)
 
-The resolve handler fix is right, but three Venue-stack `/public/clubs/:slug/*` endpoints turn out to key on **different** slug shapes. Observed against prod:
+The resolve handler fix is right, but five `/public/clubs/:slug/*` endpoints across both stacks turn out to key on **different** slug shapes. Observed against prod:
 
-| Endpoint | Accepts `clubs_data.slug` (`nae-nae-bowling-club`) | Accepts subdomain (`naenae-bowling-club`) |
-|---|---|---|
-| `venue-packages` | ✅ 200 | 404 |
-| `venue-availability` | ✅ 200 | 404 |
-| `variant` | 404 | ✅ 200 |
-| `custom-facets` | 404 | ✅ 200 |
+| Stack | Endpoint | Accepts `clubs_data.slug` (`nae-nae-bowling-club`) | Accepts subdomain (`naenae-bowling-club`) |
+|---|---|---|---|
+| SAM | `site` | 404 | ✅ 200 |
+| SAM | `events` | 404 | ✅ 200 |
+| Venue | `variant` | 404 | ✅ 200 |
+| Venue | `custom-facets` | 404 | ✅ 200 |
+| Venue | `venue-packages` | ✅ 200 | 404 |
+| Venue | `venue-availability` | ✅ 200 | 404 |
 
-So the brief's §6 claim "`GET /clubs/resolve` → `data.slug` and `GET /public/clubs/:slug/*` on the Venue stack accept the same value for every club" holds **only for venue-packages + venue-availability**. The `variant` and `custom-facets` handlers still look up by subdomain, which means:
+So the brief's §6 claim "`GET /clubs/resolve` → `data.slug` and `GET /public/clubs/:slug/*` on the Venue stack accept the same value for every club" holds **only for the two venue endpoints**. The other four public endpoints across both stacks still key on subdomain. Post-fix, every FE call that was blindly passing `data.slug` through to `site`, `events`, `variant`, or `custom-facets` 404s for the ~2 drift clubs — reproducing today as "Naenae's entire website is blank" because `useSite()` now returns null and PageRenderer falls back to chrome-only.
 
-- Passing the new `data.slug` through to variant / custom-facets 404s for the ~2 drift clubs.
-- Pre-brief-110 code that blindly passed `data.slug` to all endpoints used to work for variant + custom-facets (because `data.slug` was the subdomain) and 404'd on venue-packages. Post-brief-110 it's flipped.
+**FE workaround shipped today (2026-11-21):**
+- `useSite()` → prefers `club.subdomain ?? club.slug`.
+- `useVariant()` + `usePublicFacets()` → prefer `club.subdomain ?? club.slug`.
+- `BlockContext` gets a sibling `clubSubdomain` alongside `clubSlug`.
+- `EventsCalendarBlock` → reads `clubSubdomain` for its public endpoint call.
+- `VenueBookingBlock` + venue-availability fetch → stay on `clubSlug` (canonical venue-lookup key).
+- Each call site has a brief-110 comment pointing at which key the endpoint expects.
 
-**FE workaround shipped today:** the public club-sites composables for variant + custom-facets prefer `club.subdomain ?? club.slug`; venue-packages + venue-availability keep passing `club.slug`. Each caller picks the key the endpoint expects. Code is explicit about which, with a brief-110 comment at every call site.
+**Backend ask (primary):** align the four subdomain-keyed endpoints (`site`, `events`, `variant`, `custom-facets`) to look up by `clubs_data.slug` as well — either by changing the handler lookup column or by accepting both shapes. Once that ships, every `/public/clubs/:slug/*` endpoint accepts `data.slug` and the FE can drop the per-call `subdomain` fallback + the dual `BlockContext` field.
 
-**Backend ask:** align the `variant` + `custom-facets` handlers to look up by `clubs_data.slug` (same as venue-packages). Once that ships, every Venue-stack endpoint accepts `data.slug` and the FE can drop the per-call `subdomain` fallback. Zero data migration — purely a handler change mirroring brief 110 across the other two endpoints.
+**Backend ask (alternative, less invasive):** leave the handlers as they are, but also update `/clubs/resolve` to return a `venue_slug` field alongside the existing `slug` + `subdomain`, so the FE has an explicit name for "the key you pass to venue-packages." Keeps the 404 mapping explicit instead of encoding it in the FE as which-endpoint-picks-which.
 
 Secondary observation while verifying: the variant endpoint still returns `your_bowls` in the `club` vertical's `join_form_sections`. Brief 107 asked for it to be dropped; that's independent of this brief but worth flagging. Until it ships, the FE keeps `filterLegacyJoinFormSections` + `LEGACY_JOIN_FORM_SECTION_KEYS` as defensive scaffolding (brief-105 wiring).
 

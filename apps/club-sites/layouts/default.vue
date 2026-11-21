@@ -21,13 +21,17 @@ const drawerOpen = ref(false)
 
 // Fallback used while the backend endpoint (brief 25) is being built and
 // during the SSR-before-payload window. Once the /site payload includes
-// `navigation`, that always wins.
+// `navigation`, that always wins. Venue hire sits between Membership and
+// Contact so clubs on the fallback still surface their venue-hire CTA
+// after a Stripe redirect (brief 110 regression: /site 404s on drift
+// clubs push the chrome into this fallback).
 const FALLBACK_HEADER: NavLink[] = [
   { label: 'Home', href: '/' },
   { label: 'About', href: '/about' },
   { label: 'Events', href: '/events' },
   { label: 'Honour board', href: '/honour-board' },
   { label: 'Membership', href: '/membership' },
+  { label: 'Venue hire', href: '/venue-hire' },
   { label: 'Contact', href: '/contact' },
 ]
 

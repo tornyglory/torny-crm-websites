@@ -56,6 +56,31 @@ function colorSchemeDeclarations(scheme: SiteColorScheme): string[] {
 
 export async function useTheme() {
   const club = useClub()
+
+  // Synchronous first pass — emits the admin's `brand_primary` as the
+  // accent override from the resolve payload (sync on SSR), BEFORE the
+  // `useSite()` await below. Prevents the FOUC where buttons flash the
+  // tokens.css default (`#2563EB`) between SSR and the client hydration
+  // that resolves `/site`. The richer palette/style/fonts overrides
+  // still land in the second useHead pass below once `/site` settles.
+  useHead({
+    style: computed(() => {
+      const declarations: string[] = []
+      const primary = club.value?.brand_primary
+      if (primary) {
+        declarations.push(`--color-accent: ${primary} !important;`)
+        // Many block CTAs read `--color-accent-strong`; without an
+        // override they'd cling to the tokens.css blue (`#1E40AF`).
+        // Mirror the primary so the moment-of-paint uses the admin
+        // pick — the brand_accent override below (if set) still
+        // takes precedence when `/site` resolves.
+        declarations.push(`--color-accent-strong: ${primary} !important;`)
+      }
+      if (declarations.length === 0) return []
+      return [{ innerHTML: `:root { ${declarations.join(' ')} }` }]
+    }),
+  })
+
   // Awaiting `useSite()` here guarantees `site.value` is populated by the
   // time useHead below reads the computed on the server. Nuxt's data cache
   // dedupes by key, so the page-level `await useSite()` reuses this call.

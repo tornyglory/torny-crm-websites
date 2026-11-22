@@ -228,21 +228,51 @@ function pad(n: number): string {
   .faq__left { width: 100%; }
   .faq__heading { font-size: 36px; }
 }
-@media (max-width: 639px) {
-  .faq { padding: 48px 20px; gap: 32px; }
-  .faq__heading { font-size: 28px; }
-  .faq__row { padding: 20px; }
-  .faq__answer { padding: 0 20px 20px 58px; }
-}
 
-/* Mobile (≤640px) — tighten the 48px desktop gutter so the block
-   fills the viewport minus a 24px editorial padding, matching the
-   Paper mobile artboards. */
+/* Mobile (≤640px). One consolidated block — the old file carried both
+ * a `max-width: 639px` and a `max-width: 640px` rule; the latter
+ * overrode the former's answer indent and left the mobile answer flush
+ * with the card edge, which read as a visual stumble below the deeply
+ * indented desktop layout. */
 @media (max-width: 640px) {
-  .faq { padding-left: 20px; padding-right: 20px; overflow-x: hidden; }
-  /* Flatten the desktop 66px/28px answer indent — on mobile the answer
-     should sit flush with the content column, not under a 66px question
-     number lane. */
-  .faq__answer { padding: 0 0 20px; }
+  .faq {
+    padding: 48px 20px;
+    gap: 28px;
+    overflow-x: hidden;
+  }
+  .faq__heading { font-size: 28px; line-height: 108%; }
+  .faq__support { font-size: 14px; }
+  .faq__cta { padding: 11px 18px; font-size: 13px; }
+  .faq__row {
+    padding: 18px 18px 18px 16px;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .faq__row-left { gap: 12px; align-items: flex-start; }
+  .faq__num {
+    width: 22px;
+    height: 22px;
+    font-size: 10px;
+    /* Nudge down to baseline-match the question's first line. */
+    margin-top: 2px;
+  }
+  .faq__question {
+    font-size: 16px;
+    line-height: 1.35;
+  }
+  .faq__toggle {
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
+    margin-top: 1px;
+  }
+  /* Answer sits under the question text, not under the number lane —
+     keeps the reading column tight on narrow screens while staying
+     visually connected to the question above. */
+  .faq__answer {
+    padding: 0 18px 18px 50px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
 }
 </style>

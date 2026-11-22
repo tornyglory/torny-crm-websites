@@ -112,24 +112,15 @@ const prompt = ref('')
 const generating = ref(false)
 const lastError = ref<string | null>(null)
 
-/** When the modal opens, seed the draft from the current props and
- *  default the active tab: new empty blocks start on Prompt, filled
- *  blocks start on Preview so the admin lands on "here's what you
- *  already have". */
-watch(() => props.open, (open) => {
-  if (!open) return
-  draft.value = { ...props.value }
-  prompt.value = ''
-  lastError.value = null
-  activeTab.value = draft.value.html?.trim() ? 'preview' : 'prompt'
-  void fetchImages()
-})
-
 // ── Images ────────────────────────────────────────────────────
 // Brief 113 §5.9 — admin uploads live under the brief-18
 // (club, page, block) tuple and get sent to Gemini on each Generate
 // so the model can reference the real Cloudflare URLs instead of
 // placeholder services.
+//
+// Declared BEFORE the open-watcher below because the watcher uses
+// `immediate: true` and calls `fetchImages()` synchronously during
+// setup — it'd hit the temporal dead zone if we moved these after.
 const IMAGE_CAP = 20
 const images = ref<BlockImage[]>([])
 const imagesLoading = ref(false)
@@ -149,6 +140,25 @@ async function fetchImages() {
     imagesLoading.value = false
   }
 }
+
+/** When the modal opens, seed the draft from the current props and
+ *  default the active tab: new empty blocks start on Prompt, filled
+ *  blocks start on Preview so the admin lands on "here's what you
+ *  already have".
+ *
+ *  `immediate: true` — the parent mounts this component with `v-if`
+ *  only when a block is being edited, so by first render `open` is
+ *  already true. Without the immediate flag the watcher would skip
+ *  the initial fetch and the Images tab would read empty on reopen
+ *  until the admin uploaded something new. */
+watch(() => props.open, (open) => {
+  if (!open) return
+  draft.value = { ...props.value }
+  prompt.value = ''
+  lastError.value = null
+  activeTab.value = draft.value.html?.trim() ? 'preview' : 'prompt'
+  void fetchImages()
+}, { immediate: true })
 
 function openFilePicker() {
   imageInput.value?.click()

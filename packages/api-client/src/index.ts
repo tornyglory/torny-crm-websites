@@ -622,6 +622,7 @@ export * as ai from './resources/ai'
 export type {
   AiBrandContext,
   AiNearbyBlock,
+  AiImageRef,
   AiIterationContext,
   GenerateBlockInput,
   GeneratedBlock,

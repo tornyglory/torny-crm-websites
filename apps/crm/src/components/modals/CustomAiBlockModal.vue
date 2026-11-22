@@ -6,6 +6,10 @@
  *  · Prompt   — natural-language input + "Generate" button that calls
  *               the Gemini proxy (packages/api-client → ai.generateBlock).
  *               Returned HTML/CSS/JS populate the other tabs.
+ *  · Images   — admin uploads up to 20 images per block via the
+ *               brief-18 block-images pipeline. Fetched on each
+ *               Generate call and passed to Gemini so it uses the
+ *               real URLs verbatim instead of placeholders.
  *  · HTML     — plain textarea; CodeMirror can slot in later.
  *  · CSS      — same.
  *  · JS       — hidden behind the `allowJs` toggle; empty string clears.
@@ -16,7 +20,17 @@
  * caller's props via emit('save') when the admin clicks Save.
  */
 import { computed, ref, watch } from 'vue'
-import { ApiError, ai, type AiNearbyBlock, type GenerateBlockErrorCode, type GenerateBlockRateLimit } from '@torny/api-client'
+import {
+  ApiError,
+  ai,
+  blockImages,
+  type AiNearbyBlock,
+  type AiImageRef,
+  type BlockImage,
+  type GenerateBlockErrorCode,
+  type GenerateBlockRateLimit,
+  type PageSlug,
+} from '@torny/api-client'
 import { CustomAiBlock, type CustomAiProps, type CustomAiPromptEntry } from '@torny/content-blocks'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
@@ -30,6 +44,10 @@ const props = defineProps<{
    *  is per-user not per-club, but the endpoint is keyed on club id for
    *  auth so we pass the current club. */
   clubId: number | null
+  /** The page slug this block belongs to. Needed for the brief-18
+   *  block-images endpoints that scope uploads by
+   *  (club, page, block). */
+  pageSlug: PageSlug | null
   /** Current props of the block being edited. */
   value: CustomAiProps
   /** Brand context + nearby block summaries, forwarded to Gemini. */
@@ -51,10 +69,11 @@ const emit = defineEmits<{
 
 const toast = useToast()
 
-type Tab = 'prompt' | 'html' | 'css' | 'js' | 'preview'
+type Tab = 'prompt' | 'images' | 'html' | 'css' | 'js' | 'preview'
 const activeTab = ref<Tab>('prompt')
 const TAB_LABELS: Record<Tab, string> = {
   prompt: 'Prompt',
+  images: 'Images',
   html: 'HTML',
   css: 'CSS',
   js: 'JS',
@@ -103,7 +122,98 @@ watch(() => props.open, (open) => {
   prompt.value = ''
   lastError.value = null
   activeTab.value = draft.value.html?.trim() ? 'preview' : 'prompt'
+  void fetchImages()
 })
+
+// ── Images ────────────────────────────────────────────────────
+// Brief 113 §5.9 — admin uploads live under the brief-18
+// (club, page, block) tuple and get sent to Gemini on each Generate
+// so the model can reference the real Cloudflare URLs instead of
+// placeholder services.
+const IMAGE_CAP = 20
+const images = ref<BlockImage[]>([])
+const imagesLoading = ref(false)
+const imagesError = ref<string | null>(null)
+const uploadingCount = ref(0)
+const imageInput = ref<HTMLInputElement | null>(null)
+
+async function fetchImages() {
+  if (props.clubId == null || !props.pageSlug) return
+  imagesLoading.value = true
+  imagesError.value = null
+  try {
+    images.value = await blockImages.list(props.clubId, props.pageSlug, props.blockId)
+  } catch (err) {
+    imagesError.value = err instanceof ApiError ? err.message : 'Could not load images.'
+  } finally {
+    imagesLoading.value = false
+  }
+}
+
+function openFilePicker() {
+  imageInput.value?.click()
+}
+
+async function onFilesPicked(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  if (!files.length) return
+  if (props.clubId == null || !props.pageSlug) {
+    imagesError.value = 'Pick a club + page first.'
+    return
+  }
+  const slotsLeft = IMAGE_CAP - images.value.length
+  if (slotsLeft <= 0) {
+    imagesError.value = `Up to ${IMAGE_CAP} images per block — delete one first.`
+    return
+  }
+  const toUpload = files.slice(0, slotsLeft)
+  if (toUpload.length < files.length) {
+    imagesError.value = `Only uploaded the first ${toUpload.length} — ${IMAGE_CAP}-image cap reached.`
+  }
+  for (const file of toUpload) {
+    uploadingCount.value++
+    try {
+      const row = await blockImages.upload(props.clubId, props.pageSlug, props.blockId, file)
+      images.value = [...images.value, row].sort((a, b) => a.position - b.position)
+    } catch (err) {
+      imagesError.value = err instanceof ApiError ? err.message : 'Upload failed.'
+    } finally {
+      uploadingCount.value--
+    }
+  }
+}
+
+async function deleteImage(img: BlockImage) {
+  if (props.clubId == null || !props.pageSlug) return
+  if (!window.confirm('Delete this image? The block\'s saved HTML will keep referencing it until you regenerate.')) return
+  try {
+    await blockImages.remove(props.clubId, props.pageSlug, props.blockId, img.id)
+    images.value = images.value.filter((i) => i.id !== img.id)
+  } catch (err) {
+    imagesError.value = err instanceof ApiError ? err.message : 'Delete failed.'
+  }
+}
+
+async function updateImageMeta(img: BlockImage, patch: { alt?: string; caption?: string }) {
+  if (props.clubId == null || !props.pageSlug) return
+  try {
+    const updated = await blockImages.patch(props.clubId, props.pageSlug, props.blockId, img.id, patch)
+    images.value = images.value.map((i) => (i.id === updated.id ? updated : i))
+  } catch (err) {
+    imagesError.value = err instanceof ApiError ? err.message : 'Save failed.'
+  }
+}
+
+/** Shape the current image list into the AI request's `images` field. */
+function imagesForRequest(): AiImageRef[] {
+  return images.value.map((img) => ({
+    url: img.public_url,
+    alt: img.alt || null,
+    caption: img.caption || null,
+  }))
+}
 
 const dirty = computed(() => {
   return draft.value.html !== props.value.html
@@ -147,6 +257,7 @@ async function generate() {
       prompt: text,
       brand: props.brand,
       nearby_blocks: props.nearbyBlocks,
+      images: imagesForRequest(),
       iteration,
       allow_js: !!draft.value.allowJs,
     })
@@ -216,7 +327,7 @@ function onAllowJsToggle(allow: boolean) {
     <!-- Tabs -->
     <div class="cai__tabs" role="tablist">
       <button
-        v-for="t in (['prompt','html','css','js','preview'] as Tab[])"
+        v-for="t in (['prompt','images','html','css','js','preview'] as Tab[])"
         :key="t"
         type="button"
         class="cai__tab"
@@ -225,7 +336,10 @@ function onAllowJsToggle(allow: boolean) {
         role="tab"
         :aria-selected="activeTab === t"
         @click="activeTab = t"
-      >{{ tabLabel(t) }}</button>
+      >
+        <span>{{ tabLabel(t) }}</span>
+        <span v-if="t === 'images' && images.length > 0" class="cai__tab-badge">{{ images.length }}</span>
+      </button>
     </div>
 
     <!-- Prompt tab -->
@@ -282,6 +396,82 @@ function onAllowJsToggle(allow: boolean) {
           </li>
         </ul>
       </div>
+    </div>
+
+    <!-- Images tab -->
+    <div v-else-if="activeTab === 'images'" class="cai__panel">
+      <p class="cai__sub">Upload images the AI can use inside this block — logos, photos, hero shots. The next Generate run picks them up automatically and references their real URLs instead of placeholders.</p>
+
+      <div class="cai__images-head">
+        <div class="cai__images-count">
+          <strong>{{ images.length }}</strong> / {{ IMAGE_CAP }}
+          <span v-if="uploadingCount > 0" class="cai__images-uploading"><CrmSpinner size="sm" label="Uploading" /> {{ uploadingCount }} uploading…</span>
+        </div>
+        <button
+          type="button"
+          class="cai-btn cai-btn--outline"
+          :disabled="images.length >= IMAGE_CAP || uploadingCount > 0"
+          @click="openFilePicker"
+        >+ Upload images</button>
+        <input
+          ref="imageInput"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+          multiple
+          class="cai__file-input"
+          @change="onFilesPicked"
+        />
+      </div>
+
+      <div v-if="imagesError" class="cai__error">{{ imagesError }}</div>
+
+      <div v-if="imagesLoading && images.length === 0" class="cai__images-empty">
+        <CrmSpinner size="sm" label="Loading images" />
+      </div>
+      <div v-else-if="images.length === 0" class="cai__images-empty">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6" />
+          <circle cx="9" cy="10" r="2" stroke="currentColor" stroke-width="1.6" />
+          <path d="M3 17l5-5 4 4 3-3 6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>No images yet. Upload a few and the AI will reach for them next time you generate.</span>
+      </div>
+
+      <ul v-else class="cai__images-grid">
+        <li v-for="img in images" :key="img.id" class="cai__image">
+          <div class="cai__image-thumb">
+            <img :src="img.thumbnail_url" :alt="img.alt || ''" loading="lazy" />
+            <button
+              type="button"
+              class="cai__image-del"
+              aria-label="Delete image"
+              @click="deleteImage(img)"
+            >×</button>
+          </div>
+          <label class="cai__image-field">
+            <span>Alt text</span>
+            <input
+              type="text"
+              maxlength="200"
+              :value="img.alt"
+              placeholder="What's in the image?"
+              @change="updateImageMeta(img, { alt: ($event.target as HTMLInputElement).value })"
+            />
+          </label>
+          <label class="cai__image-field">
+            <span>Caption (optional)</span>
+            <input
+              type="text"
+              maxlength="200"
+              :value="img.caption"
+              placeholder="e.g. 'Our 1963 nationals trophy'"
+              @change="updateImageMeta(img, { caption: ($event.target as HTMLInputElement).value })"
+            />
+          </label>
+        </li>
+      </ul>
+
+      <p v-if="images.length > 0" class="cai__sub cai__sub--muted">Deleting an image doesn't remove it from the block's saved HTML — regenerate to swap or drop references.</p>
     </div>
 
     <!-- Code tabs -->
@@ -621,5 +811,145 @@ function onAllowJsToggle(allow: boolean) {
   font-size: 13px;
   background: var(--color-surface);
   border-radius: 10px;
+}
+
+/* ── Images tab ────────────────────────────────────────────── */
+.cai__tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  min-width: 18px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-ink);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.cai__images-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.cai__images-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--color-fog);
+}
+.cai__images-count strong {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+.cai__images-uploading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-ink);
+}
+.cai__file-input { display: none; }
+
+.cai__images-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 20px;
+  justify-content: center;
+  background: var(--color-surface);
+  border-radius: 10px;
+  color: var(--color-fog);
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.cai__images-empty svg { color: var(--color-mute); flex-shrink: 0; }
+
+.cai__images-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+.cai__image {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: 12px;
+}
+.cai__image-thumb {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: var(--color-hairline);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.cai__image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cai__image-del {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(10, 10, 11, 0.7);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cai__image-del:hover { background: var(--color-danger, #DC2F3B); }
+
+.cai__image-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cai__image-field > span {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-fog);
+}
+.cai__image-field input {
+  padding: 8px 10px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 8px;
+  background: #fff;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-ink);
+}
+.cai__image-field input:focus {
+  outline: 2px solid var(--color-ink);
+  outline-offset: -2px;
+  border-color: transparent;
 }
 </style>

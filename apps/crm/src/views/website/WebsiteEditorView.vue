@@ -1785,6 +1785,7 @@ const lastSavedLabel = computed(() => {
         :open="customAiModalBlockId !== null"
         :block-id="customAiEditingBlock.id"
         :club-id="currentClubId"
+        :page-slug="currentPage"
         :value="(customAiEditingBlock.props as CustomAiProps)"
         :brand="customAiBrand"
         :nearby-blocks="customAiNearby"

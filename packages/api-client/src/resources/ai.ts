@@ -62,10 +62,20 @@ export interface AiIterationContext {
   prev_js: string | null
 }
 
+/** Admin-uploaded image available to Gemini for inline `<img src>` use.
+ *  Brief 113 §5.9 — the model uses these URLs verbatim; no placeholder
+ *  services, no URL rewrites. Max 20 per request (server-side cap). */
+export interface AiImageRef {
+  url: string
+  alt?: string | null
+  caption?: string | null
+}
+
 export interface GenerateBlockInput {
   prompt: string
   brand?: AiBrandContext
   nearby_blocks?: AiNearbyBlock[]
+  images?: AiImageRef[]
   iteration?: AiIterationContext | null
   /** Off by default — custom JS is opt-in because it's the biggest
    *  surface for site breakage. */

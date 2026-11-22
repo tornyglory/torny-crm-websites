@@ -19,7 +19,10 @@ const club = useClub()
 const { isSignedIn } = useMember()
 
 const tournamentSlug = computed(() => (route.params.slug as string) || '')
-const clubSlug = computed(() => club.value?.slug ?? '')
+// Brief 110 — `publicGet` hits a SAM-stack route that keys on the
+// routing subdomain, not the canonical `clubs_data.slug`. For the ~2
+// drift clubs those differ. Prefer subdomain; fall back to slug.
+const clubSlug = computed(() => club.value?.subdomain ?? club.value?.slug ?? '')
 
 const { data: tournament, error, pending } = await useAsyncData<PublicTournamentDetail | null>(
   () => `tournament-${clubSlug.value}-${tournamentSlug.value}-enter`,

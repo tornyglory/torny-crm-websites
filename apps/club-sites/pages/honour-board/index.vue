@@ -24,7 +24,14 @@ const accent = computed(() => site.value?.club.brand_primary ?? club.value?.bran
 
 usePageMeta('honour-board')
 
-const clubSlug = computed(() => club.value?.slug ?? site.value?.club?.slug ?? '')
+// Brief 110 — honour-board lives on the SAM stack and keys on the
+// routing subdomain, not the canonical `clubs_data.slug`. For the ~2
+// drift clubs those differ (e.g. Naenae: slug `nae-nae-bowling-club`
+// vs subdomain `naenae-bowling-club`). Prefer subdomain, fall back to
+// slug for clubs where the two still match or `subdomain` is absent.
+const clubSlug = computed(() =>
+  club.value?.subdomain ?? club.value?.slug ?? site.value?.club?.slug ?? '',
+)
 
 // ── Filter / search / sort / paging state ──────────────────────
 type SortDir = 'year_desc' | 'year_asc'

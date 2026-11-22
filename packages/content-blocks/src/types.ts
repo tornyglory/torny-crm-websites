@@ -810,6 +810,10 @@ export type Block =
  */
 export interface BlockContext {
   brandPrimary?: string | null
+  /** Tenant club id. Prefer this over slug/subdomain when filtering
+   *  response data by club — it survives brief-110 slug drift and
+   *  is stable across every endpoint that returns a `club` object. */
+  clubId?: number | null
   /** Canonical `clubs_data.slug` — the key the Venue-stack
    *  `venue-packages` / `venue-availability` endpoints accept
    *  (brief 109). Pre-brief-110 this matched the subdomain for

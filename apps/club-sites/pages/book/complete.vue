@@ -34,7 +34,7 @@ const accent = computed(() => club.value?.brand_primary ?? '#2563EB')
 // resolve fix now returns the right value under club.slug for drift
 // clubs. 404s are intentional (bad ref, wrong-club ref, soft-deleted
 // row) — we fall through to the thin query-param-only card.
-const { data: booking, pending: bookingLoading, error: bookingError } = await useAsyncData<PublicVenueBookingRead | null>(
+const { data: booking, pending: bookingLoading } = await useAsyncData<PublicVenueBookingRead | null>(
   () => `venueBooking:${bookingRef.value || 'none'}`,
   async () => {
     const slug = club.value?.slug ?? null

@@ -32,6 +32,8 @@ import Skeleton from '@/components/Skeleton.vue'
 import BlockPaletteDialog from '@/components/BlockPaletteDialog.vue'
 import WebsiteSettingsPanel, { type WebsiteSettingsSection } from '@/components/WebsiteSettingsPanel.vue'
 import JoinFormEditorModal from '@/components/modals/JoinFormEditorModal.vue'
+import CustomAiBlockModal from '@/components/modals/CustomAiBlockModal.vue'
+import type { AiNearbyBlock } from '@torny/api-client'
 import { ApiError, pages, isValidPageSlug, RESERVED_PAGE_SLUGS, slugifyTitle, type PageBlock } from '@torny/api-client'
 import { usePagesStore } from '@/stores/pages'
 import type {
@@ -77,6 +79,7 @@ import type {
   TimelineEntry,
   TwoColumnProps,
   DividerProps,
+  CustomAiProps,
 } from '@torny/content-blocks'
 
 const route = useRoute()
@@ -342,8 +345,21 @@ const dividerDefault = (variant: DividerProps['variant'] = 'hairline'): DividerP
   height: variant === 'spacer' ? 64 : undefined,
 })
 
+/** Default props for a freshly-added Custom AI block — blank by design so
+ *  the admin lands on the Prompt tab and generates something immediately. */
+const customAiDefault = (): CustomAiProps => ({
+  html: '',
+  css: '',
+  js: null,
+  allowJs: false,
+  aiNotes: null,
+  promptHistory: [],
+})
+
 // Palette entries reused across multiple pages.
 const EDITORIAL_PALETTE = [
+  { type: 'customAi' as const, label: 'Custom · AI', hint: 'Generate a custom block with AI — HTML / CSS / optional JS', icon: '✦',
+    defaults: () => customAiDefault() },
   { type: 'mediaSplit' as const, label: 'Media + text', hint: 'Image on one side, story on the other', icon: '◨',
     defaults: () => mediaSplitDefault('left') },
   { type: 'sectionTitle' as const, label: 'Section title', hint: 'A centered display heading', icon: '¶',
@@ -806,6 +822,7 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   timeline: 'Timeline',
   twoColumn: 'Two-column text',
   divider: 'Divider',
+  customAi: 'Custom · AI',
 }
 
 // ── Seed layouts (per page) ───────────────────────────────
@@ -1202,6 +1219,75 @@ const selectedBlock = computed<Block | null>(() => state.blocks.find((b) => b.id
 // fields" on the Join form block's right rail to open.
 const joinFormEditorOpen = ref(false)
 const currentClubId = computed<number | null>(() => clubStore.current?.id ?? null)
+
+// ── Custom AI block modal ──────────────────────────────────
+const customAiModalBlockId = ref<string | null>(null)
+function openCustomAiModal(blockId: string): void {
+  customAiModalBlockId.value = blockId
+}
+function closeCustomAiModal(): void {
+  customAiModalBlockId.value = null
+}
+const customAiEditingBlock = computed(() =>
+  customAiModalBlockId.value == null
+    ? null
+    : state.blocks.find((b) => b.id === customAiModalBlockId.value && b.type === 'customAi') ?? null,
+)
+function saveCustomAi(next: CustomAiProps): void {
+  const id = customAiModalBlockId.value
+  if (!id) return
+  const target = state.blocks.find((b) => b.id === id)
+  if (!target || target.type !== 'customAi') return
+  target.props = next
+  closeCustomAiModal()
+}
+
+/** Brand payload the AI generator sends alongside the prompt. The club's
+ *  accent + name come from the club store (varies per tenant). Everything
+ *  else is sourced from `packages/design-tokens/src/tokens.css` and kept
+ *  in sync by hand — if the tokens file changes materially, update the
+ *  constants here so the AI's context matches the actual render target. */
+const customAiBrand = computed(() => {
+  const c = clubStore.current
+  return {
+    club_name: c?.name ?? null,
+    accent_color: c?.brandPrimary ?? '#2563EB',
+    ink_color: '#0A0A0B',
+    graphite_color: '#2E2E33',
+    surface_color: '#F5F5F2',
+    hairline_color: '#E7E7E1',
+    fog_color: '#6B6B72',
+    mute_color: '#A3A39B',
+    heading_font: 'Space Grotesk',
+    body_font: 'Inter',
+    mono_font: 'JetBrains Mono',
+    type_scale: 'label 11, caption 12, body-sm 14, body 16, title-sm 20, title 24, display-sm 32, display 44, display-lg 56, hero 88',
+    font_weights: 'regular 400, medium 500, semibold 600, bold 700',
+    spacing_scale: '4, 8, 12, 16, 20, 24, 32, 40, 48, 64',
+    radius_scale: 'xs 4, sm 8, md 12, lg 20, pill 999',
+    breakpoints: 'mobile ≤767px, tablet 768-1023px, desktop ≥1024px, wide ≥1440px',
+    container_max: '1280px',
+  }
+})
+
+/** Lightweight summary of the surrounding blocks on this page so the
+ *  model matches tone. Keeps the payload small — just the block type and
+ *  the top-level heading / body copy when present. */
+const customAiNearby = computed<AiNearbyBlock[]>(() => {
+  const id = customAiModalBlockId.value
+  const out: AiNearbyBlock[] = []
+  for (const b of state.blocks) {
+    if (b.id === id) continue
+    const p = b.props as Record<string, unknown>
+    const title = (p.heading as string | undefined) ?? (p.title as string | undefined) ?? null
+    const text = (p.description as string | undefined)
+      ?? (p.body as string | undefined)
+      ?? (p.subheading as string | undefined)
+      ?? null
+    out.push({ type: b.type, title, text })
+  }
+  return out.slice(0, 6)
+})
 
 const hasUnpublishedChanges = computed(() => state.hasUnpublishedChanges)
 
@@ -1650,7 +1736,10 @@ const lastSavedLabel = computed(() => {
           <!-- Block card -->
           <article
             class="block"
-            :class="{ 'block--selected': selectedId === block.id }"
+            :class="{
+              'block--selected': selectedId === block.id,
+              'block--ai': block.type === 'customAi',
+            }"
             @click="selectedId = block.id"
           >
             <div class="block__handle">
@@ -1686,6 +1775,21 @@ const lastSavedLabel = computed(() => {
         :open="joinFormEditorOpen"
         :club-id="currentClubId"
         @close="joinFormEditorOpen = false"
+      />
+
+      <!-- Custom · AI block editor — opens from the right-rail inspector
+           when a customAi block is selected. Lives at the editor root so
+           the modal's width/preview isn't constrained by the ~340px rail. -->
+      <CustomAiBlockModal
+        v-if="customAiEditingBlock"
+        :open="customAiModalBlockId !== null"
+        :block-id="customAiEditingBlock.id"
+        :club-id="currentClubId"
+        :value="(customAiEditingBlock.props as CustomAiProps)"
+        :brand="customAiBrand"
+        :nearby-blocks="customAiNearby"
+        @close="closeCustomAiModal"
+        @save="saveCustomAi"
       />
 
       <!-- Inspector -->
@@ -3512,6 +3616,27 @@ const lastSavedLabel = computed(() => {
               <input v-model.number="(selectedBlock!.props as DividerProps).height" type="number" min="8" max="200" />
             </label>
           </template>
+
+          <template v-else-if="selectedBlock.type === 'customAi'">
+            <p class="field__group-title" style="margin-top:0">Custom · AI block</p>
+            <p class="field__hint" style="margin: 0 0 12px">Everything — prompt, HTML, CSS, optional JS — lives in the editor modal.</p>
+            <div v-if="(selectedBlock!.props as CustomAiProps).aiNotes" class="customai-notes">
+              <div class="customai-notes__label">Last AI note</div>
+              <p>{{ (selectedBlock!.props as CustomAiProps).aiNotes }}</p>
+            </div>
+            <button
+              type="button"
+              class="btn btn--ink"
+              style="width: 100%; justify-content: center;"
+              @click="openCustomAiModal(selectedBlock!.id)"
+            >
+              <span style="color: var(--color-accent, #FFD700); margin-right: 6px;">✦</span>
+              {{ (selectedBlock!.props as CustomAiProps).html?.trim() ? 'Edit with AI' : 'Generate with AI' }}
+            </button>
+            <p class="field__hint" style="margin: 8px 0 0">
+              {{ (selectedBlock!.props as CustomAiProps).html?.trim() ? 'Opens the prompt + code editor. Your current block renders in the preview to the left.' : 'Opens a prompt editor — tell Gemini what you want, iterate, and save when it looks right.' }}
+            </p>
+          </template>
         </template>
       </aside>
     </div>
@@ -3988,6 +4113,57 @@ const lastSavedLabel = computed(() => {
 .block__delete { width: 28px; height: 28px; border: 1px solid var(--color-hairline); background: #fff; color: var(--color-fog); border-radius: 8px; font-size: 16px; cursor: pointer; align-self: center; flex-shrink: 0; }
 .block__delete:hover { background: var(--color-danger); border-color: var(--color-danger); color: #fff; }
 
+/* ── Custom · AI block card ─────────────────────────────────
+ * Visually marks any `customAi` block in the list so admins can
+ * spot it at a glance. The treatment is a conic gradient border
+ * (ink → accent → warm tangerine) via the padding-box / border-box
+ * double-background trick, a soft inset tint, and an animated
+ * sparkle on the eyebrow row. Slow animation on purpose — a 2.4s
+ * breathe is noticeable on scan but doesn't distract. */
+.block--ai {
+  position: relative;
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(135deg,
+      var(--color-ink) 0%,
+      var(--color-accent) 55%,
+      var(--color-feature-tangerine) 100%) border-box;
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--color-ink) 4%, transparent);
+}
+.block--ai:hover {
+  box-shadow: 0 8px 20px -10px color-mix(in oklab, var(--color-accent) 40%, transparent);
+}
+.block--ai.block--selected {
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--color-accent) 18%, transparent),
+    0 8px 20px -12px color-mix(in oklab, var(--color-ink) 20%, transparent);
+}
+.block--ai .block__type {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-ink);
+}
+.block--ai .block__type::before {
+  content: "✦";
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--color-accent);
+  font-size: 13px;
+  line-height: 1;
+  transform-origin: center;
+  animation: block-ai-sparkle 2.4s ease-in-out infinite;
+}
+@keyframes block-ai-sparkle {
+  0%, 100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  50% { opacity: 0.55; transform: scale(0.82) rotate(12deg); }
+}
+/* Respect the admin's reduce-motion preference — static sparkle
+ * still carries the "this is AI" meaning without the animation. */
+@media (prefers-reduced-motion: reduce) {
+  .block--ai .block__type::before { animation: none; }
+}
+
 /* Inspector */
 .inspector { padding: 20px 22px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; position: sticky; top: 20px; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 60px); overflow-y: auto; }
 .inspector__empty { text-align: center; padding: 20px 0; color: var(--color-fog); }
@@ -4015,6 +4191,14 @@ const lastSavedLabel = computed(() => {
 .chip-picker__item:has(input:checked) { background: var(--color-ink); color: #fff; border-color: var(--color-ink); font-weight: 600; }
 .chip-picker__item input { appearance: none; margin: 0; }
 .field__group-title { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
+.customai-notes {
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+.customai-notes__label { font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); }
+.customai-notes p { margin: 4px 0 0; font-family: var(--font-body); font-size: 12px; color: var(--color-ink); line-height: 1.5; }
 
 /* Segmented control inside the settings panel — used by blocks that need
  * a 2-way or 3-way picker (media type / content position / etc). Matches

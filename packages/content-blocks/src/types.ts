@@ -29,6 +29,7 @@ export type BlockType =
   | 'timeline'
   | 'twoColumn'
   | 'divider'
+  | 'customAi'
 
 export interface BlockBase<T extends BlockType, P> {
   id: string
@@ -740,6 +741,35 @@ export interface DividerProps {
   height?: number
 }
 
+/** AI-generated custom block (brief TBD). Owner-authored HTML/CSS/JS,
+ *  typically seeded by the Gemini proxy endpoint. Rendered inside a
+ *  scoped wrapper so inline CSS can't leak onto the rest of the page.
+ *  JS is opt-in via `allowJs` — off by default because it's the
+ *  biggest surface for site breakage. */
+export interface CustomAiPromptEntry {
+  /** ISO 8601 timestamp of the generation. */
+  at: string
+  prompt: string
+  /** Model used — e.g. `gemini-2.5-flash`. */
+  model?: string
+}
+
+export interface CustomAiProps {
+  html: string
+  css: string
+  /** Null or empty string = no custom JS. Honoured only when
+   *  `allowJs: true`; the renderer refuses to execute JS otherwise. */
+  js?: string | null
+  /** Explicit opt-in so admins can't accidentally ship custom JS. */
+  allowJs?: boolean
+  /** Short description the model returned alongside the code — shown in
+   *  the CRM inspector so admins can re-read what they asked for. */
+  aiNotes?: string | null
+  /** Last-N prompts kept for "regenerate with tweaks". The renderer
+   *  ignores this; the CRM inspector surfaces it. */
+  promptHistory?: CustomAiPromptEntry[]
+}
+
 export type Block =
   | BlockBase<'hero', HeroProps>
   | BlockBase<'richText', RichTextProps>
@@ -771,6 +801,7 @@ export type Block =
   | BlockBase<'timeline', TimelineProps>
   | BlockBase<'twoColumn', TwoColumnProps>
   | BlockBase<'divider', DividerProps>
+  | BlockBase<'customAi', CustomAiProps>
 
 /**
  * Shape data-hydrated blocks (eventList, honourBoard) inject at render time.

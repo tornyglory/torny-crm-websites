@@ -34,6 +34,7 @@ import FullBleedMediaBlock from './blocks/FullBleedMediaBlock.vue'
 import TimelineBlock from './blocks/TimelineBlock.vue'
 import TwoColumnBlock from './blocks/TwoColumnBlock.vue'
 import DividerBlock from './blocks/DividerBlock.vue'
+import CustomAiBlock from './blocks/CustomAiBlock.vue'
 
 defineProps<{ block: Block }>()
 </script>
@@ -69,4 +70,5 @@ defineProps<{ block: Block }>()
   <TimelineBlock v-else-if="block.type === 'timeline'" v-bind="block.props" />
   <TwoColumnBlock v-else-if="block.type === 'twoColumn'" v-bind="block.props" />
   <DividerBlock v-else-if="block.type === 'divider'" v-bind="block.props" />
+  <CustomAiBlock v-else-if="block.type === 'customAi'" v-bind="block.props" :block-id="block.id" />
 </template>

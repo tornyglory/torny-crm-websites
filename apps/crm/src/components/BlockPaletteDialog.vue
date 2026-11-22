@@ -75,6 +75,7 @@ const TAGS_BY_TYPE: Record<BlockType, Tag[]> = {
   timeline:       ['data'],
   twoColumn:      ['text', 'layout'],
   divider:        ['utility'],
+  customAi:       ['layout', 'utility'],
 }
 
 const activeTag = ref<Tag>('all')
@@ -810,6 +811,29 @@ const BlockPreview = defineComponent({
           rect(80, 58, 4, 4, { fill: '#A3A39B', rx: 2 }),
           rect(20, 60, 32, 1, { fill: hairline }),
           rect(148, 60, 32, 1, { fill: hairline }),
+        ])
+
+      case 'customAi':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#0A0A0B' }),
+          // Shimmer glow suggesting "AI"
+          h('defs', {}, [
+            h('radialGradient', { id: 'ai-glow', cx: '50%', cy: '50%', r: '60%' }, [
+              h('stop', { 'offset': '0%', 'stop-color': accent, 'stop-opacity': 0.55 }),
+              h('stop', { 'offset': '100%', 'stop-color': accent, 'stop-opacity': 0 }),
+            ]),
+          ]),
+          rect(0, 0, 200, 120, { fill: 'url(#ai-glow)' }),
+          // Sparkle mark
+          h('path', {
+            d: 'M100 40 L104 56 L120 60 L104 64 L100 80 L96 64 L80 60 L96 56 Z',
+            fill: '#fff',
+            opacity: 0.95,
+          }),
+          h('circle', { cx: 134, cy: 44, r: 3, fill: '#fff', opacity: 0.8 }),
+          h('circle', { cx: 68, cy: 74, r: 2.5, fill: '#fff', opacity: 0.6 }),
+          rect(50, 94, 100, 3, { fill: '#fff', opacity: 0.35 }),
+          rect(70, 102, 60, 3, { fill: '#fff', opacity: 0.2 }),
         ])
 
       default:

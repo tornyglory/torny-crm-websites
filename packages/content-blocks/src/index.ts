@@ -28,6 +28,7 @@ export { default as FullBleedMediaBlock } from './blocks/FullBleedMediaBlock.vue
 export { default as TimelineBlock } from './blocks/TimelineBlock.vue'
 export { default as TwoColumnBlock } from './blocks/TwoColumnBlock.vue'
 export { default as DividerBlock } from './blocks/DividerBlock.vue'
+export { default as CustomAiBlock } from './blocks/CustomAiBlock.vue'
 
 // Site chrome — same shell on every club site, tenant data (name, logo,
 // --color-accent) plumbed via props. Clubs vary content, not chrome.

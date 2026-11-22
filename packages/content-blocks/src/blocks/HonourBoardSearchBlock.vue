@@ -39,7 +39,13 @@ const ctx = computed<BlockContext | null>(() => {
   if (!ctxRef) return null
   return isRef(ctxRef) ? ctxRef.value : ctxRef
 })
-const clubSlug = computed<string | null>(() => ctx.value?.clubSlug ?? null)
+// Brief 110 — SAM-side /public/clubs/:slug/honour-board +
+// /honour-categories key on subdomain, not clubs_data.slug. Prefer
+// `clubSubdomain`; fall back to `clubSlug` for hosts that haven't
+// plumbed brief 110 yet.
+const clubSlug = computed<string | null>(
+  () => ctx.value?.clubSubdomain ?? ctx.value?.clubSlug ?? null,
+)
 const brand = computed(() => ctx.value?.brandPrimary ?? '#2563EB')
 
 // ── Filter / search / sort / paging ────────────────────────────

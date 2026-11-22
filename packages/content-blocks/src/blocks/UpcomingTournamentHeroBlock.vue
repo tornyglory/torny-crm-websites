@@ -39,7 +39,12 @@ const ctx = computed<BlockContext | null>(() => {
   if (!ctxRef) return null
   return isRef(ctxRef) ? ctxRef.value : ctxRef
 })
-const clubSlug = computed<string | null>(() => ctx.value?.clubSlug ?? null)
+// Brief 110 — tournaments.publicGet(clubSlug, …) on SAM keys on
+// subdomain; the client-side `t.club.slug` filter uses the same
+// comparison. Prefer `clubSubdomain`.
+const clubSlug = computed<string | null>(
+  () => ctx.value?.clubSubdomain ?? ctx.value?.clubSlug ?? null,
+)
 const brand = computed(() => ctx.value?.brandPrimary ?? '#16A34A')
 const needsSlug = computed(() => !clubSlug.value)
 

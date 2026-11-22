@@ -38,7 +38,13 @@ const ctx = computed<BlockContext | null>(() => {
   if (!ctxRef) return null
   return isRef(ctxRef) ? ctxRef.value : ctxRef
 })
-const clubSlug = computed<string | null>(() => ctx.value?.clubSlug ?? null)
+// Brief 110 — tournaments.publicList is a global SAM-stack call;
+// the client-side `t.club.slug` filter compares against whatever
+// shape the response carries, which is historically subdomain.
+// Prefer `clubSubdomain` for the comparison (falls back to `clubSlug`).
+const clubSlug = computed<string | null>(
+  () => ctx.value?.clubSubdomain ?? ctx.value?.clubSlug ?? null,
+)
 const brand = computed(() => ctx.value?.brandPrimary ?? '#16A34A')
 
 const needsSlug = computed(() => props.scope === 'club' && !clubSlug.value)

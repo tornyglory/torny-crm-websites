@@ -50,10 +50,19 @@ const ctx = computed<BlockContext | null>(() => {
   if (!ctxRef) return null
   return isRef(ctxRef) ? ctxRef.value : ctxRef
 })
-const clubSlug = computed<string | null>(() => ctx.value?.clubSlug ?? null)
+// Brief 110 — the id path below is drift-immune (preferred); this slug
+// is only the fallback comparison against `t.club.slug` from the global
+// tournaments list, which carries the subdomain shape.
+const clubSlug = computed<string | null>(
+  () => ctx.value?.clubSubdomain ?? ctx.value?.clubSlug ?? null,
+)
+const clubId = computed<number | null>(() => ctx.value?.clubId ?? null)
 const brand = computed(() => ctx.value?.brandPrimary ?? '#2563EB')
 
-const needsSlug = computed(() => props.scope === 'club' && !clubSlug.value)
+// `scope: 'club'` needs something to filter by. Either the club id
+// (preferred — stable across brief-110 slug drift) or the slug (older
+// contexts that haven't injected clubId yet).
+const needsSlug = computed(() => props.scope === 'club' && !clubId.value && !clubSlug.value)
 
 // ── Filter state ───────────────────────────────────────────────
 
@@ -114,11 +123,20 @@ async function load() {
       { signal: abort.signal },
     )
     let list = res.tournaments
-    if (props.scope === 'club' && clubSlug.value) {
-      list = list.filter((t) => t.club.slug === clubSlug.value)
+    if (props.scope === 'club') {
+      // Prefer the club id (stable across brief-110 slug drift) and
+      // fall back to the slug when the host hasn't injected clubId
+      // into BlockContext yet.
+      if (clubId.value != null) {
+        list = list.filter((t) => t.club.id === clubId.value)
+      } else if (clubSlug.value) {
+        list = list.filter((t) => t.club.slug === clubSlug.value)
+      }
     }
     results.value = list
-    total.value = res.pagination.total_items
+    // Count what we actually render, not the pre-filter network total —
+    // "N listed" should match the rows on screen.
+    total.value = list.length
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') return
     results.value = []
@@ -130,7 +148,7 @@ async function load() {
 
 onMounted(load)
 watch(
-  [activeFormat, activeCategory, activeGender, openOnly, debouncedSearch, clubSlug],
+  [activeFormat, activeCategory, activeGender, openOnly, debouncedSearch, clubSlug, clubId],
   load,
 )
 

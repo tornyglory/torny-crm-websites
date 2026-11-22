@@ -34,7 +34,7 @@ import WebsiteSettingsPanel, { type WebsiteSettingsSection } from '@/components/
 import JoinFormEditorModal from '@/components/modals/JoinFormEditorModal.vue'
 import CustomAiBlockModal from '@/components/modals/CustomAiBlockModal.vue'
 import type { AiNearbyBlock } from '@torny/api-client'
-import { ApiError, pages, isValidPageSlug, RESERVED_PAGE_SLUGS, slugifyTitle, type PageBlock } from '@torny/api-client'
+import { ApiError, pages, blockImages, isValidPageSlug, RESERVED_PAGE_SLUGS, slugifyTitle, type PageBlock } from '@torny/api-client'
 import { usePagesStore } from '@/stores/pages'
 import type {
   Block,
@@ -1387,6 +1387,51 @@ function moveBlock(id: string, dir: -1 | 1): void {
   state.blocks.splice(target, 0, block)
 }
 
+/**
+ * Duplicate a block in place — inserts a deep-cloned copy right after
+ * the source and selects it. For blocks with brief-18 image rows (any
+ * type: customAi, hero, mediaSplit, venueHireHero, gallery, …) we
+ * also copy the image rows to the new block via brief 114. The
+ * underlying Cloudflare assets are shared by reference, so no
+ * re-upload and the cloned HTML's `<img src=…>` tags keep rendering.
+ *
+ * If the image copy fails (race with autosave, backend hiccup, etc.)
+ * we leave the FE clone in place — the duplicate still works visually
+ * because the cloned HTML still references the source's URLs. The
+ * cost is that deleting the source could eventually 404 the duplicate's
+ * images. Warn but don't rollback.
+ */
+async function duplicateBlock(id: string): Promise<void> {
+  const idx = state.blocks.findIndex((b) => b.id === id)
+  if (idx === -1) return
+  const src = state.blocks[idx]!
+  // JSON round-trip (not structuredClone) because `src.props` comes out
+  // of the reactive `state.blocks` array as a Proxy, which structuredClone
+  // can't handle. Block props are always JSON-serialisable — they're
+  // persisted that way in `layout_draft` — so the round-trip is a true
+  // deep clone with no lossy coercion.
+  const next = {
+    id: newBlockId(),
+    type: src.type,
+    props: JSON.parse(JSON.stringify(src.props)),
+  } as Block
+  state.blocks.splice(idx + 1, 0, next)
+  selectedId.value = next.id
+
+  // Autosave fires on the layout_draft change. The image-copy call
+  // runs in parallel; it's idempotent on an image-less source
+  // (returns copied: 0) so no need to pre-check.
+  const clubId = clubStore.current?.id
+  const slug = currentPage.value
+  if (typeof clubId !== 'number') return
+  try {
+    await blockImages.copyFrom(clubId, slug, src.id, next.id)
+  } catch (err) {
+    console.warn('[duplicateBlock] image copy failed; props clone kept', err)
+    toast.info('Block duplicated. Images couldn\'t be copied — delete and retry if needed.')
+  }
+}
+
 function resetBlock(id: string): void {
   const idx = state.blocks.findIndex((b) => b.id === id)
   if (idx === -1) return
@@ -1750,6 +1795,18 @@ const lastSavedLabel = computed(() => {
               <div class="block__type">{{ BLOCK_LABEL[block.type] }}</div>
               <div class="block__summary">{{ blockSummary(block) }}</div>
             </div>
+            <button
+              type="button"
+              class="block__duplicate"
+              title="Duplicate block"
+              aria-label="Duplicate block"
+              @click.stop="duplicateBlock(block.id)"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <rect x="3" y="3" width="8" height="8" rx="1.2" stroke="currentColor" stroke-width="1.4" />
+                <rect x="6" y="6" width="8" height="8" rx="1.2" stroke="currentColor" stroke-width="1.4" fill="#fff" />
+              </svg>
+            </button>
             <button type="button" class="block__delete" @click.stop="removeBlock(block.id)" aria-label="Delete">×</button>
           </article>
 
@@ -4113,6 +4170,22 @@ const lastSavedLabel = computed(() => {
 .block__summary { font-family: var(--font-display); font-size: 15px; font-weight: 500; color: var(--color-ink); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .block__delete { width: 28px; height: 28px; border: 1px solid var(--color-hairline); background: #fff; color: var(--color-fog); border-radius: 8px; font-size: 16px; cursor: pointer; align-self: center; flex-shrink: 0; }
 .block__delete:hover { background: var(--color-danger); border-color: var(--color-danger); color: #fff; }
+.block__duplicate {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-hairline);
+  background: #fff;
+  color: var(--color-fog);
+  border-radius: 8px;
+  cursor: pointer;
+  align-self: center;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+}
+.block__duplicate:hover { background: var(--color-ink); border-color: var(--color-ink); color: #fff; }
 
 /* ── Custom · AI block card ─────────────────────────────────
  * Visually marks any `customAi` block in the list so admins can

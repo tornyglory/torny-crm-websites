@@ -8,7 +8,7 @@
 // The direct upload to Cloudflare is unauthenticated multipart form POST
 // — everything else is bearer-authed via authedFetch.
 
-import { CRM_BASE } from '../config'
+import { CRM_BASE, VENUE_BASE } from '../config'
 import { authedFetch } from '../http'
 import type { PageSlug } from './pages'
 
@@ -210,4 +210,47 @@ export async function upload(
     },
     { signal: opts.signal },
   )
+}
+
+// ── Duplicate (brief 114) ─────────────────────────────────────────
+
+export interface CopyFromResponse {
+  copied: number
+  images: BlockImage[]
+}
+
+/**
+ * Clone every active image row from `sourceBlockId` to `targetBlockId`
+ * on the same `(club, page)`. The underlying Cloudflare assets are
+ * shared by reference — no re-upload, same `cloudflare_image_id` on
+ * each new row — so the duplicate's `<img src="…">` tags render the
+ * same bytes as the source's. See brief 114 §4 for the full flow.
+ *
+ * Hosted on the Venue stack (alongside `/ai-generate`) because the CRM
+ * stack is at the CloudFormation 500-resource cap. Base is
+ * `VENUE_BASE`, not `CRM_BASE`.
+ *
+ * `copied: 0` is a valid success — source had no active rows. Keeps
+ * the duplicate flow idempotent for image-less blocks.
+ */
+export async function copyFrom(
+  clubId: number,
+  pageSlug: PageSlug,
+  sourceBlockId: string,
+  targetBlockId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<CopyFromResponse> {
+  const res = await authedFetch<Envelope<CopyFromResponse>>(
+    `${VENUE_BASE}/clubs/${clubId}/block-images-copy`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        page_slug: pageSlug,
+        source_block_id: sourceBlockId,
+        target_block_id: targetBlockId,
+      }),
+      signal: opts.signal,
+    },
+  )
+  return res.data
 }

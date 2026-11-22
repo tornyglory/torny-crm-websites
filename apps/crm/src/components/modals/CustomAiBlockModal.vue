@@ -195,14 +195,33 @@ async function onFilesPicked(e: Event) {
   }
 }
 
-async function deleteImage(img: BlockImage) {
-  if (props.clubId == null || !props.pageSlug) return
-  if (!window.confirm('Delete this image? The block\'s saved HTML will keep referencing it until you regenerate.')) return
+// Delete needs a confirmation step — the block's saved HTML will keep
+// referencing the deleted image until the admin regenerates, which is
+// a subtle gotcha worth surfacing before the click lands. Instead of
+// a native `window.confirm`, we stage the image into `pendingDelete`
+// and render a `CrmModal` on top of this modal with on-brand chrome.
+const pendingDelete = ref<BlockImage | null>(null)
+const deleting = ref(false)
+
+function deleteImage(img: BlockImage) {
+  pendingDelete.value = img
+}
+function cancelDelete() {
+  if (deleting.value) return
+  pendingDelete.value = null
+}
+async function confirmDelete() {
+  const img = pendingDelete.value
+  if (!img || props.clubId == null || !props.pageSlug) return
+  deleting.value = true
   try {
     await blockImages.remove(props.clubId, props.pageSlug, props.blockId, img.id)
     images.value = images.value.filter((i) => i.id !== img.id)
+    pendingDelete.value = null
   } catch (err) {
     imagesError.value = err instanceof ApiError ? err.message : 'Delete failed.'
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -538,6 +557,31 @@ function onAllowJsToggle(allow: boolean) {
       >Save block</button>
     </template>
   </CrmModal>
+
+  <!-- Delete-image confirmation (nested on top of the editor modal). -->
+  <CrmModal
+    :open="pendingDelete !== null"
+    width="sm"
+    eyebrow="Images · delete"
+    title="Delete this image?"
+    @close="cancelDelete"
+  >
+    <div class="cai__confirm">
+      <div v-if="pendingDelete" class="cai__confirm-thumb">
+        <img :src="pendingDelete.thumbnail_url" :alt="pendingDelete.alt || ''" />
+      </div>
+      <p class="cai__confirm-body">The block's saved HTML will keep referencing this image until you regenerate. If the public site is using it, it'll show as broken after the 7-day grace window.</p>
+    </div>
+    <template #footer>
+      <button type="button" class="cai-btn cai-btn--outline" :disabled="deleting" @click="cancelDelete">Keep it</button>
+      <button
+        type="button"
+        class="cai-btn cai-btn--danger"
+        :disabled="deleting"
+        @click="confirmDelete"
+      >{{ deleting ? 'Deleting…' : 'Delete image' }}</button>
+    </template>
+  </CrmModal>
 </template>
 
 <style scoped>
@@ -732,6 +776,13 @@ function onAllowJsToggle(allow: boolean) {
 }
 .cai-btn--outline:hover:not(:disabled) { border-color: var(--color-ink); }
 .cai-btn--outline:disabled { opacity: 0.5; }
+
+.cai-btn--danger {
+  background: var(--color-danger, #DC2F3B);
+  color: #fff;
+}
+.cai-btn--danger:hover:not(:disabled) { background: #B91C1C; }
+.cai-btn--danger:disabled { opacity: 0.6; }
 
 /* Generate pill — ink base with a subtle accent-tinted glow so it
  * reads as the AI-powered action without shouting. */
@@ -961,5 +1012,33 @@ function onAllowJsToggle(allow: boolean) {
   outline: 2px solid var(--color-ink);
   outline-offset: -2px;
   border-color: transparent;
+}
+
+/* ── Delete-image confirmation ─────────────────────────────── */
+.cai__confirm {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.cai__confirm-thumb {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--color-hairline);
+}
+.cai__confirm-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cai__confirm-body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-ink);
 }
 </style>

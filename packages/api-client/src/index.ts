@@ -424,6 +424,7 @@ export type {
   ConfirmParams as BlockImageConfirmParams,
   PatchParams as BlockImagePatchParams,
   ReorderResponse as BlockImageReorderResponse,
+  CopyFromResponse as BlockImageCopyFromResponse,
 } from './resources/blockImages'
 export * as fontPairs from './resources/fontPairs'
 export type {

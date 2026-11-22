@@ -155,10 +155,11 @@ function initialsFor(name: string, initials?: string): string {
 .vhh__title--md { --h: 72px; --h-md: 64px; --h-sm: 56px; --h-xs: 40px; }
 .vhh__title--lg { --h: 88px; --h-md: 80px; --h-sm: 64px; --h-xs: 44px; }
 .vhh__title--xl { --h: 112px; --h-md: 96px; --h-sm: 72px; --h-xs: 48px; }
-/* Match HeroBlock's .hero__body treatment — same 19px body font, same
- * graphite ink for legibility. Previously carried --color-fog which
- * read noticeably lighter than every other block's description. */
-.vhh__desc { font-family: var(--font-body); font-size: 19px; font-weight: var(--weight-regular); line-height: 155%; color: var(--color-graphite); margin: 0; max-width: 480px; }
+/* Section-level description — 16px / graphite, matching MediaSplit,
+ * MembershipCta, SectionTitle. The 19px body size that HeroBlock uses
+ * is reserved for the page-topping hero; VenueHireHero is editorial in
+ * mid-page and was reading noticeably louder than its neighbours. */
+.vhh__desc { font-family: var(--font-body); font-size: 16px; font-weight: var(--weight-regular); line-height: 155%; color: var(--color-graphite); margin: 0; max-width: 520px; }
 
 .vhh__stats { list-style: none; padding: 24px 0; margin: 0; display: flex; flex-direction: row; gap: 48px; border-top: 1px solid var(--color-hairline); border-bottom: 1px solid var(--color-hairline); }
 .vhh__stat { display: flex; flex-direction: column; gap: 4px; }
@@ -220,7 +221,7 @@ function initialsFor(name: string, initials?: string): string {
   .vhh__grid--media-left > .vhh__copy,
   .vhh__grid--media-left > .vhh__card { order: initial; }
   .vhh__title { font-size: var(--h-sm, 56px); max-width: none; }
-  .vhh__desc { font-size: 18px; max-width: 640px; }
+  .vhh__desc { font-size: 15px; max-width: 640px; }
   .vhh__card { min-height: 360px; }
   .vhh__stats { flex-wrap: wrap; gap: 24px; }
 }
@@ -241,7 +242,7 @@ function initialsFor(name: string, initials?: string): string {
   .vhh__copy { gap: 14px; }
   .vhh__eyebrow { font-size: 10px; letter-spacing: 0.08em; }
   .vhh__title { font-size: var(--h-xs, 40px); letter-spacing: -0.02em; line-height: 100%; max-width: none; }
-  .vhh__desc { font-size: 16px; line-height: 150%; max-width: none; }
+  .vhh__desc { font-size: 14px; line-height: 150%; max-width: none; }
 
   /* Stats row: 3 columns separated by thin dividers, scaled down */
   .vhh__stats {

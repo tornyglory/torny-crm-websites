@@ -155,7 +155,10 @@ function initialsFor(name: string, initials?: string): string {
 .vhh__title--md { --h: 72px; --h-md: 64px; --h-sm: 56px; --h-xs: 40px; }
 .vhh__title--lg { --h: 88px; --h-md: 80px; --h-sm: 64px; --h-xs: 44px; }
 .vhh__title--xl { --h: 112px; --h-md: 96px; --h-sm: 72px; --h-xs: 48px; }
-.vhh__desc { font-family: var(--font-body); font-size: 19px; line-height: 155%; color: var(--color-fog); margin: 0; max-width: 480px; }
+/* Match HeroBlock's .hero__body treatment — same 19px body font, same
+ * graphite ink for legibility. Previously carried --color-fog which
+ * read noticeably lighter than every other block's description. */
+.vhh__desc { font-family: var(--font-body); font-size: 19px; font-weight: var(--weight-regular); line-height: 155%; color: var(--color-graphite); margin: 0; max-width: 480px; }
 
 .vhh__stats { list-style: none; padding: 24px 0; margin: 0; display: flex; flex-direction: row; gap: 48px; border-top: 1px solid var(--color-hairline); border-bottom: 1px solid var(--color-hairline); }
 .vhh__stat { display: flex; flex-direction: column; gap: 4px; }

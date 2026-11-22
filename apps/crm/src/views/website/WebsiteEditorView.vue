@@ -33,6 +33,7 @@ import BlockPaletteDialog from '@/components/BlockPaletteDialog.vue'
 import WebsiteSettingsPanel, { type WebsiteSettingsSection } from '@/components/WebsiteSettingsPanel.vue'
 import JoinFormEditorModal from '@/components/modals/JoinFormEditorModal.vue'
 import CustomAiBlockModal from '@/components/modals/CustomAiBlockModal.vue'
+import CrmModal from '@/components/modals/CrmModal.vue'
 import type { AiNearbyBlock } from '@torny/api-client'
 import { ApiError, pages, blockImages, isValidPageSlug, RESERVED_PAGE_SLUGS, slugifyTitle, type PageBlock } from '@torny/api-client'
 import { usePagesStore } from '@/stores/pages'
@@ -1378,6 +1379,31 @@ function removeBlock(id: string): void {
   if (selectedId.value === id) selectedId.value = state.blocks[Math.max(0, idx - 1)]?.id ?? null
 }
 
+// ── Delete-block confirmation ───────────────────────────────
+// Stages the block into `pendingDeleteBlockId` and renders an on-brand
+// CrmModal instead of a native `window.confirm`. Matches the image-
+// delete pattern in CustomAiBlockModal — the destructive action is a
+// red pill, the body spells out that the undo isn't instant (admin
+// has to hit "Add block" and recreate).
+const pendingDeleteBlockId = ref<string | null>(null)
+const pendingDeleteBlock = computed<Block | null>(() =>
+  pendingDeleteBlockId.value == null
+    ? null
+    : state.blocks.find((b) => b.id === pendingDeleteBlockId.value) ?? null,
+)
+function requestDeleteBlock(id: string): void {
+  pendingDeleteBlockId.value = id
+}
+function cancelDeleteBlock(): void {
+  pendingDeleteBlockId.value = null
+}
+function confirmDeleteBlock(): void {
+  const id = pendingDeleteBlockId.value
+  if (!id) return
+  removeBlock(id)
+  pendingDeleteBlockId.value = null
+}
+
 function moveBlock(id: string, dir: -1 | 1): void {
   const idx = state.blocks.findIndex((b) => b.id === id)
   if (idx === -1) return
@@ -1807,7 +1833,7 @@ const lastSavedLabel = computed(() => {
                 <rect x="6" y="6" width="8" height="8" rx="1.2" stroke="currentColor" stroke-width="1.4" fill="#fff" />
               </svg>
             </button>
-            <button type="button" class="block__delete" @click.stop="removeBlock(block.id)" aria-label="Delete">×</button>
+            <button type="button" class="block__delete" @click.stop="requestDeleteBlock(block.id)" aria-label="Delete">×</button>
           </article>
 
           <!-- Insert-here slot below every block -->
@@ -3843,6 +3869,26 @@ const lastSavedLabel = computed(() => {
       </div>
     </div>
   </div>
+
+  <!-- Block delete confirmation — on-brand, matches the image delete
+       confirm in CustomAiBlockModal. -->
+  <CrmModal
+    :open="pendingDeleteBlock !== null"
+    width="sm"
+    eyebrow="Block · delete"
+    title="Delete this block?"
+    @close="cancelDeleteBlock"
+  >
+    <div v-if="pendingDeleteBlock" class="block-del">
+      <div class="block-del__tag">{{ BLOCK_LABEL[pendingDeleteBlock.type] }}</div>
+      <div class="block-del__summary">{{ blockSummary(pendingDeleteBlock) }}</div>
+      <p class="block-del__hint">This can't be undone from inside the editor — you'd have to add a fresh block and re-enter the content. The change saves on the draft; publish to push it live.</p>
+    </div>
+    <template #footer>
+      <button type="button" class="btn btn--outline" @click="cancelDeleteBlock">Keep it</button>
+      <button type="button" class="btn btn--danger" @click="confirmDeleteBlock">Delete block</button>
+    </template>
+  </CrmModal>
 </template>
 
 <style scoped>
@@ -3863,6 +3909,36 @@ const lastSavedLabel = computed(() => {
 .btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn--outline { background: transparent; color: var(--color-ink); border: 1px solid var(--color-hairline); }
 .btn--outline:hover { background: var(--color-surface); }
+.btn--danger { background: var(--color-danger, #DC2F3B); color: #fff; }
+.btn--danger:hover:not(:disabled) { background: #B91C1C; }
+.btn--danger:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Delete-block confirmation body ──────────────────────────── */
+.block-del { display: flex; flex-direction: column; gap: 10px; }
+.block-del__tag {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-fog);
+}
+.block-del__summary {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.block-del__hint {
+  margin: 4px 0 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-fog);
+}
 
 /* Section tabs (pages + settings) */
 .section-tabs { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }

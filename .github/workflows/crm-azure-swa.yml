@@ -40,6 +40,15 @@ jobs:
           VITE_MEDIA_BASE_URL: ${{ secrets.VITE_MEDIA_BASE_URL }}
           VITE_SITES_ORIGIN: ${{ secrets.VITE_SITES_ORIGIN }}
           VITE_SITES_HOST_SUFFIX: ${{ secrets.VITE_SITES_HOST_SUFFIX }}
+          # Sentry: ships the DSN into the bundle + uploads sourcemaps.
+          # All three SENTRY_* vars must be set for the vite-plugin to
+          # run; unset = plugin skipped and no sourcemaps uploaded.
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_SENTRY_ENVIRONMENT: production
+          VITE_SENTRY_RELEASE: ${{ github.sha }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
 
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1

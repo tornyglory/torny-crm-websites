@@ -5,6 +5,7 @@ import { directory, claims as claimsApi, ApiError, type DirectoryClub, type MyCl
 import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
 import CrmSpinner from '@/components/CrmSpinner.vue'
+import { captureException } from '@/utils/sentry'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -199,7 +200,7 @@ onMounted(async () => {
     // 401 means the guard failed; router already handles it. Anything else,
     // proceed with the empty wizard — user can still try to submit.
     if (!(err instanceof ApiError) || err.status !== 401) {
-      console.error('Failed to load /claims/mine', err)
+      captureException(err, { tags: { route: 'claim', step: 'load-mine' } })
     }
   } finally {
     loadingMine.value = false

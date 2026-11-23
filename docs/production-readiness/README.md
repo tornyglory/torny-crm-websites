@@ -8,11 +8,12 @@ This folder captures the production-readiness audit and the remediation work tha
 - [`01-xss-sanitize-html.md`](./01-xss-sanitize-html.md) — Day 1 fix. DOMPurify on every `v-html` in the CRM. **Complete.**
 - [`01b-xss-sanitize-content-blocks.md`](./01b-xss-sanitize-content-blocks.md) — Follow-up. Same treatment for `content-blocks` package (public club sites, wider blast radius). **Not started.**
 - [`02-dependabot.md`](./02-dependabot.md) — Day 2 fix. Dependabot config for weekly dep bumps + GitHub Actions pins. **Complete.**
+- [`03-sentry.md`](./03-sentry.md) — Day 3 fix. `@sentry/vue` + sourcemap upload wired into CRM build. **Code complete; needs Sentry project + env vars to go live.**
 
 ## Priority queue (from the audit)
 
 1. **XSS via `v-html` on received email HTML.** `CommunicationThreadView.vue:401,417` renders adversarial HTML. Combined with localStorage JWT, this is an account-takeover vector. → [`01-xss-sanitize-html.md`](./01-xss-sanitize-html.md)
-2. **No error tracking.** No Sentry. Every prod error is silent. Next.
+2. ~~**No error tracking.** No Sentry. Every prod error is silent.~~ → [`03-sentry.md`](./03-sentry.md) (awaiting Sentry project creation)
 3. **Auto-deploy to prod with no staging.** One config typo = outage. Next.
 4. **No GDPR / DSR flow.** Enterprise + UK blocked. Next.
 5. **Accessibility fails on auth forms.** Screen-reader users can't hear sign-in errors. Next.

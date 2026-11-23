@@ -63,6 +63,7 @@ const TAGS_BY_TYPE: Record<BlockType, Tag[]> = {
   venueBooking:   ['forms', 'cta'],
   gallery:        ['media', 'layout'],
   bistroMenu:     ['data', 'cta'],
+  sponsors:       ['media', 'layout'],
   contactForm:    ['forms'],
   membershipCta:  ['cta'],
   ctaBanner:      ['cta'],
@@ -523,6 +524,31 @@ const BlockPreview = defineComponent({
           rect(156, 87, 14, 2, { fill: graphite, opacity: 0.5 }),
           rect(156, 92, 26, 3, { fill: ink }),
           line(78, 102, 186, 102, { stroke: hairline, 'stroke-width': 1 }),
+        ])
+
+      case 'sponsors':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          // Head — eyebrow dot + heading + descriptor + "Become a sponsor" link
+          circle(14, 10, 1.6, { fill: accent }),
+          rect(20, 8, 18, 2.5, { fill: graphite, opacity: 0.55 }),
+          rect(12, 16, 74, 6, { fill: ink }),
+          rect(12, 26, 54, 2.5, { fill: graphite, opacity: 0.4 }),
+          rect(160, 18, 24, 3, { fill: ink }),
+          rect(160, 23, 24, 0.6, { fill: ink }),
+          line(12, 36, 188, 36, { stroke: hairline, 'stroke-width': 1 }),
+          // 4 x 2 logo grid
+          ...[
+            { x: 12,  y: 44 }, { x: 56,  y: 44 }, { x: 100, y: 44 }, { x: 144, y: 44 },
+            { x: 12,  y: 82 }, { x: 56,  y: 82 }, { x: 100, y: 82 }, { x: 144, y: 82 },
+          ].flatMap(({ x, y }) => [
+            rect(x, y, 44, 32, { fill: '#F5F5F2', stroke: hairline, 'stroke-width': 0.8, rx: 3 }),
+            // tiny tier pill top-left of each tile
+            rect(x + 3, y + 3, 10, 3.2, { fill: '#fff', stroke: hairline, 'stroke-width': 0.6, rx: 1.6 }),
+            // centered logo stand-in (name row + caption row)
+            rect(x + 10, y + 15, 24, 3, { fill: ink }),
+            rect(x + 14, y + 22, 16, 1.6, { fill: graphite, opacity: 0.5 }),
+          ]),
         ])
 
       case 'venueHireHero':

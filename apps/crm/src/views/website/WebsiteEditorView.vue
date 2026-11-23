@@ -54,6 +54,8 @@ import type {
   GalleryProps,
   BistroMenuProps,
   BistroMenuItem,
+  SponsorsProps,
+  SponsorItem,
   PeopleGridProps,
   PeopleGridPerson,
   VenueHireHeroProps,
@@ -386,6 +388,15 @@ const EDITORIAL_PALETTE = [
       bookingLabel: 'Book a table',
       bookingHref: '/contact',
       menus: [],
+    }) },
+  { type: 'sponsors' as const, label: 'Sponsors', hint: 'Logo wall of local businesses supporting the club', icon: '▣',
+    defaults: (): SponsorsProps => ({
+      eyebrow: 'SUPPORTERS · 2026',
+      heading: 'Thanks to our sponsors.',
+      description: 'Local businesses who keep the greens open, the lights on, and the bistro running. Please support them in return.',
+      ctaLabel: 'Become a sponsor',
+      ctaHref: '/contact',
+      sponsors: [],
     }) },
   { type: 'fullBleedImage' as const, label: 'Full-bleed image', hint: 'A big picture with a CTA', icon: '◪',
     defaults: () => fullBleedImageDefault() },
@@ -827,6 +838,7 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   venueBooking: 'Venue booking wizard',
   gallery: 'Gallery',
   bistroMenu: 'Bistro menu',
+  sponsors: 'Sponsors',
   contactForm: 'Contact form',
   membershipCta: 'Membership CTA',
   ctaBanner: 'CTA banner',
@@ -1612,6 +1624,7 @@ function blockSummary(block: Block): string {
     case 'venueBooking': return (block.props as VenueBookingProps).heading || `${(block.props as VenueBookingProps).packages?.length ?? 0} packages`
     case 'gallery':       return `${(block.props as GalleryProps).images.length} photos`
     case 'bistroMenu':    return (block.props as BistroMenuProps).heading || `${(block.props as BistroMenuProps).menus.length} menus`
+    case 'sponsors':      return (block.props as SponsorsProps).heading || `${(block.props as SponsorsProps).sponsors.length} sponsors`
     case 'contactForm':   return (block.props as ContactFormProps).heading || 'Contact form'
     case 'membershipJoinForm': return (block.props as MembershipJoinFormProps).heading || 'Join form'
     case 'membershipCta': return (block.props as MembershipCtaProps).heading || '(no heading)'
@@ -2789,6 +2802,55 @@ const lastSavedLabel = computed(() => {
                 <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as BistroMenuProps).menus.splice(mi, 1)">Remove</button>
               </div>
               <button type="button" class="gallery-add" @click="(selectedBlock!.props as BistroMenuProps).menus.push({ title: 'New menu', description: '', pdfUrl: '', pageCountLabel: '', fileSizeLabel: '', updatedLabel: '' } satisfies BistroMenuItem)">+ Add menu</button>
+            </div>
+          </template>
+
+          <!-- Sponsors -->
+          <template v-else-if="selectedBlock.type === 'sponsors'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as SponsorsProps).eyebrow" type="text" placeholder="SUPPORTERS · 2026" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as SponsorsProps).heading" type="text" placeholder="Thanks to our sponsors." />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as SponsorsProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as SponsorsProps).description" rows="3" placeholder="Local businesses who keep the greens open…" />
+            </label>
+            <label class="field">
+              <span class="field__label">Link label (right of head)</span>
+              <input v-model="(selectedBlock.props as SponsorsProps).ctaLabel" type="text" placeholder="Become a sponsor" />
+              <span class="field__hint">Leave blank (either label or URL) to hide the link.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Link URL</span>
+              <input v-model="(selectedBlock.props as SponsorsProps).ctaHref" type="text" placeholder="/contact" />
+            </label>
+
+            <div class="field">
+              <span class="field__label">Sponsors ({{ (selectedBlock.props as SponsorsProps).sponsors.length }})</span>
+              <span class="field__hint">Add a logo image, business name, optional tier pill, and optional link to open in a new tab.</span>
+              <div v-for="(sponsor, si) in (selectedBlock.props as SponsorsProps).sponsors" :key="si" class="gallery-item">
+                <ImagePicker v-model="sponsor.logoUrl" content-type="gallery" aspect="3 / 2" />
+                <input v-model="sponsor.name" type="text" placeholder="Business name (also the alt text)" class="gallery-item__alt" />
+                <input v-model="sponsor.caption" type="text" placeholder="Caption — Est. 2011, Wellington…" class="gallery-item__alt" />
+                <input v-model="sponsor.tier" type="text" placeholder="Tier pill — Gold, Silver, Bronze…" class="gallery-item__alt" />
+                <input v-model="sponsor.href" type="text" placeholder="https://… (opens in new tab)" class="gallery-item__alt" />
+                <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as SponsorsProps).sponsors.splice(si, 1)">Remove</button>
+              </div>
+              <button type="button" class="gallery-add" @click="(selectedBlock!.props as SponsorsProps).sponsors.push({ name: 'New sponsor', logoUrl: '', caption: '', tier: '', href: '' } satisfies SponsorItem)">+ Add sponsor</button>
             </div>
           </template>
 

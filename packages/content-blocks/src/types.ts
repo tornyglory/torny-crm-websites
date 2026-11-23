@@ -17,6 +17,7 @@ export type BlockType =
   | 'venueBooking'
   | 'gallery'
   | 'bistroMenu'
+  | 'sponsors'
   | 'contactForm'
   | 'membershipCta'
   | 'ctaBanner'
@@ -560,6 +561,39 @@ export interface BistroMenuHour {
   value: string
 }
 
+/** Sponsor tile in SponsorsBlock. Logo is required; a tier pill +
+ *  descriptor line are both optional. */
+export interface SponsorItem {
+  /** Business name. Also used as the fallback text inside the logo tile
+   *  when no logoUrl is supplied, and as the link's aria-label. */
+  name: string
+  /** URL for the sponsor's logo. Rendered via object-fit: contain so
+   *  landscape / square / portrait all sit tidily. */
+  logoUrl?: string
+  /** Optional caption under the sponsor name — "Est. 2011", "Wellington",
+   *  "Law since 1962". Rendered in mono small-caps. */
+  caption?: string
+  /** Optional tier pill shown top-left of the tile. Free-text so clubs
+   *  can run "Platinum" / "Gold" / "Silver" / "Bronze" or their own
+   *  naming ("Clubhouse partner", etc.). Omit to hide the pill. */
+  tier?: string
+  /** Opens the sponsor's site in a new tab. Omit to render as a
+   *  non-interactive tile. */
+  href?: string
+}
+
+export interface SponsorsProps {
+  eyebrow?: string
+  heading?: string
+  headingSize?: SectionHeadingSize
+  description?: string
+  /** "Become a sponsor" style link on the right edge of the header row.
+   *  Both label + href must be set to render the link. */
+  ctaLabel?: string
+  ctaHref?: string
+  sponsors: SponsorItem[]
+}
+
 export interface BistroMenuProps {
   eyebrow?: string
   heading?: string
@@ -836,6 +870,7 @@ export type Block =
   | BlockBase<'venueBooking', VenueBookingProps>
   | BlockBase<'gallery', GalleryProps>
   | BlockBase<'bistroMenu', BistroMenuProps>
+  | BlockBase<'sponsors', SponsorsProps>
   | BlockBase<'contactForm', ContactFormProps>
   | BlockBase<'membershipCta', MembershipCtaProps>
   | BlockBase<'ctaBanner', CtaBannerProps>

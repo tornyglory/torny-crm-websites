@@ -1,10 +1,16 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { RichTextProps } from '../types'
-defineProps<RichTextProps>()
+import { sanitizeWebsiteHtml } from '../utils/sanitizeHtml'
+
+const props = defineProps<RichTextProps>()
+// Author-supplied HTML — sanitise before rendering on the public
+// site. See docs/production-readiness/01b-xss-sanitize-content-blocks.md.
+const safeHtml = computed(() => sanitizeWebsiteHtml(props.html))
 </script>
 
 <template>
-  <div class="rich-text" v-html="html" />
+  <div class="rich-text" v-html="safeHtml" />
 </template>
 
 <style scoped>

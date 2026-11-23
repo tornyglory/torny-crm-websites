@@ -22,6 +22,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CustomAiPromptEntry } from '../types'
+import { sanitizeWebsiteHtml } from '../utils/sanitizeHtml'
 
 // NOTE: props are inlined here (not `CustomAiProps & { blockId }`) because
 // Vue's SFC compiler can't resolve intersection types that pull in an
@@ -43,16 +44,6 @@ const props = defineProps<{
 }>()
 
 const wrapperEl = ref<HTMLElement | null>(null)
-
-/** Strip `<script>` and `<style>` tags from the author-supplied HTML so
- *  the only CSS/JS that runs is the one we deliberately scoped and
- *  evaluated through this component. */
-function sanitiseHtml(html: string): string {
-  if (!html) return ''
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-}
 
 /** Prefix every selector with the per-block scope. Walks the CSS with
  *  a tiny brace-depth state machine so nested at-rules (`@media`,
@@ -164,7 +155,7 @@ function scopeCss(css: string, scope: string): string {
   return out
 }
 
-const safeHtml = computed(() => sanitiseHtml(props.html ?? ''))
+const safeHtml = computed(() => sanitizeWebsiteHtml(props.html))
 const scopedCss = computed(() => scopeCss(props.css ?? '', props.blockId))
 
 // ── JS execution (opt-in) ──────────────────────────────────────

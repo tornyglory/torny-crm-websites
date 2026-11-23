@@ -179,8 +179,20 @@ function href(t: PublicTournamentCard): string {
 </template>
 
 <style scoped>
-.ut-list { padding: 80px 0; background: var(--color-ground); color: var(--color-ink); }
-.ut-list__inner { max-width: 1240px; margin: 0 auto; padding: 0 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 32px; }
+/* Full-bleed escape — matches FaqAccordionBlock / HeroBlock so the
+ * block paints its background edge-to-edge instead of sitting inside
+ * the PageRenderer gutter. Inner wrapper keeps the 1240px content
+ * column centered. */
+.ut-list {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding: 80px max(48px, calc((100vw - var(--container-content, 1280px)) / 2));
+  box-sizing: border-box;
+  background: var(--color-ground);
+  color: var(--color-ink);
+}
+.ut-list__inner { max-width: 1240px; margin: 0 auto; box-sizing: border-box; display: flex; flex-direction: column; gap: 32px; }
 
 .ut-list__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; }
 .ut-list__head-copy { max-width: 540px; }

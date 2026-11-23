@@ -71,7 +71,19 @@ const planTag = computed(() => {
             <svg v-else-if="social.icon === 'twitter'" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M2 2L7 8.5L2 14H3.5L7.7 9.4L11 14H14L8.7 7.1L13.6 2H12.1L8.1 6.3L5 2H2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" />
             </svg>
+            <svg v-else-if="social.icon === 'tiktok'" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M10 2v6.6A2.4 2.4 0 1 1 7.6 6.2v1.6a0.8 0.8 0 1 0 0.8 0.8V2h1.6a3 3 0 0 0 3 3v1.6A4.6 4.6 0 0 1 10 5.1z" fill="currentColor" />
+            </svg>
+            <svg v-else-if="social.icon === 'youtube'" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="1" y="3.5" width="14" height="9" rx="2.2" stroke="currentColor" stroke-width="1.3" />
+              <path d="M6.8 6.1v3.8l3.2-1.9-3.2-1.9z" fill="currentColor" />
+            </svg>
+            <svg v-else-if="social.icon === 'linkedin'" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="1" y="1" width="14" height="14" rx="2.4" stroke="currentColor" stroke-width="1.3" />
+              <path d="M4.3 6.4v5m0-7v0.6M7.3 11.4v-5m0 5V8.6a1.6 1.6 0 1 1 3.2 0v2.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
             <svg v-else width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <!-- email fallback -->
               <path d="M14 3H2C1.4 3 1 3.4 1 4V12C1 12.6 1.4 13 2 13H14C14.6 13 15 12.6 15 12V4C15 3.4 14.6 3 14 3Z" stroke="currentColor" stroke-width="1.3" />
               <path d="M1.5 3.5L8 8.5L14.5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
             </svg>

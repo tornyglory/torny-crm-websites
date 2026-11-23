@@ -453,6 +453,16 @@ export type {
   UpdateNavigationResponse,
   HeaderDisplay,
 } from './resources/navigation'
+export * as footer from './resources/footer'
+export type { FooterConfigRead } from './resources/footer'
+export type {
+  FooterConfig,
+  FooterColumn,
+  FooterContactOverride,
+  FooterLink,
+  FooterSocial,
+  FooterSocialIcon,
+} from './types'
 export * as clubSettings from './resources/clubSettings'
 export type {
   ClubSettings,

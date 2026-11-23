@@ -134,6 +134,52 @@ export interface ClubNavigation {
 }
 
 /**
+ * Footer config (brief 115). Clubs with no saved config get `footer: null`
+ * on the public /site payload and the FE falls back to its hardcoded
+ * placeholder values. Written via `resources/footer.ts` against VENUE_BASE
+ * (admin endpoints moved off the CFN-capped CRM stack).
+ */
+export type FooterSocialIcon =
+  | 'instagram'
+  | 'facebook'
+  | 'twitter'
+  | 'tiktok'
+  | 'youtube'
+  | 'linkedin'
+  | 'email'
+
+export interface FooterLink {
+  label: string
+  href: string
+}
+
+export interface FooterColumn {
+  heading: string
+  links: FooterLink[]
+}
+
+export interface FooterSocial {
+  icon: FooterSocialIcon
+  label: string
+  href: string
+}
+
+export interface FooterContactOverride {
+  email: string | null
+  phone: string | null
+  address_lines: string[] | null
+  status: string | null
+}
+
+export interface FooterConfig {
+  description: string | null
+  columns: FooterColumn[]
+  socials: FooterSocial[]
+  legal_links: FooterLink[]
+  contact_override: FooterContactOverride | null
+}
+
+/**
  * Full club record. `id` is a number (matches backend integer PKs; see brief
  * 08 §Timezones + IDs). Other fields are optional so we can hydrate a stub
  * from a `UserClub` in the auth response before a full /clubs/:id load.

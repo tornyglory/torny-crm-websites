@@ -89,10 +89,12 @@ const clubPlan = computed<'starter' | 'pro' | undefined>(() => {
 
 const primaryCta = computed(() => ({ label: terminology.value.join_cta, href: '/membership' }))
 
-// Footer content. Same structure per tenant — the CMS will surface a
-// "site settings" panel later for clubs to override the contact block
-// and social links.
-const footerColumns: FooterNavColumn[] = [
+// Hardcoded footer defaults (brief 115 §1: `footer: null` on the public
+// /site payload means the admin has never configured one, so we fall
+// through to these so-every-club-still-has-a-footer values). Once the
+// admin saves anything in Settings → Website → Footer, `site.footer`
+// becomes authoritative and these are ignored.
+const FALLBACK_FOOTER_COLUMNS: FooterNavColumn[] = [
   {
     heading: 'Explore',
     links: [
@@ -114,22 +116,80 @@ const footerColumns: FooterNavColumn[] = [
   },
 ]
 
-const footerContact: FooterContact = {
+const FALLBACK_FOOTER_CONTACT: FooterContact = {
   email: 'hello@example.com',
   phone: '(00) 000 0000',
 }
 
-const socials: SocialLink[] = [
+const FALLBACK_FOOTER_SOCIALS: SocialLink[] = [
   { label: 'Instagram', icon: 'instagram', href: '#' },
   { label: 'Facebook', icon: 'facebook', href: '#' },
   { label: 'Email', icon: 'email', href: 'mailto:hello@example.com' },
 ]
 
-const legalLinks: NavLink[] = [
+const FALLBACK_FOOTER_LEGAL_LINKS: NavLink[] = [
   { label: 'Privacy', href: '/privacy' },
   { label: 'Terms', href: '/terms' },
   { label: 'Cookies', href: '/cookies' },
 ]
+
+const FALLBACK_FOOTER_DESCRIPTION =
+  "A community bowling club. Everyone welcome — bring a friend, we'll bring the bowls."
+
+const footerConfig = computed(() => site.value?.footer ?? null)
+
+const footerDescription = computed<string>(
+  () => footerConfig.value?.description ?? FALLBACK_FOOTER_DESCRIPTION,
+)
+
+const footerColumns = computed<FooterNavColumn[]>(() => {
+  const saved = footerConfig.value?.columns
+  if (!saved) return FALLBACK_FOOTER_COLUMNS
+  return saved.map((col) => ({
+    heading: col.heading,
+    links: col.links.map((link) => ({ label: link.label, href: link.href })),
+  }))
+})
+
+const socials = computed<SocialLink[]>(() => {
+  const saved = footerConfig.value?.socials
+  if (!saved) return FALLBACK_FOOTER_SOCIALS
+  return saved.map((s) => ({
+    label: s.label,
+    href: s.href,
+    icon: s.icon,
+  }))
+})
+
+const legalLinks = computed<NavLink[]>(() => {
+  const saved = footerConfig.value?.legal_links
+  if (!saved) return FALLBACK_FOOTER_LEGAL_LINKS
+  return saved.map((l) => ({ label: l.label, href: l.href }))
+})
+
+// The server owns the canonical contact block (site.contact). When the
+// admin sets a footer-only override, we use that; otherwise we project
+// the canonical contact into the FooterContact shape so the footer stays
+// useful for every club.
+const footerContact = computed<FooterContact>(() => {
+  const override = footerConfig.value?.contact_override
+  if (override) {
+    const contact: FooterContact = {}
+    if (override.email) contact.email = override.email
+    if (override.phone) contact.phone = override.phone
+    if (override.address_lines?.length) contact.addressLines = override.address_lines
+    if (override.status) contact.status = override.status
+    return contact
+  }
+
+  const canonical = site.value?.contact
+  if (!canonical) return FALLBACK_FOOTER_CONTACT
+  const contact: FooterContact = {}
+  if (canonical.email) contact.email = canonical.email
+  if (canonical.phone) contact.phone = canonical.phone
+  if (canonical.address) contact.addressLines = [canonical.address]
+  return contact
+})
 </script>
 
 <template>
@@ -162,7 +222,7 @@ const legalLinks: NavLink[] = [
 
     <SiteFooter
       :club="chromeClub"
-      description="A community bowling club. Everyone welcome — bring a friend, we'll bring the bowls."
+      :description="footerDescription"
       :socials="socials"
       :columns="footerColumns"
       :contact="footerContact"

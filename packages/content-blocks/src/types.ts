@@ -1000,8 +1000,16 @@ export interface SocialLink {
   /** Display label (used for aria-label). */
   label: string
   href: string
-  /** Icon key — the component ships a small set. */
-  icon: 'instagram' | 'facebook' | 'email' | 'twitter'
+  /** Icon key — the component ships SVGs for this whitelist. Matches the
+   *  server-side allowed set shipped with brief 115. */
+  icon:
+    | 'instagram'
+    | 'facebook'
+    | 'twitter'
+    | 'tiktok'
+    | 'youtube'
+    | 'linkedin'
+    | 'email'
 }
 
 export interface FooterNavColumn {

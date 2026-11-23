@@ -203,6 +203,48 @@ export type SystemPageSlug = 'home' | 'about' | 'membership' | 'events' | 'honou
  *  pages type-check everywhere the six-slug union used to. */
 export type PageSlug = SystemPageSlug | (string & { readonly brand?: 'PageSlug' })
 
+/** Footer config section (brief 115). `null` when the admin has never
+ *  saved — the layout then falls back to its hardcoded placeholder values. */
+export type SiteFooterSocialIcon =
+  | 'instagram'
+  | 'facebook'
+  | 'twitter'
+  | 'tiktok'
+  | 'youtube'
+  | 'linkedin'
+  | 'email'
+
+export interface SiteFooterLink {
+  label: string
+  href: string
+}
+
+export interface SiteFooterColumn {
+  heading: string
+  links: SiteFooterLink[]
+}
+
+export interface SiteFooterSocial {
+  icon: SiteFooterSocialIcon
+  label: string
+  href: string
+}
+
+export interface SiteFooterContactOverride {
+  email: string | null
+  phone: string | null
+  address_lines: string[] | null
+  status: string | null
+}
+
+export interface SiteFooter {
+  description: string | null
+  columns: SiteFooterColumn[]
+  socials: SiteFooterSocial[]
+  legal_links: SiteFooterLink[]
+  contact_override: SiteFooterContactOverride | null
+}
+
 export interface Site {
   club: SiteClub
   contact: SiteContact
@@ -223,6 +265,9 @@ export interface Site {
     blocks: unknown[]
     meta?: SitePageMeta
   } | undefined>
+  /** Admin-editable footer config (brief 115). Null until the admin saves
+   *  anything — layout falls back to its hardcoded placeholder values. */
+  footer?: SiteFooter | null
 }
 
 /** Fully-resolved per-page SEO metadata. Server picks page → site default → derived. */

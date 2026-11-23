@@ -192,7 +192,12 @@ function href(t: PublicTournamentCard): string {
   background: var(--color-ground);
   color: var(--color-ink);
 }
-.ut-list__inner { max-width: 1240px; margin: 0 auto; box-sizing: border-box; display: flex; flex-direction: column; gap: 32px; }
+/* The outer already pads to match the PageRenderer container
+ * (1280px via --container-content). Letting the inner fill 100%
+ * means the content column matches every other block's width —
+ * previously the extra `max-width: 1240px` pinched it 40px
+ * narrower than the siblings. */
+.ut-list__inner { width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 32px; }
 
 .ut-list__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; }
 .ut-list__head-copy { max-width: 540px; }
@@ -243,10 +248,53 @@ function href(t: PublicTournamentCard): string {
 .ut-list__row-enter { padding: 8px 16px; background: var(--color-ink); color: #FFFFFF; border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 600; }
 
 @media (max-width: 760px) {
-  .ut-list { padding: 56px 0; }
-  .ut-list__head { flex-direction: column; align-items: flex-start; }
-  .ut-list__row { flex-wrap: wrap; padding: 20px; }
-  .ut-list__date { order: -1; }
-  .ut-list__stats { width: auto; align-items: flex-start; }
+  /* Keep the horizontal escape — only trim vertical padding and tighten
+   * the gutter. The old rule zeroed horizontal padding, which jammed
+   * content against the viewport edges. */
+  .ut-list { padding: 56px 20px; }
+  .ut-list__inner { gap: 24px; }
+  .ut-list__head { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .ut-list__heading { font-size: clamp(30px, 8vw, 40px); }
+  .ut-list__body { border-radius: 16px; }
+
+  /* Stack each row vertically — the 88px date, body, and stats columns
+   * all competed for the same ~335px row on narrow screens, which is
+   * what produced the title/button overlap. */
+  .ut-list__row {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    grid-template-areas:
+      "date   meta"
+      "body   body"
+      "stats  stats";
+    gap: 10px 14px;
+    padding: 18px;
+    align-items: center;
+  }
+  .ut-list__date {
+    grid-area: date;
+    width: 56px;
+    padding: 8px 4px;
+  }
+  .ut-list__date-day { font-size: 22px; }
+  .ut-list__body-col { grid-area: body; }
+  .ut-list__row-meta { grid-area: meta; margin-bottom: 0; align-self: center; }
+  .ut-list__row-title { font-size: 20px; }
+
+  /* Stats row sits at the bottom: numbers left, Enter CTA right,
+   * progress bar wraps onto its own full-width line below. */
+  .ut-list__stats {
+    grid-area: stats;
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 12px;
+    margin-top: 6px;
+  }
+  .ut-list__stats-numbers { text-align: left; order: 1; flex: 1; min-width: 0; }
+  .ut-list__row-enter { order: 2; flex-shrink: 0; }
+  .ut-list__progress { order: 3; flex-basis: 100%; }
 }
 </style>

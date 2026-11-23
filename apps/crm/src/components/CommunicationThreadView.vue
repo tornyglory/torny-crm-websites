@@ -28,6 +28,7 @@ import { RichTextEditor } from '@torny/content-blocks'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 import { useToast } from '@/composables/useToast'
 import { usePermissions } from '@/composables/usePermissions'
+import { sanitizeEmailHtml } from '@/utils/sanitizeHtml'
 
 const props = defineProps<{
   clubId: number
@@ -398,7 +399,7 @@ function bodyKind(m: ThreadMessage): BodyRender['kind'] {
              you see first. Plain-text fallback only when there's no HTML. -->
         <div class="msg__body">
           <template v-if="bodyKind(m) === 'html'">
-            <div class="msg__body-html" v-html="bodyHtmlMain(m)" />
+            <div class="msg__body-html" v-html="sanitizeEmailHtml(bodyHtmlMain(m))" />
             <template v-if="bodyHtmlQuoted(m)">
               <button
                 type="button"
@@ -414,7 +415,7 @@ function bodyKind(m: ThreadMessage): BodyRender['kind'] {
               <div
                 v-if="expandedQuotes.has(m.communication_id)"
                 class="msg__body-html msg__body-html--quoted"
-                v-html="bodyHtmlQuoted(m) ?? ''"
+                v-html="sanitizeEmailHtml(bodyHtmlQuoted(m))"
               />
             </template>
           </template>

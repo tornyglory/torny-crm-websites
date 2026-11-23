@@ -16,6 +16,7 @@ import { RichTextEditor } from '@torny/content-blocks'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import { useEmailSignatures } from '@/composables/useEmailSignatures'
 import { useToast } from '@/composables/useToast'
+import { sanitizeEmailHtml } from '@/utils/sanitizeHtml'
 
 type RteHandle = { insertText: (html: string) => boolean; focus: () => void }
 
@@ -129,7 +130,7 @@ const clubSet = computed(() => signatures.club.value.trim().length > 0)
       </header>
       <p class="esig-tile__sub">Appears under every email you send through Torny — just yours, not shared with the rest of the committee.</p>
 
-      <div v-if="personalSet" class="esig-tile__preview" v-html="signatures.personal.value" />
+      <div v-if="personalSet" class="esig-tile__preview" v-html="sanitizeEmailHtml(signatures.personal.value)" />
       <div v-else class="esig-tile__empty">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M4 20h4L18 10l-4-4L4 16v4z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
@@ -170,7 +171,7 @@ const clubSet = computed(() => signatures.club.value.trim().length > 0)
       </header>
       <p class="esig-tile__sub">Runs under every member's personal signature. Club address, contact, and the one-line unsubscribe note — the same for everyone who sends from this club.</p>
 
-      <div v-if="clubSet" class="esig-tile__preview esig-tile__preview--muted" v-html="signatures.club.value" />
+      <div v-if="clubSet" class="esig-tile__preview esig-tile__preview--muted" v-html="sanitizeEmailHtml(signatures.club.value)" />
       <div v-else class="esig-tile__empty">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.6" />
@@ -232,7 +233,7 @@ const clubSet = computed(() => signatures.club.value.trim().length > 0)
         <div class="esig-preview__eyebrow">In context</div>
         <p class="esig-preview__quote">…thanks again for the roll-up on Saturday, let me know if you can make the committee catch-up Thursday.</p>
         <div class="esig-preview__divider" />
-        <div class="esig-preview__body" v-html="personalDraft" />
+        <div class="esig-preview__body" v-html="sanitizeEmailHtml(personalDraft)" />
       </div>
 
       <template #footer>
@@ -266,7 +267,7 @@ const clubSet = computed(() => signatures.club.value.trim().length > 0)
         <div class="esig-preview__eyebrow">In context</div>
         <p class="esig-preview__quote">…Nev Rodda · Secretary · 021 426 168</p>
         <div class="esig-preview__divider" />
-        <div class="esig-preview__body esig-preview__body--muted" v-html="clubDraft" />
+        <div class="esig-preview__body esig-preview__body--muted" v-html="sanitizeEmailHtml(clubDraft)" />
       </div>
 
       <template #footer>

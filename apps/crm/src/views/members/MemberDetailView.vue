@@ -44,6 +44,7 @@ import TornyDatePicker from '@/components/TornyDatePicker.vue'
 import CrmSkeleton from '@/components/CrmSkeleton.vue'
 import CrmEmptyState from '@/components/CrmEmptyState.vue'
 import { RichTextEditor } from '@torny/content-blocks'
+import { sanitizeEmailHtml } from '@/utils/sanitizeHtml'
 
 /** TipTap emits `<p></p>` for an empty editor, so a trim-length check
  *  on the raw HTML always passes. Strip tags before measuring so the
@@ -1912,7 +1913,7 @@ async function submitEdit() {
                         </button>
                       </div>
                     </template>
-                    <div v-else class="notes-row__text" v-html="noteBodyHtml(c.body)" />
+                    <div v-else class="notes-row__text" v-html="sanitizeEmailHtml(noteBodyHtml(c.body))" />
                   </div>
                 </li>
               </ul>

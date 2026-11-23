@@ -27,6 +27,7 @@ import { RichTextEditor } from '@torny/content-blocks'
 import { useClubStore } from '@/stores/club'
 import { useToast } from '@/composables/useToast'
 import { useEmailSignatures, stitchSignature } from '@/composables/useEmailSignatures'
+import { sanitizeEmailHtml } from '@/utils/sanitizeHtml'
 
 /** Lightweight shape the modal needs — RosterMember already satisfies it,
  *  and callers composing a bulk send can pass trimmed rows without having
@@ -692,7 +693,7 @@ Just a quick note from the club…"
         <div
           v-if="signatures.personal.value"
           class="email__sig-body"
-          v-html="signatures.personal.value"
+          v-html="sanitizeEmailHtml(signatures.personal.value)"
         />
         <hr
           v-if="signatures.personal.value && signatures.club.value"
@@ -701,7 +702,7 @@ Just a quick note from the club…"
         <div
           v-if="signatures.club.value"
           class="email__sig-body email__sig-body--muted"
-          v-html="signatures.club.value"
+          v-html="sanitizeEmailHtml(signatures.club.value)"
         />
       </div>
     </section>

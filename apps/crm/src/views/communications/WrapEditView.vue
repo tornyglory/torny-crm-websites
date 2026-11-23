@@ -24,6 +24,7 @@ import {
 import { useClubStore } from '@/stores/club'
 import { useClubSettingsStore } from '@/stores/clubSettings'
 import { useToast } from '@/composables/useToast'
+import { sanitizeEmailHtml } from '@/utils/sanitizeHtml'
 
 const router = useRouter()
 const clubStore = useClubStore()
@@ -527,12 +528,12 @@ function back() { router.push({ name: 'templates' }) }
             {{ serverPreviewError }}
           </div>
           <template v-else>
-            <div class="wrap-edit__preview-inner" v-html="renderedHeader" />
+            <div class="wrap-edit__preview-inner" v-html="sanitizeEmailHtml(renderedHeader)" />
             <div class="wrap-edit__preview-body">
               <p>Hi Frances,</p>
               <p>Your body text drops in here, between the header and footer.</p>
             </div>
-            <div class="wrap-edit__preview-inner" v-html="renderedFooter" />
+            <div class="wrap-edit__preview-inner" v-html="sanitizeEmailHtml(renderedFooter)" />
           </template>
         </div>
       </div>

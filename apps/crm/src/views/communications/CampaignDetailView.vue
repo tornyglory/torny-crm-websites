@@ -19,6 +19,7 @@ import {
 import { useClubStore } from '@/stores/club'
 import CrmModal from '@/components/modals/CrmModal.vue'
 import { findCampaign, type Campaign, type CampaignRecipient, type RecipientStatus } from './mockCampaigns'
+import { sanitizeEmailHtml } from '@/utils/sanitizeHtml'
 
 const route = useRoute()
 const router = useRouter()
@@ -608,7 +609,7 @@ function body(line: string) {
             </div>
             <div class="cd-mail__body">
               <div class="cd-mail__hero">Season kick-off</div>
-              <p v-for="(line, i) in campaign.body_lines ?? []" :key="i" class="cd-mail__line" v-html="body(line)"></p>
+              <p v-for="(line, i) in campaign.body_lines ?? []" :key="i" class="cd-mail__line" v-html="sanitizeEmailHtml(body(line))"></p>
               <div v-if="campaign.cta_label" class="cd-mail__cta">{{ campaign.cta_label }}</div>
             </div>
           </div>

@@ -28,6 +28,7 @@ import {
 import CrmModal from '@/components/modals/CrmModal.vue'
 import { useToast } from '@/composables/useToast'
 import { useClubStore } from '@/stores/club'
+import { sanitizeEmailHtml } from '@/utils/sanitizeHtml'
 
 const toast = useToast()
 const clubStore = useClubStore()
@@ -642,9 +643,9 @@ watch(() => clubStore.current?.id, loadTemplate)
                   </div>
                 </header>
                 <div class="wz-preview__body" :style="previewShellStyle">
-                  <div v-if="renderedHeader" v-html="renderedHeader" />
-                  <div class="wz-preview__content" v-html="renderedBody" />
-                  <div v-if="renderedFooter" v-html="renderedFooter" />
+                  <div v-if="renderedHeader" v-html="sanitizeEmailHtml(renderedHeader)" />
+                  <div class="wz-preview__content" v-html="sanitizeEmailHtml(renderedBody)" />
+                  <div v-if="renderedFooter" v-html="sanitizeEmailHtml(renderedFooter)" />
                 </div>
               </div>
 

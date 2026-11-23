@@ -23,7 +23,7 @@
     "@torny/content-blocks": "workspace:*",
     "@torny/design-tokens": "workspace:*",
     "dompurify": "^3.5.0",
-    "pinia": "^2.3.0",
+    "pinia": "^4.1.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },

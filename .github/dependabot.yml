@@ -1,0 +1,68 @@
+version: 2
+
+# Dependency updates for the pnpm workspace + GitHub Actions. Weekly
+# cadence keeps the PR noise down. Groups keep related bumps in a
+# single PR instead of one per package.
+#
+# Rationale lives in docs/production-readiness/02-dependabot.md.
+
+updates:
+  # pnpm workspace (root). pnpm-lock.yaml covers every workspace, so one
+  # entry here is enough — Dependabot resolves updates across apps/* and
+  # packages/* via the single lockfile.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Pacific/Auckland
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      # Patch/minor bumps of prod deps — low risk, batch them.
+      prod-minor-and-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      # Same for dev deps.
+      dev-minor-and-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Major Vue / Nuxt / Vite bumps need manual migration work — don't
+      # auto-PR them. Minor + patch still flow through the groups above.
+      - dependency-name: "vue"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "nuxt"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions in .github/workflows. Keeps action pins current so
+  # setup-node / checkout etc. don't lag.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Pacific/Auckland
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"

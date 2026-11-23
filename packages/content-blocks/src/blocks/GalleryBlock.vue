@@ -6,7 +6,7 @@
  * Tiles can be marked `wide` (span 2 columns) or `tall` (span 2 rows)
  * to break the grid rhythm — matches the masonry-ish feel in the design.
  */
-import { computed, inject, isRef, type Ref } from 'vue'
+import { computed, inject, isRef, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import {
   BLOCK_CONTEXT_KEY,
   type BlockContext,
@@ -54,6 +54,80 @@ function tileStyle(img: GalleryImage, index: number): Record<string, string> {
   }
   return styles
 }
+
+/** Only tiles with a real URL participate in the lightbox — placeholder
+ *  coloured tiles stay static. Carries the original array index so
+ *  prev/next can skip URL-less tiles cleanly. */
+const lightboxable = computed(() =>
+  props.images
+    .map((img, index) => ({ img, index }))
+    .filter((entry) => Boolean(entry.img.url)),
+)
+
+const openIndex = ref<number | null>(null)
+const activeImage = computed<GalleryImage | null>(() => {
+  const i = openIndex.value
+  if (i === null) return null
+  return props.images[i] ?? null
+})
+const activePosition = computed(() => {
+  const i = openIndex.value
+  if (i === null) return { current: 0, total: 0 }
+  const pos = lightboxable.value.findIndex((entry) => entry.index === i)
+  return { current: pos + 1, total: lightboxable.value.length }
+})
+
+function openAt(index: number): void {
+  if (!props.images[index]?.url) return
+  openIndex.value = index
+}
+function close(): void {
+  openIndex.value = null
+}
+function step(direction: 1 | -1): void {
+  const list = lightboxable.value
+  if (list.length === 0 || openIndex.value === null) return
+  const currentPos = list.findIndex((entry) => entry.index === openIndex.value)
+  if (currentPos < 0) return
+  const nextPos = (currentPos + direction + list.length) % list.length
+  openIndex.value = list[nextPos]!.index
+}
+
+function onKeydown(event: KeyboardEvent): void {
+  if (openIndex.value === null) return
+  if (event.key === 'Escape') { event.preventDefault(); close() }
+  else if (event.key === 'ArrowRight') { event.preventDefault(); step(1) }
+  else if (event.key === 'ArrowLeft') { event.preventDefault(); step(-1) }
+}
+
+/** Lock body scroll while the overlay is open so wheel / touch input
+ *  doesn't scroll the page behind the backdrop. */
+watch(openIndex, (next, prev) => {
+  if (typeof document === 'undefined') return
+  const wasOpen = prev !== null
+  const isOpen = next !== null
+  if (isOpen && !wasOpen) {
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKeydown)
+  } else if (!isOpen && wasOpen) {
+    document.body.style.overflow = ''
+    window.removeEventListener('keydown', onKeydown)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (typeof document !== 'undefined' && openIndex.value !== null) {
+    document.body.style.overflow = ''
+    window.removeEventListener('keydown', onKeydown)
+  }
+})
+
+function onTileKey(event: KeyboardEvent, index: number): void {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    openAt(index)
+  }
+}
 </script>
 
 <template>
@@ -83,8 +157,17 @@ function tileStyle(img: GalleryImage, index: number): Record<string, string> {
         v-for="(img, i) in props.images"
         :key="i"
         class="gal__tile"
-        :class="{ 'gal__tile--wide': img.wide, 'gal__tile--tall': img.tall }"
+        :class="{
+          'gal__tile--wide': img.wide,
+          'gal__tile--tall': img.tall,
+          'gal__tile--clickable': Boolean(img.url),
+        }"
         :style="tileStyle(img, i)"
+        :role="img.url ? 'button' : undefined"
+        :tabindex="img.url ? 0 : undefined"
+        :aria-label="img.url ? (img.alt || img.caption || 'Open image') : undefined"
+        @click="img.url && openAt(i)"
+        @keydown="img.url && onTileKey($event, i)"
       >
         <span v-if="img.alt && !img.url" class="gal__alt-sr">{{ img.alt }}</span>
         <span v-if="img.caption" class="gal__caption">{{ img.caption }}</span>
@@ -95,6 +178,66 @@ function tileStyle(img: GalleryImage, index: number): Record<string, string> {
       <div class="gal__empty-title">No images yet</div>
       <p>Add photos in the block editor. Each tile takes a caption pill and can be flagged as a wide or tall feature.</p>
     </div>
+
+    <Teleport v-if="activeImage" to="body">
+      <div
+        class="gal-lightbox"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="activeImage.alt || activeImage.caption || 'Gallery image'"
+        @click.self="close"
+      >
+        <button
+          type="button"
+          class="gal-lightbox__close"
+          aria-label="Close"
+          @click="close"
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 6l12 12M6 18L18 6" />
+          </svg>
+        </button>
+
+        <button
+          v-if="lightboxable.length > 1"
+          type="button"
+          class="gal-lightbox__nav gal-lightbox__nav--prev"
+          aria-label="Previous image"
+          @click="step(-1)"
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6" />
+          </svg>
+        </button>
+
+        <figure class="gal-lightbox__figure" @click.stop>
+          <img
+            :src="activeImage.url"
+            :alt="activeImage.alt || activeImage.caption || ''"
+            class="gal-lightbox__img"
+          />
+          <figcaption v-if="activeImage.caption || lightboxable.length > 1" class="gal-lightbox__caption">
+            <span v-if="activeImage.caption">{{ activeImage.caption }}</span>
+            <span
+              v-if="lightboxable.length > 1"
+              class="gal-lightbox__count"
+            >{{ activePosition.current }} / {{ activePosition.total }}</span>
+          </figcaption>
+        </figure>
+
+        <button
+          v-if="lightboxable.length > 1"
+          type="button"
+          class="gal-lightbox__nav gal-lightbox__nav--next"
+          aria-label="Next image"
+          @click="step(1)"
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -149,6 +292,14 @@ function tileStyle(img: GalleryImage, index: number): Record<string, string> {
 .gal__tile--wide { grid-column: span 2; }
 .gal__tile--tall { grid-row: span 2; }
 
+.gal__tile--clickable { cursor: zoom-in; }
+.gal__tile--clickable:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+.gal__tile--clickable::before { transition: transform 240ms ease; }
+.gal__tile--clickable:hover::before { transform: scale(1.04); }
+
 .gal__caption {
   position: absolute;
   left: 16px;
@@ -188,5 +339,102 @@ function tileStyle(img: GalleryImage, index: number): Record<string, string> {
    Paper mobile artboards. */
 @media (max-width: 640px) {
   .gal { padding-left: 20px; padding-right: 20px; overflow-x: hidden; }
+}
+</style>
+
+<!-- Lightbox styles live outside the scoped block because the overlay
+     is teleported to <body>, which would otherwise strip scoped class
+     hashes and leave it unstyled. -->
+<style>
+.gal-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  background: rgba(10, 10, 11, 0.92);
+  backdrop-filter: blur(4px);
+  animation: gal-lightbox-in 160ms ease-out;
+}
+@keyframes gal-lightbox-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.gal-lightbox__figure {
+  position: relative;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: min(1200px, calc(100vw - 160px));
+  max-height: calc(100vh - 96px);
+}
+.gal-lightbox__img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 160px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+}
+.gal-lightbox__caption {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: #fff;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.gal-lightbox__count { color: rgba(255, 255, 255, 0.55); }
+
+.gal-lightbox__close,
+.gal-lightbox__nav {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+.gal-lightbox__close:hover,
+.gal-lightbox__nav:hover { background: rgba(255, 255, 255, 0.14); }
+.gal-lightbox__close:focus-visible,
+.gal-lightbox__nav:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+.gal-lightbox__close { top: 24px; right: 24px; }
+.gal-lightbox__nav--prev { left: 24px; top: 50%; transform: translateY(-50%); }
+.gal-lightbox__nav--next { right: 24px; top: 50%; transform: translateY(-50%); }
+.gal-lightbox__nav--prev:hover { transform: translateY(-50%) translateX(-2px); }
+.gal-lightbox__nav--next:hover { transform: translateY(-50%) translateX(2px); }
+
+@media (max-width: 640px) {
+  .gal-lightbox { padding: 16px; }
+  .gal-lightbox__figure { max-width: 100vw; max-height: calc(100vh - 48px); }
+  .gal-lightbox__img { max-height: calc(100vh - 140px); border-radius: 6px; }
+  .gal-lightbox__close { top: 12px; right: 12px; width: 40px; height: 40px; }
+  .gal-lightbox__nav { width: 40px; height: 40px; }
+  .gal-lightbox__nav--prev { left: 8px; }
+  .gal-lightbox__nav--next { right: 8px; }
 }
 </style>

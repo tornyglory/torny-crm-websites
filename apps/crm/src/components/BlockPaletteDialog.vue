@@ -62,6 +62,7 @@ const TAGS_BY_TYPE: Record<BlockType, Tag[]> = {
   venuePackages:  ['layout', 'cta'],
   venueBooking:   ['forms', 'cta'],
   gallery:        ['media', 'layout'],
+  bistroMenu:     ['data', 'cta'],
   contactForm:    ['forms'],
   membershipCta:  ['cta'],
   ctaBanner:      ['cta'],

@@ -16,6 +16,7 @@ export type BlockType =
   | 'venuePackages'
   | 'venueBooking'
   | 'gallery'
+  | 'bistroMenu'
   | 'contactForm'
   | 'membershipCta'
   | 'ctaBanner'
@@ -528,6 +529,52 @@ export interface GalleryProps {
   images: GalleryImage[]
 }
 
+/** A single PDF menu row in BistroMenuBlock. All text fields are
+ *  admin-editable copy — no server-side file introspection, admins
+ *  pass the page count / file size pill by hand so clubs can match the
+ *  "2 pages · 320 KB" rhythm without us round-tripping the PDF. */
+export interface BistroMenuItem {
+  /** e.g. "Lunch menu". */
+  title: string
+  /** Short descriptor under the title, e.g. "Sandwiches, salads, sides.
+   *  Served 12 – 2:30, Wed through Sun." */
+  description?: string
+  /** Direct URL to the PDF — opens in a new tab. */
+  pdfUrl: string
+  /** Mono pill meta on desktop and the bottom metadata row on mobile.
+   *  Admin-authored — e.g. "2 pages · 320 KB" or "1 page". Both halves
+   *  are optional; renders only what's present. */
+  pageCountLabel?: string
+  fileSizeLabel?: string
+  /** Tangerine-accented "· Updated …" stamp next to the row title. */
+  updatedLabel?: string
+}
+
+/** A single opening-hours strip entry used in BistroMenuBlock's editorial
+ *  head. Admins typically ship three (Lunch / Dinner / Closed) but the
+ *  renderer just loops — fewer or more are fine. */
+export interface BistroMenuHour {
+  /** Mono uppercase label, e.g. "Lunch", "Closed". */
+  label: string
+  /** Body-weight value, e.g. "12 – 2:30", "Mon · Tue". */
+  value: string
+}
+
+export interface BistroMenuProps {
+  eyebrow?: string
+  heading?: string
+  headingSize?: SectionHeadingSize
+  description?: string
+  /** Hours strip above the booking CTA. Omit to hide the strip. */
+  hours?: BistroMenuHour[]
+  /** "Book a table" style CTA under the hours strip. Omit either side to
+   *  hide the button. */
+  bookingLabel?: string
+  bookingHref?: string
+  /** The list of downloadable PDFs. Empty array renders an empty state. */
+  menus: BistroMenuItem[]
+}
+
 /**
  * Full-page membership join form. Reads the club's membership tiers from
  * BlockContext (no separate fetch) and POSTs the completed form to the
@@ -788,6 +835,7 @@ export type Block =
   | BlockBase<'venuePackages', VenuePackagesProps>
   | BlockBase<'venueBooking', VenueBookingProps>
   | BlockBase<'gallery', GalleryProps>
+  | BlockBase<'bistroMenu', BistroMenuProps>
   | BlockBase<'contactForm', ContactFormProps>
   | BlockBase<'membershipCta', MembershipCtaProps>
   | BlockBase<'ctaBanner', CtaBannerProps>

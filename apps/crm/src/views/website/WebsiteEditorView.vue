@@ -52,6 +52,8 @@ import type {
   MembersSearchProps,
   MembershipJoinFormProps,
   GalleryProps,
+  BistroMenuProps,
+  BistroMenuItem,
   PeopleGridProps,
   PeopleGridPerson,
   VenueHireHeroProps,
@@ -371,6 +373,20 @@ const EDITORIAL_PALETTE = [
     defaults: () => featureGridDefault() },
   { type: 'faqAccordion' as const, label: 'FAQ', hint: 'Expandable question rows', icon: '?',
     defaults: () => faqAccordionDefault() },
+  { type: 'bistroMenu' as const, label: 'Bistro menu', hint: 'Downloadable PDFs with hours + booking CTA', icon: '◫',
+    defaults: (): BistroMenuProps => ({
+      eyebrow: 'BISTRO · OPEN WED–SUN',
+      heading: 'From the kitchen.',
+      description: "Share platters, pub classics, and a rotating chef's board. Menus are updated weekly — grab the PDF for the latest.",
+      hours: [
+        { label: 'Lunch',  value: '12 – 2:30' },
+        { label: 'Dinner', value: '5:30 – 9' },
+        { label: 'Closed', value: 'Mon · Tue' },
+      ],
+      bookingLabel: 'Book a table',
+      bookingHref: '/contact',
+      menus: [],
+    }) },
   { type: 'fullBleedImage' as const, label: 'Full-bleed image', hint: 'A big picture with a CTA', icon: '◪',
     defaults: () => fullBleedImageDefault() },
   { type: 'fullBleedMedia' as const, label: 'Full-bleed video / image', hint: 'Cinematic hero — video or still, headline on top', icon: '▶',
@@ -810,6 +826,7 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   venuePackages: 'Venue packages',
   venueBooking: 'Venue booking wizard',
   gallery: 'Gallery',
+  bistroMenu: 'Bistro menu',
   contactForm: 'Contact form',
   membershipCta: 'Membership CTA',
   ctaBanner: 'CTA banner',
@@ -1594,6 +1611,7 @@ function blockSummary(block: Block): string {
     case 'venuePackages': return (block.props as VenuePackagesProps).heading || `${(block.props as VenuePackagesProps).packages.length} packages`
     case 'venueBooking': return (block.props as VenueBookingProps).heading || `${(block.props as VenueBookingProps).packages?.length ?? 0} packages`
     case 'gallery':       return `${(block.props as GalleryProps).images.length} photos`
+    case 'bistroMenu':    return (block.props as BistroMenuProps).heading || `${(block.props as BistroMenuProps).menus.length} menus`
     case 'contactForm':   return (block.props as ContactFormProps).heading || 'Contact form'
     case 'membershipJoinForm': return (block.props as MembershipJoinFormProps).heading || 'Join form'
     case 'membershipCta': return (block.props as MembershipCtaProps).heading || '(no heading)'
@@ -2705,6 +2723,72 @@ const lastSavedLabel = computed(() => {
                 <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as GalleryProps).images.splice(ii, 1)">Remove</button>
               </div>
               <button type="button" class="gallery-add" @click="(selectedBlock!.props as GalleryProps).images.push({ url: '', alt: '', caption: '' })">+ Add image</button>
+            </div>
+          </template>
+
+          <!-- Bistro menu -->
+          <template v-else-if="selectedBlock.type === 'bistroMenu'">
+            <label class="field">
+              <span class="field__label">Eyebrow</span>
+              <input v-model="(selectedBlock.props as BistroMenuProps).eyebrow" type="text" placeholder="BISTRO · OPEN WED–SUN" />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading</span>
+              <input v-model="(selectedBlock.props as BistroMenuProps).heading" type="text" placeholder="From the kitchen." />
+            </label>
+            <label class="field">
+              <span class="field__label">Heading size</span>
+              <select v-model="(selectedBlock.props as BistroMenuProps).headingSize">
+                <option :value="undefined">Default</option>
+                <option value="sm">Small — 48 → 32</option>
+                <option value="md">Medium — 72 → 40</option>
+                <option value="lg">Large — 88 → 44</option>
+                <option value="xl">Extra large — 112 → 48</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Description</span>
+              <textarea v-model="(selectedBlock.props as BistroMenuProps).description" rows="3" placeholder="Share platters, pub classics, and a rotating chef's board." />
+            </label>
+
+            <div class="field">
+              <span class="field__label">Hours strip</span>
+              <span class="field__hint">Short mono-label + value pairs. Leave empty to hide the strip.</span>
+              <div v-for="(hour, hi) in (selectedBlock.props as BistroMenuProps).hours ?? []" :key="hi" class="gallery-item">
+                <div class="gallery-item__row">
+                  <input v-model="hour.label" type="text" placeholder="Lunch" class="gallery-item__alt" />
+                  <input v-model="hour.value" type="text" placeholder="12 – 2:30" class="gallery-item__alt" />
+                </div>
+                <button type="button" class="gallery-item__remove" @click="((selectedBlock!.props as BistroMenuProps).hours ?? []).splice(hi, 1)">Remove</button>
+              </div>
+              <button type="button" class="gallery-add" @click="((selectedBlock!.props as BistroMenuProps).hours ??= []).push({ label: '', value: '' })">+ Add hour</button>
+            </div>
+
+            <label class="field">
+              <span class="field__label">Booking button label</span>
+              <input v-model="(selectedBlock.props as BistroMenuProps).bookingLabel" type="text" placeholder="Book a table" />
+              <span class="field__hint">Leave blank (either label or URL) to hide the button.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Booking URL</span>
+              <input v-model="(selectedBlock.props as BistroMenuProps).bookingHref" type="text" placeholder="/contact" />
+            </label>
+
+            <div class="field">
+              <span class="field__label">Menus ({{ (selectedBlock.props as BistroMenuProps).menus.length }})</span>
+              <span class="field__hint">Each row is one downloadable PDF. Page count and file size are plain text — type them to match "2 pages · 320 KB".</span>
+              <div v-for="(menu, mi) in (selectedBlock.props as BistroMenuProps).menus" :key="mi" class="gallery-item">
+                <input v-model="menu.title" type="text" placeholder="Lunch menu" class="gallery-item__alt" />
+                <input v-model="menu.description" type="text" placeholder="Sandwiches, salads, sides. Served 12 – 2:30, Wed through Sun." class="gallery-item__alt" />
+                <input v-model="menu.pdfUrl" type="text" placeholder="https://… URL to the PDF" class="gallery-item__alt" />
+                <div class="gallery-item__row">
+                  <input v-model="menu.pageCountLabel" type="text" placeholder="2 pages" class="gallery-item__alt" />
+                  <input v-model="menu.fileSizeLabel" type="text" placeholder="320 KB" class="gallery-item__alt" />
+                </div>
+                <input v-model="menu.updatedLabel" type="text" placeholder="Updated Nov 24" class="gallery-item__alt" />
+                <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as BistroMenuProps).menus.splice(mi, 1)">Remove</button>
+              </div>
+              <button type="button" class="gallery-add" @click="(selectedBlock!.props as BistroMenuProps).menus.push({ title: 'New menu', description: '', pdfUrl: '', pageCountLabel: '', fileSizeLabel: '', updatedLabel: '' } satisfies BistroMenuItem)">+ Add menu</button>
             </div>
           </template>
 

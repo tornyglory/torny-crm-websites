@@ -21,6 +21,7 @@ import VenueSpacesBlock from './blocks/VenueSpacesBlock.vue'
 import VenuePackagesBlock from './blocks/VenuePackagesBlock.vue'
 import VenueBookingBlock from './blocks/VenueBookingBlock.vue'
 import GalleryBlock from './blocks/GalleryBlock.vue'
+import BistroMenuBlock from './blocks/BistroMenuBlock.vue'
 import ContactFormBlock from './blocks/ContactFormBlock.vue'
 import MembershipCtaBlock from './blocks/MembershipCtaBlock.vue'
 import CtaBannerBlock from './blocks/CtaBannerBlock.vue'
@@ -57,6 +58,7 @@ defineProps<{ block: Block }>()
   <VenuePackagesBlock v-else-if="block.type === 'venuePackages'" v-bind="block.props" />
   <VenueBookingBlock v-else-if="block.type === 'venueBooking'" v-bind="block.props" />
   <GalleryBlock v-else-if="block.type === 'gallery'" v-bind="block.props" />
+  <BistroMenuBlock v-else-if="block.type === 'bistroMenu'" v-bind="block.props" />
   <ContactFormBlock v-else-if="block.type === 'contactForm'" v-bind="block.props" />
   <MembershipCtaBlock v-else-if="block.type === 'membershipCta'" v-bind="block.props" />
   <CtaBannerBlock v-else-if="block.type === 'ctaBanner'" v-bind="block.props" />

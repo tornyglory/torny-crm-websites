@@ -1,5 +1,3 @@
-export { createTornyClient } from './client'
-export type { TornyClient, TornyClientOptions } from './client'
 export * from './types'
 
 // Brief 105 — variant + custom facets
@@ -109,7 +107,6 @@ export type {
   CalendarSource,
   EventRsvpPreview,
 } from './types'
-export * as teams from './resources/teams'
 export * as honourBoard from './resources/honour-board'
 export type {
   HonourCategory,
@@ -175,7 +172,6 @@ export type {
   ReplyResult,
   ReplyErrorCode,
 } from './resources/communications'
-export * as devices from './resources/devices'
 export * as clubs from './resources/clubs'
 export type {
   BrandAssetsPatch,

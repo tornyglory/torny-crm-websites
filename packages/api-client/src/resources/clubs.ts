@@ -1,19 +1,5 @@
-import type { TornyClient } from '../client'
 import { CRM_BASE, VENUE_BASE } from '../config'
 import { authedFetch, publicFetch } from '../http'
-import type { Club, ID } from '../types'
-
-export const listMine = (c: TornyClient) =>
-  c.get<Club[]>('/clubs/mine').then(r => r.data)
-
-export const get = (c: TornyClient, id: ID) =>
-  c.get<Club>(`/clubs/${id}`).then(r => r.data)
-
-export const update = (c: TornyClient, id: ID, body: Partial<Club>) =>
-  c.patch<Club>(`/clubs/${id}`, body).then(r => r.data)
-
-export const resolveByHost = (c: TornyClient, host: string) =>
-  c.get<Club>('/clubs/resolve', { params: { host } }).then(r => r.data)
 
 // ── Brand assets ─────────────────────────────────────────────────
 // See brief 24. Send only the field that changed; missing keys are

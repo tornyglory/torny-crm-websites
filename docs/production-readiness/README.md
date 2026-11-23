@@ -9,6 +9,7 @@ This folder captures the production-readiness audit and the remediation work tha
 - [`01b-xss-sanitize-content-blocks.md`](./01b-xss-sanitize-content-blocks.md) — Follow-up. Same treatment for `content-blocks` package (public club sites, wider blast radius). **Not started.**
 - [`02-dependabot.md`](./02-dependabot.md) — Day 2 fix. Dependabot config for weekly dep bumps + GitHub Actions pins. **Complete.**
 - [`03-sentry.md`](./03-sentry.md) — Day 3 fix. `@sentry/vue` + sourcemap upload wired into CRM build. **Live. Smoke test passed 2026-11-11. First real production error already captured (stale-client-after-deploy on dynamic imports — flagged as follow-up).**
+- [`04-dead-axios-code.md`](./04-dead-axios-code.md) — Day 4 quick win. Deleted unused axios wrapper + dead resource files, closing ~7 high-severity Dependabot alerts. **Complete.**
 
 ## Priority queue (from the audit)
 

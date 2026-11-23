@@ -1,6 +1,6 @@
 # 03 · Sentry for error tracking
 
-**Status:** code complete; needs Sentry project + env vars to go live
+**Status:** live (smoke-tested 2026-11-11)
 **Date:** 2026-11-11
 **Priority:** Day-3 (observability was 2/10 on the audit — this is the biggest single lift)
 **Related:** [`audit-2026-11-11.md`](./audit-2026-11-11.md) → Observability
@@ -87,6 +87,22 @@ Not captured (deliberate):
 - Decide on an environments model: `production` (Azure SWA main), `staging` (once staging exists — see Day-4), `development` (local, usually off).
 - Set up release health tracking by shipping a `VITE_SENTRY_RELEASE` matching your GitHub Actions `${{ github.sha }}` — already wired in the workflow.
 
+## Observed on day one
+
+The first real production errors Sentry captured were both **stale-client-after-deploy** issues:
+
+- `TypeError: Failed to fetch dynamically imported module: https://.../TornyImage.vue-<old-hash>.js`
+- `Error: Unable to preload CSS for /assets/TornyImage.vue-<old-hash>.css`
+
+Root cause: a user had an old tab open with the pre-redeploy `index-<old-hash>.js`. That chunk refers to lazy-loaded Vue routes by filenames tied to old build hashes. After redeploy those files no longer exist on the CDN. The browser 404s on the lazy-import, Vue router throws, Sentry catches it.
+
+Mild severity (user just refreshes) but worth fixing. Common patterns:
+- Service worker that prompts a reload when a new build is detected
+- `window.addEventListener('vite:preloadError', ...)` handler that forces a reload
+- Backend-exposed `/version` endpoint the FE polls, prompting a reload on mismatch
+
+Queued as a follow-up — not blocking.
+
 ## Changelog
 
 ### 2026-11-11
@@ -98,3 +114,7 @@ Not captured (deliberate):
 - `pnpm --filter @torny/crm typecheck` — green
 - `pnpm --filter @torny/crm test` — green (62/62)
 - `pnpm --filter @torny/crm build` — green; Vite plugin correctly skipped without secrets (no sourcemaps emitted)
+- Env vars configured: `VITE_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` (`torny`), `SENTRY_PROJECT` (`torny-crm-websites`) in GitHub Actions secrets.
+- CI build `45274034880` triggered via workflow_dispatch after secrets were in place. Log line confirmed: `[sentry-vite-plugin] Info: Successfully uploaded source maps to Sentry`.
+- Smoke test confirmed: events arrive in Sentry Issues UI with readable stack traces (sourcemap resolution working).
+- Caught a red herring during smoke: a raw `fetch()` test I asked the user to run (no auth, bogus body) returned `401 Unauthorized`, which I mistakenly attributed to the SDK. Real SDK requests were 200 OK the whole time. Noted so future-me doesn't chase the same ghost.

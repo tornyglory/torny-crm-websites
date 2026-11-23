@@ -17,6 +17,7 @@ import FontPicker from '@/components/FontPicker.vue'
 import StylePicker from '@/components/StylePicker.vue'
 import ColorSchemePicker from '@/components/ColorSchemePicker.vue'
 import ImagePicker from '@/components/ImagePicker.vue'
+import FooterConfigEditor from '@/components/website/FooterConfigEditor.vue'
 import {
   ApiError,
   clubs,
@@ -1352,25 +1353,10 @@ function dnsCheckKind(key: string): string {
         <button type="button" class="ws-btn ws-btn--ghost" @click="addTopLevel(navHeader)">+ Add link</button>
       </div>
 
-      <div class="ws-card">
-        <div class="ws-card__eyebrow">Footer navigation</div>
-        <ul class="ws-nav-list">
-          <li v-for="(item, i) in navFooter" :key="i" class="ws-nav-item">
-            <div class="ws-nav-row">
-              <div class="ws-nav-order">
-                <button type="button" class="ws-nav-arrow" :disabled="i === 0" @click="moveItem(navFooter, i, -1)" aria-label="Move up">▲</button>
-                <button type="button" class="ws-nav-arrow" :disabled="i === navFooter.length - 1" @click="moveItem(navFooter, i, 1)" aria-label="Move down">▼</button>
-              </div>
-              <div class="ws-nav-fields">
-                <input v-model="item.label" placeholder="Label" class="ws-nav-input" @input="markDirty" />
-                <input v-model="item.href" placeholder="/path or https://…" class="ws-nav-input ws-mono" @input="markDirty" />
-              </div>
-              <button type="button" class="ws-nav-remove" @click="removeItem(navFooter, i)" aria-label="Remove">×</button>
-            </div>
-          </li>
-        </ul>
-        <button type="button" class="ws-btn ws-btn--ghost" @click="addTopLevel(navFooter)">+ Add link</button>
-      </div>
+      <!-- Footer content editor — brief 115. Loads + saves on its own
+           (separate endpoint, separate dirty state) so header-nav saves
+           stay independent of footer saves. -->
+      <FooterConfigEditor />
     </template>
 
     <!-- Forms -->

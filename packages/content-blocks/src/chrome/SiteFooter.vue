@@ -58,6 +58,8 @@ const planTag = computed(() => {
             :key="social.icon + social.href"
             :href="social.href"
             :aria-label="social.label"
+            :target="social.href.startsWith('mailto:') || social.href.startsWith('tel:') ? undefined : '_blank'"
+            :rel="social.href.startsWith('mailto:') || social.href.startsWith('tel:') ? undefined : 'noopener noreferrer'"
             class="site-footer__social"
           >
             <svg v-if="social.icon === 'instagram'" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">

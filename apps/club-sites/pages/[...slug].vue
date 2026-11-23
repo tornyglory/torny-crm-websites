@@ -26,28 +26,38 @@ const accent = computed(
 
 <template>
   <PageRenderer :slug="slug">
-    <div class="custom-empty" :style="{ '--brand': accent } as any">
-      <div class="custom-empty__eyebrow">
-        <span class="custom-empty__eyebrow-dot" />
-        <span>Page not published</span>
+    <div class="custom-empty-wrap">
+      <div class="custom-empty" :style="{ '--brand': accent } as any">
+        <div class="custom-empty__eyebrow">
+          <span class="custom-empty__eyebrow-dot" />
+          <span>Page not published</span>
+        </div>
+        <h1 class="custom-empty__title">Nothing here yet.</h1>
+        <p class="custom-empty__body">
+          This page exists in the club's CMS but hasn't been given any blocks or published.
+          Once the owner drops in a hero, some paragraphs, or any block from the palette, it'll show up here.
+        </p>
+        <NuxtLink to="/" class="custom-empty__cta">Back to the club</NuxtLink>
       </div>
-      <h1 class="custom-empty__title">Nothing here yet.</h1>
-      <p class="custom-empty__body">
-        This page exists in the club's CMS but hasn't been given any blocks or published.
-        Once the owner drops in a hero, some paragraphs, or any block from the palette, it'll show up here.
-      </p>
-      <NuxtLink to="/" class="custom-empty__cta">Back to the club</NuxtLink>
     </div>
   </PageRenderer>
 </template>
 
 <style scoped>
+/* Outer wrapper mirrors PageRenderer's horizontal gutter so the empty
+ * state's left edge lines up with the header + footer content column.
+ * Without it the content hugs the left viewport edge. */
+.custom-empty-wrap {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 80px max(48px, calc((100vw - var(--container-content, 1280px)) / 2)) 120px;
+  background: var(--color-ground);
+}
 .custom-empty {
   display: flex;
   flex-direction: column;
   gap: 20px;
   max-width: 640px;
-  padding: 80px 0 120px;
 }
 .custom-empty__eyebrow {
   display: inline-flex;

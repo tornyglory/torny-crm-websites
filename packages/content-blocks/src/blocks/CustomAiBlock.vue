@@ -188,7 +188,6 @@ function runJs(): void {
   const root = wrapperEl.value
   if (!root) return
   try {
-    // eslint-disable-next-line no-new-func
     const fn = new Function('root', src) as (root: HTMLElement) => Teardown
     teardown.value = fn(root)
   } catch (err) {

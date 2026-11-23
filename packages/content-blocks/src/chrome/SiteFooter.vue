@@ -131,10 +131,10 @@ const planTag = computed(() => {
       <a
         v-if="poweredBy"
         class="site-footer__powered"
-        href="https://torny.club"
+        href="https://torny.pro"
         target="_blank"
         rel="noopener"
-        aria-label="Built with Torny — visit torny.club"
+        aria-label="Built with Torny — visit torny.pro"
       >
         <span class="site-footer__powered-label">Powered by</span>
         <span class="site-footer__powered-mark">

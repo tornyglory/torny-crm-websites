@@ -467,6 +467,64 @@ const BlockPreview = defineComponent({
           rect(138, 99, 22, 4, { fill: ink, rx: 1 }),
         ])
 
+      case 'bistroMenu':
+        return shell([
+          rect(0, 0, 200, 120, { fill: '#fff' }),
+          // Left column — editorial head
+          circle(16, 14, 1.8, { fill: '#EA580C' }),
+          rect(22, 12, 24, 3, { fill: graphite, opacity: 0.55 }),
+          rect(12, 22, 54, 7, { fill: ink }),
+          rect(12, 32, 38, 7, { fill: ink }),
+          // Desc hint
+          rect(12, 46, 50, 2, { fill: graphite, opacity: 0.4 }),
+          rect(12, 51, 42, 2, { fill: graphite, opacity: 0.4 }),
+          // Hours strip with top hairline
+          line(12, 62, 68, 62, { stroke: hairline, 'stroke-width': 1 }),
+          rect(12, 68, 10, 2, { fill: graphite, opacity: 0.45 }),
+          rect(12, 73, 14, 3, { fill: ink }),
+          rect(30, 68, 10, 2, { fill: graphite, opacity: 0.45 }),
+          rect(30, 73, 12, 3, { fill: ink }),
+          rect(48, 68, 10, 2, { fill: graphite, opacity: 0.45 }),
+          rect(48, 73, 14, 3, { fill: ink }),
+          // Book button pill
+          rect(12, 90, 34, 11, { fill: ink, rx: 5.5 }),
+          rect(16, 94, 20, 3, { fill: '#fff' }),
+          // Right column — list of menu rows, hairline-separated
+          line(78, 22, 186, 22, { stroke: hairline, 'stroke-width': 1 }),
+          // Row 1 — PDF chip + title + desc + size + download
+          rect(82, 26, 7, 9, { fill: '#F5F5F2', stroke: hairline, 'stroke-width': 0.8, rx: 1 }),
+          rect(83, 29, 5, 2, { fill: '#EA580C' }),
+          rect(94, 26, 42, 3, { fill: ink }),
+          rect(94, 32, 38, 2, { fill: graphite, opacity: 0.55 }),
+          rect(156, 27, 14, 2, { fill: graphite, opacity: 0.5 }),
+          rect(156, 32, 26, 3, { fill: ink }),
+          line(78, 42, 186, 42, { stroke: hairline, 'stroke-width': 1 }),
+          // Row 2
+          rect(82, 46, 7, 9, { fill: '#F5F5F2', stroke: hairline, 'stroke-width': 0.8, rx: 1 }),
+          rect(83, 49, 5, 2, { fill: '#EA580C' }),
+          rect(94, 46, 46, 3, { fill: ink }),
+          rect(94, 52, 42, 2, { fill: graphite, opacity: 0.55 }),
+          rect(156, 47, 14, 2, { fill: graphite, opacity: 0.5 }),
+          rect(156, 52, 26, 3, { fill: ink }),
+          line(78, 62, 186, 62, { stroke: hairline, 'stroke-width': 1 }),
+          // Row 3
+          rect(82, 66, 7, 9, { fill: '#F5F5F2', stroke: hairline, 'stroke-width': 0.8, rx: 1 }),
+          rect(83, 69, 5, 2, { fill: '#EA580C' }),
+          rect(94, 66, 40, 3, { fill: ink }),
+          rect(94, 72, 36, 2, { fill: graphite, opacity: 0.55 }),
+          rect(156, 67, 14, 2, { fill: graphite, opacity: 0.5 }),
+          rect(156, 72, 26, 3, { fill: ink }),
+          line(78, 82, 186, 82, { stroke: hairline, 'stroke-width': 1 }),
+          // Row 4
+          rect(82, 86, 7, 9, { fill: '#F5F5F2', stroke: hairline, 'stroke-width': 0.8, rx: 1 }),
+          rect(83, 89, 5, 2, { fill: '#EA580C' }),
+          rect(94, 86, 44, 3, { fill: ink }),
+          rect(94, 92, 40, 2, { fill: graphite, opacity: 0.55 }),
+          rect(156, 87, 14, 2, { fill: graphite, opacity: 0.5 }),
+          rect(156, 92, 26, 3, { fill: ink }),
+          line(78, 102, 186, 102, { stroke: hairline, 'stroke-width': 1 }),
+        ])
+
       case 'venueHireHero':
         return shell([
           rect(0, 0, 200, 120, { fill: '#fff' }),

@@ -11,6 +11,7 @@ This folder captures the production-readiness audit and the remediation work tha
 - [`03-sentry.md`](./03-sentry.md) — Day 3 fix. `@sentry/vue` + sourcemap upload wired into CRM build. **Live. Smoke test passed 2026-11-11. First real production error already captured (stale-client-after-deploy on dynamic imports — flagged as follow-up).**
 - [`04-dead-axios-code.md`](./04-dead-axios-code.md) — Day 4 quick win. Deleted unused axios wrapper + dead resource files, closing ~7 high-severity Dependabot alerts. **Complete.**
 - [`05-preload-error-recovery.md`](./05-preload-error-recovery.md) — Day 5 quick win. One-shot reload on `vite:preloadError` so stale tabs recover from deploys instead of throwing. **Complete.**
+- [`06-build-quality-next-steps.md`](./06-build-quality-next-steps.md) — Scoping doc for the "editor experience → 9" push. Three candidate pushes (inline uploads, consistency + a11y sweep, live preview) ranked by leverage. **Scoping only — not started.**
 
 ## Priority queue (from the audit)
 

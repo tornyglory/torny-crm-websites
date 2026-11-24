@@ -193,6 +193,15 @@ function ssoNotice(provider: string) {
         New to Torny? <RouterLink to="/register">Register your club →</RouterLink>
       </div>
     </form>
+
+    <!-- Legal footer — points at the marketing site (torny.pro) where the
+         canonical /privacy and /terms live. These are external links from
+         the CRM origin (app.torny.pro), not internal routes. -->
+    <footer class="auth-page__legal">
+      <a href="https://torny.pro/privacy" target="_blank" rel="noopener noreferrer">Privacy</a>
+      <span aria-hidden="true">·</span>
+      <a href="https://torny.pro/terms" target="_blank" rel="noopener noreferrer">Terms</a>
+    </footer>
   </div>
 </template>
 
@@ -200,5 +209,25 @@ function ssoNotice(provider: string) {
 .auth-sso-btn--passkey {
   flex: 1.4;
   gap: 6px;
+}
+
+.auth-page__legal {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--color-fog);
+}
+.auth-page__legal a {
+  color: var(--color-fog);
+  text-decoration: none;
+}
+.auth-page__legal a:hover,
+.auth-page__legal a:focus-visible {
+  color: var(--color-ink);
+  text-decoration: underline;
 }
 </style>

@@ -204,10 +204,44 @@ function ssoNotice(provider: string) {
         Already have an account? <RouterLink to="/">Sign in →</RouterLink>
       </div>
     </form>
+
+    <!-- Legal footer — same pattern as SignInView. External links to
+         torny.pro where the canonical /privacy and /terms live. Users
+         registering an account should see what they're agreeing to
+         before they commit. -->
+    <footer class="auth-page__legal">
+      By creating an account you agree to our
+      <a href="https://torny.pro/terms" target="_blank" rel="noopener noreferrer">Terms</a>
+      and
+      <a href="https://torny.pro/privacy" target="_blank" rel="noopener noreferrer">Privacy</a>.
+    </footer>
   </div>
 </template>
 
 <style scoped>
+.auth-page__legal {
+  margin-top: 24px;
+  padding: 0 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-fog);
+  flex-wrap: wrap;
+}
+.auth-page__legal a {
+  color: var(--color-fog);
+  text-decoration: underline;
+}
+.auth-page__legal a:hover,
+.auth-page__legal a:focus-visible {
+  color: var(--color-ink);
+}
+
 .register__names {
   display: grid;
   grid-template-columns: 1fr 1fr;

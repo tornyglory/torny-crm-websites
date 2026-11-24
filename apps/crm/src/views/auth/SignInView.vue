@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { auth as authApi, AuthError } from '@torny/api-client'
 import { useAuthStore, fromApiUser } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
+import { useAuthRateLimit } from '@/composables/useAuthRateLimit'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const club = useClubStore()
+const rateLimit = useAuthRateLimit()
 
 const email = ref('')
 const password = ref('')
@@ -18,6 +20,19 @@ const submitting = ref(false)
 const error = ref<string | null>(null)
 
 const API_BASE = import.meta.env.VITE_SAM_BASE_URL
+
+/** Disable the form during server round-trips AND during the client-side
+ *  cool-off after too many failures. */
+const formDisabled = computed(() => submitting.value || rateLimit.isLocked.value)
+
+/** Error text to show. Lockout wins over whatever auth error last fired
+ *  because "too many attempts" is the more actionable instruction. */
+const displayError = computed(() => {
+  if (rateLimit.isLocked.value) {
+    return `Too many attempts. Try again in ${rateLimit.countdownLabel.value}.`
+  }
+  return error.value
+})
 
 function landingFor(user: ReturnType<typeof fromApiUser>): string {
   if (user.isPlatformAdmin) return '/admin'
@@ -34,6 +49,10 @@ function landingFor(user: ReturnType<typeof fromApiUser>): string {
 
 async function submit(e: Event) {
   e.preventDefault()
+  // Lockout short-circuits submission entirely — the UI already shows
+  // the countdown via displayError; no round-trip needed.
+  if (rateLimit.isLocked.value) return
+
   submitting.value = true
   error.value = null
   try {
@@ -45,12 +64,21 @@ async function submit(e: Event) {
     const user = fromApiUser(apiUser)
     auth.setSession(token, user)
     club.syncFromUserClubs(user.clubs)
+    rateLimit.recordSuccess()
 
     const redirect = (route.query.redirect as string | undefined) ?? landingFor(user)
     await router.push(redirect)
   } catch (err) {
-    if (err instanceof AuthError && err.status === 401) {
+    if (err instanceof AuthError && err.status === 429) {
+      // Backend-authoritative rate limit. The response body may carry
+      // `{ data: { retry_after_seconds: N } }`; fall back to 60s if not.
+      const data = (err.data ?? {}) as { retry_after_seconds?: number }
+      const retryAfter = typeof data.retry_after_seconds === 'number' ? data.retry_after_seconds : 60
+      rateLimit.applyServerLockout(retryAfter)
+      error.value = null
+    } else if (err instanceof AuthError && err.status === 401) {
       error.value = 'Email or password is incorrect.'
+      rateLimit.recordFailure()
     } else if (err instanceof AuthError) {
       error.value = err.message
     } else {
@@ -88,9 +116,10 @@ function ssoNotice(provider: string) {
             required
             autocomplete="email"
             autofocus
+            :disabled="formDisabled"
             placeholder="you@yourclub.co.nz"
-            :aria-invalid="error ? true : undefined"
-            :aria-describedby="error ? 'auth-error' : undefined"
+            :aria-invalid="displayError ? true : undefined"
+            :aria-describedby="displayError ? 'auth-error' : undefined"
           />
         </div>
       </div>
@@ -109,8 +138,9 @@ function ssoNotice(provider: string) {
             :type="showPassword ? 'text' : 'password'"
             required
             autocomplete="current-password"
-            :aria-invalid="error ? true : undefined"
-            :aria-describedby="error ? 'auth-error' : undefined"
+            :disabled="formDisabled"
+            :aria-invalid="displayError ? true : undefined"
+            :aria-describedby="displayError ? 'auth-error' : undefined"
           />
           <button
             type="button"
@@ -134,17 +164,19 @@ function ssoNotice(provider: string) {
 
       <!-- Error — role=alert makes screen readers announce the moment
            it appears after submit; aria-live=assertive for the same
-           reason on browsers that don't act on role=alert alone. -->
+           reason on browsers that don't act on role=alert alone. The
+           rate-limit countdown reuses the same slot so both auth
+           errors and lockout messages get announced the same way. -->
       <div
-        v-if="error"
+        v-if="displayError"
         id="auth-error"
         class="auth-alert"
         role="alert"
         aria-live="assertive"
-      >{{ error }}</div>
+      >{{ displayError }}</div>
 
       <!-- Primary CTA -->
-      <button type="submit" class="auth-btn" :disabled="submitting">
+      <button type="submit" class="auth-btn" :disabled="formDisabled">
         <span>{{ submitting ? 'Signing in…' : 'Sign in' }}</span>
         <CrmSpinner v-if="submitting" size="sm" label="Signing in" />
         <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

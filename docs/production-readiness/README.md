@@ -15,6 +15,7 @@ This folder captures the production-readiness audit and the remediation work tha
 - [`06-csp-headers.md`](./06-csp-headers.md) — CRM Content-Security-Policy, started in Report-Only then flipped to enforcing. **Complete.**
 - [`07-club-sites-typecheck-debt.md`](./07-club-sites-typecheck-debt.md) — Nuxt-app typecheck + test setup gaps that CRM-only CI had been masking. Fixed `club-sites` typecheck, wired `torny-web` prepare → test via turbo, flipped CI back to monorepo-wide `pnpm typecheck` + `pnpm test`. **Complete.**
 - [`08-compliance-floor.md`](./08-compliance-floor.md) — `/privacy` + `/terms` scaffolds on the marketing site so the `/signup` wizard's links no longer 404. Structured for NZ Privacy Act 2020 + standard SaaS terms. **Scaffold shipped — legal review required before production.**
+- [`09-sign-in-rate-limit.md`](./09-sign-in-rate-limit.md) — Client-side lockout on failed sign-in attempts with exponential backoff; ready to honour a backend 429 + `retry_after_seconds` when the server rate limit ships. **FE shipped; backend brief required for the real control.**
 
 ## Priority queue (from the audit)
 

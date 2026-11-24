@@ -32,16 +32,8 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      # Typecheck is CRM-only for now — `pnpm typecheck` via turbo
-       # catches pre-existing errors in apps/club-sites (brief: see
-       # docs/production-readiness). Expand to monorepo-wide once those
-       # land.
       - name: Typecheck
-        run: pnpm --filter @torny/crm typecheck
+        run: pnpm typecheck
 
-      # torny-web is excluded until its tests stop requiring a generated
-      # `.nuxt/tsconfig.json` on cold CI (needs `nuxi prepare` first).
-      # Noted in docs/production-readiness/07-club-sites-typecheck-debt.md
-      # under follow-ups.
       - name: Test
-        run: pnpm --filter '!@torny/torny-web' test
+        run: pnpm test

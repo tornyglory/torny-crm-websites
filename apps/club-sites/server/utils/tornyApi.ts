@@ -459,7 +459,13 @@ export async function fetchCustomFacets(slug: string): Promise<CustomFacet[]> {
 }
 
 // Generic passthrough for anything else on the public surface.
+//
+// Nitro's `$fetch<T>()` overloads treat known internal paths as
+// typed internal responses (`TypedInternalResponse<..., T, 'get'>`),
+// which isn't what this helper proxies — callers hand us an external
+// Torny API path and expect the raw `T` back. The explicit cast
+// collapses the overload to the shape we actually return.
 export function tornyFetch<T>(path: string, opts?: Parameters<typeof $fetch>[1]): Promise<T> {
   const config = useRuntimeConfig()
-  return $fetch<T>(path, { baseURL: config.tornyApiBaseUrl, ...opts })
+  return $fetch<T>(path, { baseURL: config.tornyApiBaseUrl, ...opts }) as Promise<T>
 }

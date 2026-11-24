@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "PORT=3002 nuxt dev",
+    "prepare": "nuxt prepare",
     "build": "nuxt build",
     "preview": "wrangler pages dev .output/public --compatibility-date=2024-10-01",
     "deploy": "nuxt build && wrangler pages deploy .output/public",

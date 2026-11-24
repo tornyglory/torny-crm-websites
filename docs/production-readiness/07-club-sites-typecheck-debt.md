@@ -1,55 +1,54 @@
-# 07 · club-sites typecheck debt
+# 07 · club-sites typecheck + torny-web test setup
 
-**Status:** open. Needs a session.
+**Status:** resolved.
 **Date raised:** 2026-11-25
-**Priority:** Blocker before we expand CI typecheck to the full monorepo.
+**Date resolved:** 2026-11-25
 
 ## Context
 
-During the api-client + content-blocks test-infra push (commit `fe9335b`) I tried to switch CI's typecheck step from `pnpm --filter @torny/crm typecheck` to `pnpm typecheck` (via turbo, all workspaces) — so that any regression in a shared package or a Nuxt app lands red on the PR, not silently on main.
+When the api-client + content-blocks test-infra push (commit `fe9335b`) expanded CI to run `pnpm typecheck` and `pnpm test` across every workspace (not just CRM), two pre-existing failures in the Nuxt apps surfaced for the first time. Both had been masked by CRM-only CI.
 
-That change immediately caught a pre-existing typecheck failure in `apps/club-sites/server/utils/tornyApi.ts:464`:
+## Issue 1: club-sites typecheck
+
+Two errors in `apps/club-sites`:
 
 ```
-Type 'Promise<TypedInternalResponse<NitroFetchRequest, T, "get">>'
+layouts/default.vue(85,9): error TS2352:
+  Conversion of type 'Club | null' to type 'Record<string, unknown> | undefined'
+  may be a mistake because neither type sufficiently overlaps with the other.
+
+server/utils/tornyApi.ts(464,3): error TS2322:
+  Type 'Promise<TypedInternalResponse<NitroFetchRequest, T, "get">>'
   is not assignable to type 'Promise<T>'.
-  Type 'TypedInternalResponse<NitroFetchRequest, T, "get">' is not
-    assignable to type 'T'.
-    'T' could be instantiated with an arbitrary type which could be
-    unrelated to 'TypedInternalResponse<NitroFetchRequest, T, "get">'.
-
-Type 'Club' is not comparable to type 'Record<string, unknown>'.
-  Index signature for type 'string' is missing in type 'Club'.
 ```
 
-Two separate issues on the same file. Likely from a Nitro / Nuxt types bump upstream — vue-tsc + @nuxt/kit versions have moved enough since the file was written that the generic inference breaks.
+### Fixes
 
-Reverted the ci.yml change in a follow-up so main CI stays green. Test expansion stayed (all three packages now run tests in CI via `pnpm test`).
+- `layouts/default.vue:85` — the cast was reading a `plan` field that was added to the Club payload in brief 93 but never pushed onto the shared `Club` interface. Narrow via `as unknown as Record<string, unknown>` at the read site. Replace with a typed field once brief 93's shape is stable upstream.
+- `server/utils/tornyApi.ts:464` — Nitro's `$fetch<T>` overloads treat known internal paths as `TypedInternalResponse<..., T, 'get'>`, which isn't what this helper proxies (external Torny API). Collapse the overload with an explicit `as Promise<T>` cast.
 
-## Why fix this
+Commit: this one (see doc history).
 
-- `club-sites` is a deployed app — `app.torny.pro` → public club websites. Typecheck errors there could mask real bugs.
-- The only workspace in the repo whose typecheck isn't gated by CI. Every other app / package already runs under `pnpm typecheck` in a pre-commit or deploy context, so they stay clean. club-sites drifts because nothing checks it.
+## Issue 2: torny-web test setup
 
-## What to fix
+`apps/torny-web/tsconfig.json` extends `./.nuxt/tsconfig.json`, which only exists after `nuxt prepare` (or a dev/build). Cold CI didn't have it.
 
-- `apps/club-sites/server/utils/tornyApi.ts:464` — two typecheck errors. Likely the `$fetch<T>()` generic needs an explicit cast or the return type needs to swap from `Promise<T>` to the Nitro `TypedInternalResponse` shape.
-- Re-run `pnpm --filter @torny/club-sites typecheck` locally after the fix.
-- Then flip ci.yml back to `pnpm typecheck` across the monorepo.
+### Fix (option 1 from the original debt scoping)
 
-## Not in scope
+- Added `"prepare": "nuxt prepare"` to `apps/torny-web/package.json`.
+- Added `test` task deps in `turbo.json` — `dependsOn: ["^build", "prepare"]` — so turbo runs `prepare` in the same workspace before `test`.
+- Declared a `prepare` task in `turbo.json` with `cache: false` (it's a code-gen step, doesn't cache).
 
-- Bumping Nitro / Nuxt versions. That's part of the bigger "Nuxt + Vite major upgrade" track (`04`-era alerts). If the typecheck fix needs a version bump, note it; don't bundle the whole upgrade here.
+## Related: CI step flipped back to monorepo-wide
 
-## Related: torny-web tests excluded from CI for the same reason
+With both issues fixed, `ci.yml` now runs:
 
-`apps/torny-web` has a `tsconfig.json` that extends `./.nuxt/tsconfig.json`, which is only generated after `nuxi prepare` (or `nuxt dev` / `nuxt build`). Cold CI runs don't have that file, so vitest fails to parse the tsconfig and the suite blows up before it starts.
+- `pnpm typecheck` (all 6 workspaces)
+- `pnpm test` (4 workspaces with test scripts)
 
-Workaround today: `pnpm --filter '!@torny/torny-web' test` in `.github/workflows/ci.yml` — torny-web tests still run locally, just not in CI.
+instead of the CRM-only forms. Future regressions in any workspace will show red on PR before landing on main.
 
-**Fix options:**
-1. Add a `prepare` script to `apps/torny-web/package.json` that runs `nuxi prepare` and make turbo's `test` task depend on `^prepare` (cleanest).
-2. Change torny-web's `tsconfig.json` to extend from a stable path (not `.nuxt/`).
-3. Add a step in `.github/workflows/ci.yml` that runs `pnpm --filter @torny/torny-web exec nuxi prepare` before tests (works but slow and nuxt-only).
+## Not done (follow-up)
 
-Recommended: option 1.
+- Add `plan` to the shared `Club` interface so `layouts/default.vue:85` can drop the unknown cast. Needs backend brief 93 to finalise the response shape first; small ticket for later.
+- club-sites currently has no test suite (per the production-readiness audit). Setting up vitest there is the next shared-package-quality push once we have bandwidth.

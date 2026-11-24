@@ -12,6 +12,8 @@ This folder captures the production-readiness audit and the remediation work tha
 - [`04-dead-axios-code.md`](./04-dead-axios-code.md) — Day 4 quick win. Deleted unused axios wrapper + dead resource files, closing ~7 high-severity Dependabot alerts. **Complete.**
 - [`05-preload-error-recovery.md`](./05-preload-error-recovery.md) — Day 5 quick win. One-shot reload on `vite:preloadError` so stale tabs recover from deploys instead of throwing. **Complete.**
 - [`06-build-quality-next-steps.md`](./06-build-quality-next-steps.md) — Scoping doc for the "editor experience → 9" push. Three candidate pushes (inline uploads, consistency + a11y sweep, live preview) ranked by leverage. **Scoping only — not started.**
+- [`06-csp-headers.md`](./06-csp-headers.md) — CRM Content-Security-Policy, started in Report-Only then flipped to enforcing. **Complete.**
+- [`07-club-sites-typecheck-debt.md`](./07-club-sites-typecheck-debt.md) — Nuxt-app typecheck + test setup gaps that CRM-only CI had been masking. Fixed `club-sites` typecheck, wired `torny-web` prepare → test via turbo, flipped CI back to monorepo-wide `pnpm typecheck` + `pnpm test`. **Complete.**
 
 ## Priority queue (from the audit)
 

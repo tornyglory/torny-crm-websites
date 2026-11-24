@@ -81,8 +81,12 @@ const chromeClub = computed<SiteChromeClub>(() => ({
  *  carrying it on `/me` in brief 93 and can hydrate it on `/site` too.
  *  When absent the SiteFooter falls back to the generic "OS" tag. */
 const clubPlan = computed<'starter' | 'pro' | undefined>(() => {
-  const raw = (site.value?.club as Record<string, unknown> | undefined)?.plan
-    ?? (club.value as Record<string, unknown> | undefined)?.plan
+  // Club was typed before brief 93 added `plan` on /me + /site. Rather
+  // than touch the shared Club interface (consumed across CRM + Nuxt),
+  // narrow via an unknown cast at the read site. Replace with a typed
+  // field once brief 93's shape is stable upstream.
+  const raw = (site.value?.club as unknown as Record<string, unknown> | undefined)?.plan
+    ?? (club.value as unknown as Record<string, unknown> | undefined)?.plan
   if (raw === 'starter' || raw === 'pro') return raw
   return undefined
 })

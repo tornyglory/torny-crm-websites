@@ -19,6 +19,17 @@ A pnpm + turborepo monorepo:
 
 ---
 
+## Emergencies / rollback
+
+If prod is broken (Sentry spike, user report of "can't sign in," blank page after a deploy):
+
+- **CRM:** run `./bin/rollback-crm.sh` from the repo root. Dry-runs by default; shows which commit(s) would be reverted. Requires `--yes` to actually revert and push. Agent protocol = always dry-run first and wait for human confirmation before `--yes`.
+- **Full runbook** with signal → decide → execute → coordinate → verify per deploy surface (CRM Azure SWA, club-sites Cloudflare, torny-web Cloudflare), plus a revert-vs-hotfix decision table: `docs/runbook/rollback.md`.
+
+Direct `git revert` + push works too (admin bypass of branch protection is on), but the script catches common foot-guns (dirty tree, wrong branch, out-of-sync local main) that would otherwise push a wrong revert.
+
+---
+
 ## The feedback loop (default to this every time)
 
 **After any CRM UI change:**

@@ -60,3 +60,9 @@ jobs:
           output_location: ""
           skip_app_build: true
           skip_api_build: true
+          # Dependabot PRs (and any PR from a fork) can't read the SWA
+          # api token, so the deploy step would always fail on them
+          # with "ApiToken is invalid". Letting it skip-on-missing-secrets
+          # makes the build step still prove the code is buildable
+          # without lighting up a false red on the PR.
+          skip_deploy_on_missing_secrets: true

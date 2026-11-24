@@ -130,7 +130,7 @@ function href(t: PublicTournamentCard): string {
         </div>
         <a v-if="ctaLabel && ctaHref" :href="ctaHref" class="ut-list__cta">
           {{ ctaLabel }}
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6H10M10 6L7 3M10 6L7 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 6H10M10 6L7 3M10 6L7 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
       </header>
 

@@ -193,7 +193,7 @@ function enquiryErrorMessage(err: unknown): string {
           </div>
           <div v-if="contact.email" class="cf__contact-row">
             <div class="cf__icon-square">
-              <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="3" y="5" width="14" height="10" rx="1.5" /><path d="M3 6l7 5 7-5" />
               </svg>
             </div>
@@ -204,7 +204,7 @@ function enquiryErrorMessage(err: unknown): string {
           </div>
           <div v-if="contact.phone" class="cf__contact-row">
             <div class="cf__icon-square">
-              <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M4 4h3l2 4-2 1.5c1 2 3 4 5 5L13 12.5l4 2v3c0 1-.8 1.5-1.5 1.5C9 19 3 13 3 5.5 3 4.8 3.5 4 4 4z" />
               </svg>
             </div>
@@ -238,7 +238,7 @@ function enquiryErrorMessage(err: unknown): string {
             rel="noopener"
           >
             <span>Open in Google Maps</span>
-            <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5h7v7M15 5l-8 8" /></svg>
+            <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5h7v7M15 5l-8 8" /></svg>
           </a>
         </div>
 

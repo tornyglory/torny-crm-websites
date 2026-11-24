@@ -1,0 +1,44 @@
+/**
+ * Shared focus-visible treatment for every interactive element in the
+ * content-blocks surface. Keyboard-only (never fires for mouse focus
+ * because browsers suppress `:focus-visible` after a pointer event).
+ *
+ * Why this lives outside every block's scoped CSS: 28 of 33 blocks ship
+ * without an explicit `:focus-visible` style, so keyboard users get the
+ * browser default dotted ring that fights the Torny brand. One file
+ * lands a consistent, on-brand outline across the entire surface.
+ *
+ * Block-local `:focus-visible` rules (e.g. GalleryBlock's teleported
+ * lightbox) have Vue's scoped-CSS attribute suffix and therefore higher
+ * specificity than these base selectors, so they win where set — these
+ * rules are a floor, not a cap.
+ *
+ * Selectors are deliberately narrow:
+ *   - `<button>`, `<a>`, `[role="button"]`, `[tabindex="0"]` — the
+ *     interactive primitives
+ *   - `<input>`, `<textarea>`, `<select>` — form controls
+ *
+ * The outline-offset + outline-color combo ensures the ring reads on
+ * every theme token combination (ground / surface / ink backgrounds).
+ */
+
+:where(button, a, [role="button"], [tabindex="0"]):focus-visible {
+  outline: 2px solid var(--color-accent, #2563EB);
+  outline-offset: 3px;
+  border-radius: inherit;
+}
+
+/* Form controls inherit their own border on focus. The ring sits
+ * just outside their visual frame via offset so it doesn't double
+ * up with the border-color change. */
+:where(input, textarea, select):focus-visible {
+  outline: 2px solid var(--color-accent, #2563EB);
+  outline-offset: 2px;
+}
+
+/* Ink-on-ink safety: when an interactive element sits on an inverted
+ * surface (`.site-footer` paints ink + the brand accent may be dark
+ * too), swap the ring to the ground token so it stays visible. */
+.site-footer :where(button, a, [role="button"], [tabindex="0"]):focus-visible {
+  outline-color: var(--color-ground, #ffffff);
+}

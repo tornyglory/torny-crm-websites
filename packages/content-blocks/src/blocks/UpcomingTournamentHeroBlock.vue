@@ -143,7 +143,7 @@ const detailHref = computed(() => featured.value ? `/tournaments/${featured.valu
     <div v-else class="ut-hero__inner">
       <div class="ut-hero__top">
         <div class="ut-hero__pill">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1L7.5 4L11 4.5L8.5 7L9 10.5L6 8.75L3 10.5L3.5 7L1 4.5L4.5 4L6 1Z" fill="#EA580C"/></svg>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M6 1L7.5 4L11 4.5L8.5 7L9 10.5L6 8.75L3 10.5L3.5 7L1 4.5L4.5 4L6 1Z" fill="#EA580C"/></svg>
           FEATURED TOURNAMENT
         </div>
         <div class="ut-hero__pill ut-hero__pill--mint">
@@ -164,7 +164,7 @@ const detailHref = computed(() => featured.value ? `/tournaments/${featured.valu
           <div class="ut-hero__ctas">
             <a :href="enterHref" class="ut-hero__cta ut-hero__cta--primary">
               {{ primaryLabel }}
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7H11.5M11.5 7L8 3.5M11.5 7L8 10.5" stroke="#0A0A0B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2.5 7H11.5M11.5 7L8 3.5M11.5 7L8 10.5" stroke="#0A0A0B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </a>
             <a :href="detailHref" class="ut-hero__cta ut-hero__cta--secondary">{{ secondaryLabel }}</a>
           </div>

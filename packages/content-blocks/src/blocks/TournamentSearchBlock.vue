@@ -272,7 +272,7 @@ function href(t: PublicTournamentCard): string {
       <!-- Main column -->
       <div class="tsx__main">
         <div v-if="showSearch" class="tsx__search">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           <input v-model="searchQuery" type="search" placeholder="Search tournaments, clubs, formats…" />
           <button v-if="searchQuery" type="button" class="tsx__clear" @click="searchQuery = ''">× CLEAR</button>
         </div>
@@ -344,7 +344,7 @@ function href(t: PublicTournamentCard): string {
               <div class="tsx__feature-actions">
                 <span class="tsx__feature-enter">
                   Enter
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6H10M10 6L7 3M10 6L7 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 6H10M10 6L7 3M10 6L7 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </span>
                 <span class="tsx__feature-details">Details</span>
               </div>

@@ -879,7 +879,7 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
               @click="goStep(2); currentStep = 2"
             >
               Continue to details
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7h8M7 3.5L10.5 7 7 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2.5 7h8M7 3.5L10.5 7 7 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
           </div>
         </aside>
@@ -943,7 +943,7 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
                 :class="{ 'vb__addon--on': addonFor(a).checked }"
               >
                 <button type="button" class="vb__addon-check" @click="toggleAddon(a)" :aria-pressed="addonFor(a).checked">
-                  <svg v-if="addonFor(a).checked" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6l2.5 2.5L9.5 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <svg v-if="addonFor(a).checked" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6l2.5 2.5L9.5 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
                 <div class="vb__addon-copy">
                   <div class="vb__addon-name">{{ a.name }}</div>
@@ -1001,7 +1001,7 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
               @click="submit"
             >
               {{ submitting ? 'Taking you to Stripe…' : `Pay deposit · $${deposit}` }}
-              <svg v-if="!submitting" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7h8M7 3.5L10.5 7 7 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg v-if="!submitting" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2.5 7h8M7 3.5L10.5 7 7 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
           </div>
         </div>
@@ -1032,7 +1032,7 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
           </div>
 
           <div class="vb__summary-note">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 6l1.5 1.5L8 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2"/></svg>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 6l1.5 1.5L8 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2"/></svg>
             Free cancellation until 14 days before.
           </div>
         </aside>
@@ -1047,7 +1047,7 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
     <template v-else>
       <div class="vb__confirm-hero">
         <div class="vb__confirm-ref">REF · {{ bookingRef }}</div>
-        <div class="vb__confirm-check"><svg viewBox="0 0 32 32" width="28" height="28" fill="none"><path d="M9 17l5 5 10-11" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="vb__confirm-check"><svg viewBox="0 0 32 32" width="28" height="28" fill="none" aria-hidden="true"><path d="M9 17l5 5 10-11" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         <div class="vb__confirm-eyebrow">Request received</div>
         <h2 class="vb__confirm-title">
           Thanks{{ form.fullName ? `, ${form.fullName.split(' ')[0]}` : '' }} — we've logged your booking.

@@ -1,3 +1,8 @@
+// Shared stylesheets — loaded whenever any content-blocks export is
+// used, so chrome (SiteHeader/Drawer/Footer) picks up the focus-visible
+// treatment even on pages that don't mount BlockRenderer.
+import './styles/focus-visible.css'
+
 export { default as BlockRenderer } from './BlockRenderer.vue'
 export { default as RichTextEditor } from './components/RichTextEditor.vue'
 export { default as TornyDatePicker } from './components/TornyDatePicker.vue'

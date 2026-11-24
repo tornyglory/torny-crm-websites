@@ -426,7 +426,7 @@ function joinFormErrorMessage(err: unknown): string {
           <div class="jf__steps-eyebrow">STEPS</div>
           <li v-for="(step, idx) in steps" :key="step.key" class="jf__step">
             <span class="jf__step-marker" :class="{ 'jf__step-marker--done': step.complete }">
-              <svg v-if="step.complete" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 6.5 12 13 4" /></svg>
+              <svg v-if="step.complete" viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4" /></svg>
               <template v-else>{{ idx + 1 }}</template>
             </span>
             <span class="jf__step-label" :class="{ 'jf__step-label--muted': !step.complete }">{{ step.label }}</span>

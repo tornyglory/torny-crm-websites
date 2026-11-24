@@ -1,6 +1,9 @@
 # 06 — Build quality: get the editor experience closer to 9
 
-**Status:** not started. Scoping only — pick before committing to time.
+**Status:**
+- Ship 1 (inline PDF uploads): **FE wired.** Brief 118 queued. Commit `edf1622`.
+- Ship 2 (consistency + a11y sweep): **Shipped.** aria-hidden sweep across decorative SVGs, shared `focus-visible.css` applied via content-blocks entry, SignInView error now announced via `role=alert` + inputs wired with `aria-invalid` + `aria-describedby`, FooterConfigEditor's per-field errors upgraded to `role=alert`, and `@axe-core/playwright` added to the smoke suite with a WCAG 2.1 A + AA baseline test that fails on any serious/critical violation.
+- Ship 3 (live preview): **Not started.** Prototype gate still ahead.
 
 The audit baseline (`audit-2026-11-11.md`) scored the overall build **5.5 / 10**, with the operational floor since lifted by docs 01–05 (XSS, Sentry, Dependabot, axios cleanup, preload recovery). Code health already sits at 9. Everything from here is about the **editor + public-site product polish** — the stuff a club admin feels on their first visit to the CRM.
 

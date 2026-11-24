@@ -25,38 +25,38 @@ const gridStyle = computed(() => ({
       <article v-for="(item, i) in items" :key="i" class="fg__card">
         <span v-if="item.icon" class="fg__icon" :class="`fg__icon--${item.iconTone ?? 'accent'}`">
           <!-- inline SVG per icon -->
-          <svg v-if="item.icon === 'target'" width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <svg v-if="item.icon === 'target'" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" />
             <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="1.5" />
             <circle cx="12" cy="12" r="1" fill="currentColor" />
           </svg>
-          <svg v-else-if="item.icon === 'people'" width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <svg v-else-if="item.icon === 'people'" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M4 20C4 16.5 6.5 14 10 14H14C17.5 14 20 16.5 20 20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
             <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
           </svg>
-          <svg v-else-if="item.icon === 'star'" width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <svg v-else-if="item.icon === 'star'" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 3L14 9H20L15 12.5L17 19L12 15L7 19L9 12.5L4 9H10L12 3Z" fill="currentColor" fill-opacity="0.25" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
           </svg>
-          <svg v-else-if="item.icon === 'calendar'" width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <svg v-else-if="item.icon === 'calendar'" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M4 6H20V18H4V6Z" stroke="currentColor" stroke-width="1.5" />
             <path d="M4 10H20" stroke="currentColor" stroke-width="1.5" />
             <path d="M9 6V4M15 6V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
           </svg>
-          <svg v-else-if="item.icon === 'trophy'" width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <svg v-else-if="item.icon === 'trophy'" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M8 5H16V10C16 12.2 14.2 14 12 14C9.8 14 8 12.2 8 10V5Z" stroke="currentColor" stroke-width="1.5" />
             <path d="M5 5H8V8C8 8 5 8 5 6V5Z" stroke="currentColor" stroke-width="1.5" />
             <path d="M19 5H16V8C16 8 19 8 19 6V5Z" stroke="currentColor" stroke-width="1.5" />
             <path d="M12 14V17M9 20H15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
           </svg>
-          <svg v-else-if="item.icon === 'sparkle'" width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <svg v-else-if="item.icon === 'sparkle'" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 4L13.5 10.5L20 12L13.5 13.5L12 20L10.5 13.5L4 12L10.5 10.5L12 4Z" fill="currentColor" fill-opacity="0.25" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
           </svg>
-          <svg v-else-if="item.icon === 'coffee'" width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <svg v-else-if="item.icon === 'coffee'" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M4 8H16V14C16 16.2 14.2 18 12 18H8C5.8 18 4 16.2 4 14V8Z" stroke="currentColor" stroke-width="1.5" />
             <path d="M16 10H18C19.1 10 20 10.9 20 12C20 13.1 19.1 14 18 14H16" stroke="currentColor" stroke-width="1.5" />
             <path d="M7 3V5M10 3V5M13 3V5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
           </svg>
-          <svg v-else-if="item.icon === 'bolt'" width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <svg v-else-if="item.icon === 'bolt'" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M13 3L4 14H11L10 21L20 10H13V3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
           </svg>
         </span>

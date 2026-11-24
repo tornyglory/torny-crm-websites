@@ -1,4 +1,5 @@
 import { test, expect, type ConsoleMessage } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 
 /**
  * Baseline smoke tests.
@@ -57,5 +58,36 @@ test.describe('smoke', () => {
     await expect(page.getByRole('heading', { name: /sign in to torny/i })).toBeVisible()
     await expect(page).toHaveURL(/\?redirect=\/crm\/members/)
     expect(errors, `console errors during redirect:\n${errors.join('\n')}`).toEqual([])
+  })
+
+  /**
+   * Accessibility baseline for the sign-in page.
+   *
+   * Runs axe-core at WCAG 2.1 A + AA level. Serious + critical violations
+   * fail the suite — moderate/minor are reported for triage but don't block.
+   *
+   * This is the entry point every CRM user hits, so any regression here
+   * is user-visible. Once this test is green, duplicate the pattern across
+   * authenticated flows as they come online.
+   */
+  test('sign-in page passes axe-core WCAG A + AA baseline', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: /sign in to torny/i })).toBeVisible()
+    await page.waitForLoadState('networkidle')
+
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze()
+
+    const blocking = results.violations.filter(
+      (v) => v.impact === 'serious' || v.impact === 'critical',
+    )
+
+    if (blocking.length > 0) {
+      const summary = blocking
+        .map((v) => `[${v.impact}] ${v.id} — ${v.help}\n  ${v.nodes.length} node(s): ${v.nodes[0]?.target.join(' ')}`)
+        .join('\n\n')
+      throw new Error(`axe-core found ${blocking.length} blocking violation(s):\n\n${summary}`)
+    }
   })
 })

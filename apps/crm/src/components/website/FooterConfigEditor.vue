@@ -494,23 +494,36 @@ const totalColumnCount = computed(() => form.value.columns.length)
     </div>
 
     <template v-else>
-      <div v-if="fieldErrors.form" class="footer-editor__form-error">{{ fieldErrors.form }}</div>
+      <div
+        v-if="fieldErrors.form"
+        class="footer-editor__form-error"
+        role="alert"
+        aria-live="assertive"
+      >{{ fieldErrors.form }}</div>
 
       <!-- Description -->
       <div class="ws-card">
         <div class="ws-card__eyebrow">Description</div>
         <p class="ws-card__hint">Short blurb under the club name. Shown in the brand column of the footer.</p>
         <textarea
+          id="footer-description"
           v-model="form.description"
           class="ws-textarea"
           :maxlength="MAX_DESCRIPTION"
           rows="3"
           placeholder="A community bowling club. Everyone welcome…"
+          :aria-invalid="fieldErrors.description ? true : undefined"
+          :aria-describedby="fieldErrors.description ? 'footer-description-error' : undefined"
         />
         <div class="footer-editor__meta">
           <span>{{ form.description.length }} / {{ MAX_DESCRIPTION }}</span>
         </div>
-        <div v-if="fieldErrors.description" class="footer-editor__err">{{ fieldErrors.description }}</div>
+        <div
+          v-if="fieldErrors.description"
+          id="footer-description-error"
+          class="footer-editor__err"
+          role="alert"
+        >{{ fieldErrors.description }}</div>
       </div>
 
       <!-- Columns -->
@@ -541,6 +554,7 @@ const totalColumnCount = computed(() => form.value.columns.length)
           <div
             v-if="fieldErrors[`column.${ci}.heading`]"
             class="footer-editor__err"
+            role="alert"
           >{{ fieldErrors[`column.${ci}.heading`] }}</div>
 
           <ul class="footer-editor__link-list">
@@ -567,10 +581,12 @@ const totalColumnCount = computed(() => form.value.columns.length)
               <div
                 v-if="fieldErrors[`column.${ci}.link.${li}.label`]"
                 class="footer-editor__err footer-editor__err--row"
+              role="alert"
               >{{ fieldErrors[`column.${ci}.link.${li}.label`] }}</div>
               <div
                 v-if="fieldErrors[`column.${ci}.link.${li}.href`]"
                 class="footer-editor__err footer-editor__err--row"
+              role="alert"
               >{{ fieldErrors[`column.${ci}.link.${li}.href`] }}</div>
             </li>
           </ul>
@@ -629,6 +645,7 @@ const totalColumnCount = computed(() => form.value.columns.length)
             <div
               v-if="fieldErrors[`social.${si}.href`]"
               class="footer-editor__err footer-editor__err--row"
+              role="alert"
             >{{ fieldErrors[`social.${si}.href`] }}</div>
           </li>
         </ul>
@@ -712,7 +729,7 @@ const totalColumnCount = computed(() => form.value.columns.length)
               placeholder="hello@yourclub.co.nz"
               class="ws-nav-input ws-mono"
             />
-            <div v-if="fieldErrors['contact.email']" class="footer-editor__err">
+            <div v-if="fieldErrors['contact.email']" class="footer-editor__err" role="alert">
               {{ fieldErrors['contact.email'] }}
             </div>
           </label>
@@ -763,7 +780,7 @@ const totalColumnCount = computed(() => form.value.columns.length)
             >
               + Add address line{{ form.contact.address_lines.length >= MAX_CONTACT_ADDRESS_LINES ? ' (max reached)' : '' }}
             </button>
-            <div v-if="fieldErrors['contact.address']" class="footer-editor__err">
+            <div v-if="fieldErrors['contact.address']" class="footer-editor__err" role="alert">
               {{ fieldErrors['contact.address'] }}
             </div>
           </div>

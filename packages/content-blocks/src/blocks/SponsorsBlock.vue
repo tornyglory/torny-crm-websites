@@ -227,14 +227,24 @@ withDefaults(defineProps<SponsorsProps>(), {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  max-width: 100%;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
 }
+/* Fill the body wherever possible — bounded by the tile's own padding
+ * so the logo breathes but doesn't crowd the tier pill. object-fit:
+ * contain keeps wide + square + portrait logos all rendering tidily. */
 .sponsors__logo {
   display: block;
+  width: 100%;
+  height: 100%;
   max-width: 100%;
-  max-height: 100px;
+  max-height: 100%;
   object-fit: contain;
+  object-position: center;
 }
 .sponsors__name {
   font-family: var(--font-display);
@@ -302,7 +312,6 @@ withDefaults(defineProps<SponsorsProps>(), {
     padding: 3px 7px;
     font-size: 8px;
   }
-  .sponsors__logo { max-height: 72px; }
   .sponsors__name { font-size: 16px; }
   .sponsors__caption { font-size: 9px; }
 }

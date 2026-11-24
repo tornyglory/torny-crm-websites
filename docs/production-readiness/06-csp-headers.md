@@ -1,6 +1,6 @@
 # 06 · Content-Security-Policy headers (CRM)
 
-**Status:** Report-Only mode live. Enforcement after observation window.
+**Status:** enforcing live (flipped from Report-Only after a clean observation window).
 **Date:** 2026-11-25
 **Priority:** Defence-in-depth on top of the DOMPurify sanitisers from day 01 / 01b.
 

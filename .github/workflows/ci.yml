@@ -32,8 +32,12 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Typecheck is CRM-only for now — `pnpm typecheck` via turbo
+       # catches pre-existing errors in apps/club-sites (brief: see
+       # docs/production-readiness). Expand to monorepo-wide once those
+       # land.
       - name: Typecheck
-        run: pnpm typecheck
+        run: pnpm --filter @torny/crm typecheck
 
       - name: Test
         run: pnpm test

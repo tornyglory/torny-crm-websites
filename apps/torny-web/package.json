@@ -25,10 +25,10 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^22.10.5",
     "jsdom": "^25",
-    "typescript": "~5.6.3",
+    "typescript": "~5.9.3",
     "vitest": "^2",
     "vue-tsc": "^2.1.10",
     "wrangler": "^3.99.0"

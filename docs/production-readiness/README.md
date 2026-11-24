@@ -14,6 +14,7 @@ This folder captures the production-readiness audit and the remediation work tha
 - [`06-build-quality-next-steps.md`](./06-build-quality-next-steps.md) — Scoping doc for the "editor experience → 9" push. Three candidate pushes (inline uploads, consistency + a11y sweep, live preview) ranked by leverage. **Scoping only — not started.**
 - [`06-csp-headers.md`](./06-csp-headers.md) — CRM Content-Security-Policy, started in Report-Only then flipped to enforcing. **Complete.**
 - [`07-club-sites-typecheck-debt.md`](./07-club-sites-typecheck-debt.md) — Nuxt-app typecheck + test setup gaps that CRM-only CI had been masking. Fixed `club-sites` typecheck, wired `torny-web` prepare → test via turbo, flipped CI back to monorepo-wide `pnpm typecheck` + `pnpm test`. **Complete.**
+- [`08-compliance-floor.md`](./08-compliance-floor.md) — `/privacy` + `/terms` scaffolds on the marketing site so the `/signup` wizard's links no longer 404. Structured for NZ Privacy Act 2020 + standard SaaS terms. **Scaffold shipped — legal review required before production.**
 
 ## Priority queue (from the audit)
 

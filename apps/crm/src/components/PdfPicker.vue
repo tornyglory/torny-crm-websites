@@ -127,7 +127,7 @@ async function onFile(e: Event) {
     if (prevId != null) {
       // Fire-and-forget — a failed delete here isn't user-facing.
       blockPdfs
-        .remove(clubId, props.pageSlug, props.blockId, prevId)
+        .remove(clubId, prevId)
         .catch(() => { /* ignore */ })
     }
     cachedFilename.value = confirmed.original_filename
@@ -171,7 +171,7 @@ async function remove() {
 
   if (typeof clubId === 'number' && prevId != null) {
     try {
-      await blockPdfs.remove(clubId, props.pageSlug, props.blockId, prevId)
+      await blockPdfs.remove(clubId, prevId)
     } catch { /* ignore */ }
   }
 }

@@ -1,17 +1,23 @@
-// Block-scoped PDF uploads. See brief 118 — parallel to brief 18's
-// block-images pipeline, but stores to R2 instead of Cloudflare Images
-// because CF Images rejects any non-image MIME.
+// Block-scoped PDF uploads — brief 118 shipped 2026-11-25 (commit a289fea).
 //
-// Endpoints live on the CRM base under
-//   /clubs/{club_id}/pages/{page_slug}/blocks/{block_id}/pdfs/…
+// URL shape deviates from the original brief: the server flattened the
+// nested /clubs/:cid/pages/:slug/blocks/:bid/pdfs/* path to a flat
+// /clubs/:cid/block-pdfs/* one hosted on VENUE_BASE. Same reason as
+// /ai-generate, /block-images-copy, /footer-config — the CRM stack is
+// at CloudFormation's 500-resource cap. Nested paths blow the budget;
+// new endpoints flatten and migrate to the Venue stack.
 //
-// If the backend ends up hosting these on VENUE_BASE (CFN 500-resource
-// cap on the CRM stack), swap `CRM_BASE` → `VENUE_BASE` in `base()`
-// below. FE is indifferent — callers just use `upload()` / `remove()`.
+// Practical consequences for callers:
+//   - `page_slug` + `block_id` live on the request body (POST) or query
+//     string (GET), not in the URL.
+//   - PATCH + DELETE key only on the row id — the row remembers its
+//     page/block ownership.
+//   - R2 presigned PUTs are single-object (raw File, not FormData) and
+//     REQUIRE `Content-Type: application/pdf` because that's what the
+//     signature was minted against.
 
-import { CRM_BASE } from '../config'
+import { VENUE_BASE } from '../config'
 import { authedFetch } from '../http'
-import type { PageSlug } from './pages'
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -33,14 +39,16 @@ export interface UploadUrlResponse {
 }
 
 export interface ConfirmParams {
+  page_slug: string
+  block_id: string
   pdf_key: string
   original_filename: string
   file_size_bytes: number
-  title?: string
+  title?: string | null
 }
 
 export interface PatchParams {
-  title?: string
+  title: string | null
 }
 
 interface Envelope<T> {
@@ -49,91 +57,98 @@ interface Envelope<T> {
   data: T
 }
 
-// ── Path helper ───────────────────────────────────────────────────
-
-function base(clubId: number, pageSlug: PageSlug, blockId: string): string {
-  return `${CRM_BASE}/clubs/${clubId}/pages/${pageSlug}/blocks/${encodeURIComponent(blockId)}/pdfs`
-}
-
 // ── Endpoints ─────────────────────────────────────────────────────
 
-/** GET — list active PDFs for a block. */
+/** GET /clubs/:cid/block-pdfs?page_slug=&block_id= — active PDFs for a block. */
 export async function list(
   clubId: number,
-  pageSlug: PageSlug,
+  pageSlug: string,
   blockId: string,
   opts: { signal?: AbortSignal } = {},
 ): Promise<BlockPdf[]> {
+  const qs = new URLSearchParams({ page_slug: pageSlug, block_id: blockId })
   const res = await authedFetch<Envelope<{ pdfs: BlockPdf[] }>>(
-    base(clubId, pageSlug, blockId),
+    `${VENUE_BASE}/clubs/${clubId}/block-pdfs?${qs.toString()}`,
     { method: 'GET', signal: opts.signal },
   )
   return res.data.pdfs
 }
 
-/** POST /upload-url — mint an R2 presigned PUT URL. */
+/** POST /clubs/:cid/block-pdfs/upload-url — mint R2 presigned PUT URL.
+ *  Server rejects here with `too_many_pdfs` if the block is at cap, so
+ *  we don't waste a presigned URL in the common over-20 case. */
 export async function requestUploadUrl(
   clubId: number,
-  pageSlug: PageSlug,
+  pageSlug: string,
   blockId: string,
   opts: { signal?: AbortSignal } = {},
 ): Promise<UploadUrlResponse> {
   const res = await authedFetch<Envelope<UploadUrlResponse>>(
-    `${base(clubId, pageSlug, blockId)}/upload-url`,
-    { method: 'POST', body: '{}', signal: opts.signal },
+    `${VENUE_BASE}/clubs/${clubId}/block-pdfs/upload-url`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ page_slug: pageSlug, block_id: blockId }),
+      signal: opts.signal,
+    },
   )
   return res.data
 }
 
-/** POST /confirm — record a completed R2 upload against the block. */
+/** POST /clubs/:cid/block-pdfs/confirm — persist the row after R2 PUT.
+ *  Server does a headObject against R2 to catch MIME lies + size lies
+ *  before writing the DB row. Returns the public URL the FE should
+ *  store on the block's menu item. */
 export async function confirmUpload(
   clubId: number,
-  pageSlug: PageSlug,
-  blockId: string,
   params: ConfirmParams,
   opts: { signal?: AbortSignal } = {},
 ): Promise<BlockPdf> {
   const res = await authedFetch<Envelope<BlockPdf>>(
-    `${base(clubId, pageSlug, blockId)}/confirm`,
+    `${VENUE_BASE}/clubs/${clubId}/block-pdfs/confirm`,
     {
       method: 'POST',
-      body: JSON.stringify(params),
+      body: JSON.stringify({
+        page_slug: params.page_slug,
+        block_id: params.block_id,
+        pdf_key: params.pdf_key,
+        original_filename: params.original_filename,
+        file_size_bytes: params.file_size_bytes,
+        title: params.title ?? null,
+      }),
       signal: opts.signal,
     },
   )
   return res.data
 }
 
-/** PATCH — update metadata (currently just title). */
+/** PATCH /clubs/:cid/block-pdfs/:id — title only. Pass `null` to clear. */
 export async function patch(
   clubId: number,
-  pageSlug: PageSlug,
-  blockId: string,
   pdfId: number,
-  params: PatchParams,
+  title: string | null,
   opts: { signal?: AbortSignal } = {},
 ): Promise<BlockPdf> {
   const res = await authedFetch<Envelope<BlockPdf>>(
-    `${base(clubId, pageSlug, blockId)}/${pdfId}`,
+    `${VENUE_BASE}/clubs/${clubId}/block-pdfs/${pdfId}`,
     {
       method: 'PATCH',
-      body: JSON.stringify(params),
+      body: JSON.stringify({ title } satisfies PatchParams),
       signal: opts.signal,
     },
   )
   return res.data
 }
 
-/** DELETE — soft-delete. Sweeper hard-deletes + purges R2 after 7 days. */
+/** DELETE /clubs/:cid/block-pdfs/:id — soft-delete. Sweeper purges DB +
+ *  R2 after 7 days. Idempotent on the server, but we do a best-effort
+ *  catch at callsites so a stale id doesn't break Replace flows. */
 export async function remove(
   clubId: number,
-  pageSlug: PageSlug,
-  blockId: string,
   pdfId: number,
   opts: { signal?: AbortSignal } = {},
 ): Promise<void> {
   await authedFetch<null>(
-    `${base(clubId, pageSlug, blockId)}/${pdfId}`,
+    `${VENUE_BASE}/clubs/${clubId}/block-pdfs/${pdfId}`,
     { method: 'DELETE', signal: opts.signal },
   )
 }
@@ -144,21 +159,22 @@ export async function remove(
  * End-to-end block PDF upload:
  *   request upload URL → PUT file to R2 → confirm.
  *
- * R2 presigned PUTs expect the raw file bytes with the matching
- * `Content-Type` header — NOT multipart/form-data (which is what the
- * block-images Cloudflare flow uses). Don't be tempted to copy the
- * `FormData` dance from `blockImages.upload` here.
+ * R2 signed the URL against `Content-Type: application/pdf` — sending
+ * anything else kills the PUT with a signature mismatch. The body MUST
+ * be the raw File, not FormData — R2 presigned PUTs are single-object
+ * uploads and a multipart body gets stored as-is, then fails the
+ * server-side headObject check at confirm time.
  *
  * Throws on any step failure. Callers should catch ApiError and surface
  * a message; a failed R2 PUT bubbles up as a plain Error.
  */
 export async function upload(
   clubId: number,
-  pageSlug: PageSlug,
+  pageSlug: string,
   blockId: string,
   file: File,
   opts: {
-    title?: string
+    title?: string | null
     signal?: AbortSignal
   } = {},
 ): Promise<BlockPdf> {
@@ -181,13 +197,13 @@ export async function upload(
 
   return confirmUpload(
     clubId,
-    pageSlug,
-    blockId,
     {
+      page_slug: pageSlug,
+      block_id: blockId,
       pdf_key: pdfKey,
       original_filename: file.name,
       file_size_bytes: file.size,
-      ...(opts.title !== undefined ? { title: opts.title } : {}),
+      title: opts.title ?? null,
     },
     { signal: opts.signal },
   )

@@ -2901,23 +2901,13 @@ async function submitEdit() {
   /* Push the Profile summary above the Payments/Tabs column at narrow widths
      so it stays as a glance-away reference and doesn't drop to the bottom. */
   .member-detail__rail { position: static; top: auto; order: -1; }
-}
-@media (max-width: 767px) {
-  .member-detail__topbar { flex-wrap: wrap; gap: 12px; padding: 12px 4px; }
-  /* Hide the heavy actions row — Mark paid lives in the Owing banner,
-     Edit lives in the Profile card header. Secondary actions move to
-     a dedicated action sheet in a later pass. */
-  .member-detail__actions { display: none; }
 
-  .member-detail__hero { flex-direction: column; padding: 20px; gap: 14px; }
-  /* Shrink the hero to match Paper design 33b — tighter avatar + name. */
-  .member-detail__avatar { width: 56px; height: 56px; font-size: 20px; }
-  /* Hide the inline owing block — it moves to its own dark banner below. */
+  /* Tablet: the inline owing block in the hero gets cramped between the
+     avatar + hero-body on anything narrower than a desktop (iPad portrait
+     and up both fail here). Promote the dark owing banner below so the
+     hero stays legible. Hero itself stays horizontal — the mobile
+     treatment (vertical hero, smaller avatar) still kicks in at ≤767px. */
   .member-detail__owing { display: none; }
-  .member-detail__hero-line { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .member-detail__name { font-size: 22px; }
-
-  /* Dark owing banner — pulls Mark paid above the fold. */
   .member-detail__owing-banner {
     display: flex; align-items: center; justify-content: space-between; gap: 16px;
     padding: 16px 20px;
@@ -2937,6 +2927,23 @@ async function submitEdit() {
   }
   .owing-banner__cta:hover:not(:disabled) { background: #15803D; }
   .owing-banner__cta:disabled { opacity: 0.6; cursor: not-allowed; }
+}
+@media (max-width: 767px) {
+  .member-detail__topbar { flex-wrap: wrap; gap: 12px; padding: 12px 4px; }
+  /* Hide the heavy actions row — Mark paid lives in the Owing banner,
+     Edit lives in the Profile card header. Secondary actions move to
+     a dedicated action sheet in a later pass. */
+  .member-detail__actions { display: none; }
+
+  .member-detail__hero { flex-direction: column; padding: 20px; gap: 14px; }
+  /* Shrink the hero to match Paper design 33b — tighter avatar + name. */
+  .member-detail__avatar { width: 56px; height: 56px; font-size: 20px; }
+  .member-detail__hero-line { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .member-detail__name { font-size: 22px; }
+
+  /* Owing banner base styles + children live in the 1023px block above
+     so they also cover tablet widths. No mobile-specific banner tweaks
+     needed today. */
 
   /* Tighter card padding on mobile so values aren't crammed against the edge. */
   .member-detail__profile { padding: 18px 18px; }

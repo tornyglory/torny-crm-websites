@@ -422,6 +422,13 @@ export type {
   ReorderResponse as BlockImageReorderResponse,
   CopyFromResponse as BlockImageCopyFromResponse,
 } from './resources/blockImages'
+export * as blockPdfs from './resources/blockPdfs'
+export type {
+  BlockPdf,
+  UploadUrlResponse as BlockPdfUploadUrlResponse,
+  ConfirmParams as BlockPdfConfirmParams,
+  PatchParams as BlockPdfPatchParams,
+} from './resources/blockPdfs'
 export * as fontPairs from './resources/fontPairs'
 export type {
   FontPair,

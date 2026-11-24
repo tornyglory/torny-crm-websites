@@ -26,6 +26,7 @@ import { sitePreviewUrl } from '@/composables/sitePreviewUrl'
 import { useClubStore } from '@/stores/club'
 import { useOnboardingStore } from '@/stores/onboarding'
 import ImagePicker from '@/components/ImagePicker.vue'
+import PdfPicker from '@/components/PdfPicker.vue'
 import VideoPicker from '@/components/VideoPicker.vue'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 import Skeleton from '@/components/Skeleton.vue'
@@ -2789,11 +2790,23 @@ const lastSavedLabel = computed(() => {
 
             <div class="field">
               <span class="field__label">Menus ({{ (selectedBlock.props as BistroMenuProps).menus.length }})</span>
-              <span class="field__hint">Each row is one downloadable PDF. Page count and file size are plain text — type them to match "2 pages · 320 KB".</span>
+              <span class="field__hint">Drag a PDF in or click to upload. File size auto-fills from the upload; page count is the only label you type.</span>
               <div v-for="(menu, mi) in (selectedBlock.props as BistroMenuProps).menus" :key="mi" class="gallery-item">
                 <input v-model="menu.title" type="text" placeholder="Lunch menu" class="gallery-item__alt" />
                 <input v-model="menu.description" type="text" placeholder="Sandwiches, salads, sides. Served 12 – 2:30, Wed through Sun." class="gallery-item__alt" />
-                <input v-model="menu.pdfUrl" type="text" placeholder="https://… URL to the PDF" class="gallery-item__alt" />
+                <PdfPicker
+                  v-model="menu.pdfUrl"
+                  v-model:pdfId="menu.pdfId"
+                  :page-slug="currentPage"
+                  :block-id="selectedBlock!.id"
+                  :title="menu.title"
+                  @update:file-size="(bytes) => {
+                    if (bytes === 0) { menu.fileSizeLabel = ''; return }
+                    menu.fileSizeLabel = bytes < 1024 * 1024
+                      ? `${Math.round(bytes / 1024)} KB`
+                      : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+                  }"
+                />
                 <div class="gallery-item__row">
                   <input v-model="menu.pageCountLabel" type="text" placeholder="2 pages" class="gallery-item__alt" />
                   <input v-model="menu.fileSizeLabel" type="text" placeholder="320 KB" class="gallery-item__alt" />
@@ -2801,7 +2814,7 @@ const lastSavedLabel = computed(() => {
                 <input v-model="menu.updatedLabel" type="text" placeholder="Updated Nov 24" class="gallery-item__alt" />
                 <button type="button" class="gallery-item__remove" @click="(selectedBlock!.props as BistroMenuProps).menus.splice(mi, 1)">Remove</button>
               </div>
-              <button type="button" class="gallery-add" @click="(selectedBlock!.props as BistroMenuProps).menus.push({ title: 'New menu', description: '', pdfUrl: '', pageCountLabel: '', fileSizeLabel: '', updatedLabel: '' } satisfies BistroMenuItem)">+ Add menu</button>
+              <button type="button" class="gallery-add" @click="(selectedBlock!.props as BistroMenuProps).menus.push({ title: 'New menu', description: '', pdfUrl: '', pdfId: null, pageCountLabel: '', fileSizeLabel: '', updatedLabel: '' } satisfies BistroMenuItem)">+ Add menu</button>
             </div>
           </template>
 
@@ -3048,18 +3061,23 @@ const lastSavedLabel = computed(() => {
                 <input v-model="sp.name" placeholder="Space name" type="text" class="gallery-item__alt" />
                 <input v-model="sp.badge" placeholder="Badge — e.g. MOST BOOKED" type="text" class="gallery-item__alt" />
                 <textarea v-model="sp.description" placeholder="One-line description" rows="2" class="gallery-item__alt" />
-                <div class="gallery-item__row">
-                  <select v-model="sp.tone" class="gallery-item__alt" style="flex: 1;">
-                    <option :value="undefined">Auto tone</option>
-                    <option value="tangerine">Tangerine</option>
-                    <option value="mint">Mint</option>
-                    <option value="ink">Ink</option>
-                    <option value="accent">Accent</option>
-                    <option value="violet">Violet</option>
-                    <option value="sky">Sky</option>
-                  </select>
-                  <input v-model="sp.imageUrl" placeholder="Photo URL (optional)" type="text" class="gallery-item__alt" style="flex: 2;" />
-                </div>
+                <select v-model="sp.tone" class="gallery-item__alt">
+                  <option :value="undefined">Auto tone</option>
+                  <option value="tangerine">Tangerine</option>
+                  <option value="mint">Mint</option>
+                  <option value="ink">Ink</option>
+                  <option value="accent">Accent</option>
+                  <option value="violet">Violet</option>
+                  <option value="sky">Sky</option>
+                </select>
+                <ImagePicker
+                  v-model="sp.imageUrl"
+                  :page-slug="currentPage"
+                  :block-id="selectedBlock!.id"
+                  label="Photo (optional)"
+                  aspect="4 / 3"
+                  hint="Falls back to the tone-coloured gradient when empty."
+                />
                 <input v-model="sp.capacity" placeholder="Capacity — Seated 80 · Standing 140" type="text" class="gallery-item__alt" />
                 <input v-model="sp.availability" placeholder="Availability" type="text" class="gallery-item__alt" />
                 <input v-model="sp.included" placeholder="What's included" type="text" class="gallery-item__alt" />

@@ -542,6 +542,11 @@ export interface BistroMenuItem {
   description?: string
   /** Direct URL to the PDF — opens in a new tab. */
   pdfUrl: string
+  /** Row id from the block-pdfs API (brief 118). Kept on the block
+   *  layout so replacing a PDF can DELETE the previous row. Null until
+   *  the admin uploads via PdfPicker; legacy layouts with just a pasted
+   *  URL keep rendering fine. */
+  pdfId?: number | null
   /** Mono pill meta on desktop and the bottom metadata row on mobile.
    *  Admin-authored — e.g. "2 pages · 320 KB" or "1 page". Both halves
    *  are optional; renders only what's present. */

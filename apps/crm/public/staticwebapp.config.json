@@ -9,6 +9,7 @@
   "globalHeaders": {
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
-    "X-Content-Type-Options": "nosniff"
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy-Report-Only": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.execute-api.ap-southeast-2.amazonaws.com https://*.ingest.us.sentry.io; frame-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'; upgrade-insecure-requests"
   }
 }

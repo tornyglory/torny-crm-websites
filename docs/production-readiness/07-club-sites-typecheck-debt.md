@@ -40,3 +40,16 @@ Reverted the ci.yml change in a follow-up so main CI stays green. Test expansion
 ## Not in scope
 
 - Bumping Nitro / Nuxt versions. That's part of the bigger "Nuxt + Vite major upgrade" track (`04`-era alerts). If the typecheck fix needs a version bump, note it; don't bundle the whole upgrade here.
+
+## Related: torny-web tests excluded from CI for the same reason
+
+`apps/torny-web` has a `tsconfig.json` that extends `./.nuxt/tsconfig.json`, which is only generated after `nuxi prepare` (or `nuxt dev` / `nuxt build`). Cold CI runs don't have that file, so vitest fails to parse the tsconfig and the suite blows up before it starts.
+
+Workaround today: `pnpm --filter '!@torny/torny-web' test` in `.github/workflows/ci.yml` — torny-web tests still run locally, just not in CI.
+
+**Fix options:**
+1. Add a `prepare` script to `apps/torny-web/package.json` that runs `nuxi prepare` and make turbo's `test` task depend on `^prepare` (cleanest).
+2. Change torny-web's `tsconfig.json` to extend from a stable path (not `.nuxt/`).
+3. Add a step in `.github/workflows/ci.yml` that runs `pnpm --filter @torny/torny-web exec nuxi prepare` before tests (works but slow and nuxt-only).
+
+Recommended: option 1.

@@ -33,7 +33,7 @@ jobs:
         run: pnpm lint
 
       - name: Typecheck
-        run: pnpm --filter @torny/crm typecheck
+        run: pnpm typecheck
 
       - name: Test
-        run: pnpm --filter @torny/crm test
+        run: pnpm test

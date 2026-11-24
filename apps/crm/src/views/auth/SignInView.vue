@@ -11,7 +11,7 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const club = useClubStore()
-const rateLimit = useAuthRateLimit()
+const rateLimit = useAuthRateLimit('signIn')
 
 const email = ref('')
 const password = ref('')

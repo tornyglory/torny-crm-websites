@@ -2,10 +2,12 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { auth as authApi, AuthError } from '@torny/api-client'
+import { useAuthRateLimit } from '@/composables/useAuthRateLimit'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 
 const router = useRouter()
 const route = useRoute()
+const rateLimit = useAuthRateLimit('reset')
 
 const token = ref('')
 const password = ref('')
@@ -14,6 +16,14 @@ const showPassword = ref(false)
 const submitting = ref(false)
 const done = ref(false)
 const error = ref<string | null>(null)
+
+const formDisabled = computed(() => submitting.value || rateLimit.isLocked.value)
+const displayError = computed(() => {
+  if (rateLimit.isLocked.value) {
+    return `Too many attempts. Try again in ${rateLimit.countdownLabel.value}.`
+  }
+  return error.value
+})
 
 const API_BASE = import.meta.env.VITE_SAM_BASE_URL
 
@@ -67,17 +77,29 @@ const canSubmit = computed(
 async function submit(e: Event) {
   e.preventDefault()
   if (!canSubmit.value) return
+  if (rateLimit.isLocked.value) return
   submitting.value = true
   error.value = null
   try {
     await authApi.resetPassword(token.value, password.value, { baseURL: API_BASE })
+    rateLimit.recordSuccess()
     done.value = true
     setTimeout(() => router.push('/'), 2000)
   } catch (err) {
-    if (err instanceof AuthError) {
-      error.value = err.status === 400 || err.status === 401
-        ? 'This reset link is invalid or has expired. Request a new one.'
-        : err.message
+    if (err instanceof AuthError && err.status === 429) {
+      const data = (err.data ?? {}) as { retry_after_seconds?: number }
+      const retryAfter = typeof data.retry_after_seconds === 'number' ? data.retry_after_seconds : 60
+      rateLimit.applyServerLockout(retryAfter)
+      error.value = null
+    } else if (err instanceof AuthError && (err.status === 400 || err.status === 401)) {
+      // Invalid / expired token is a brute-force signal — count it.
+      // Five bad tokens in a row and the FE locks the form, slowing
+      // any script hammering the endpoint. Backend brief 120 §3.4
+      // caps the real attack at the server.
+      error.value = 'This reset link is invalid or has expired. Request a new one.'
+      rateLimit.recordFailure()
+    } else if (err instanceof AuthError) {
+      error.value = err.message
     } else {
       error.value = (err as Error).message
     }
@@ -194,9 +216,14 @@ async function submit(e: Event) {
         </div>
       </div>
 
-      <div v-if="error" class="auth-alert">{{ error }}</div>
+      <div
+        v-if="displayError"
+        class="auth-alert"
+        role="alert"
+        aria-live="assertive"
+      >{{ displayError }}</div>
 
-      <button type="submit" class="auth-btn" :disabled="submitting || !canSubmit">
+      <button type="submit" class="auth-btn" :disabled="formDisabled || !canSubmit">
         <span>{{ submitting ? 'Saving…' : 'Save & sign in' }}</span>
         <CrmSpinner v-if="submitting" size="sm" label="Saving" />
         <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

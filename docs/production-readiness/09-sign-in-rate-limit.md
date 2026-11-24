@@ -1,6 +1,6 @@
-# 09 · Sign-in rate limit (FE defence-in-depth)
+# 09 · Auth-form rate limit (FE defence-in-depth)
 
-**Status:** FE shipped. Backend brief required for the real control.
+**Status:** FE shipped on all four auth forms. Backend specced in brief 120.
 **Date:** 2026-11-25
 **Priority:** Defence-in-depth after the auth-form a11y pass and the compliance scaffold.
 
@@ -54,15 +54,29 @@ Threshold per lockout: 5 failed attempts.
 
 A server-triggered lockout (`applyServerLockout`) doesn't advance the local schedule — the server is authoritative on the window, and we shouldn't double-count our own counter against theirs.
 
+## Per-form isolation
+
+The composable takes a `formKey: AuthFormKey` arg (`'signIn' | 'register' | 'forgot' | 'reset'`) and namespaces every sessionStorage key with it. That way failing to register five times doesn't lock sign-in — each form carries its own counter. Pinned with a test.
+
+## Where it's wired
+
+| Form | formKey | Records failures on | Backend 429 → applyServerLockout |
+|---|---|---|---|
+| `SignInView.vue` | `signIn` | 401 (wrong password) | ✓ |
+| `RegisterView.vue` | `register` | — (form-level errors like "email taken" aren't credential-stuffing signal) | ✓ |
+| `ForgotPasswordView.vue` | `forgot` | — (backend intentionally doesn't leak existence; FE has no signal) | ✓ |
+| `ResetPasswordView.vue` | `reset` | 400/401 (invalid/expired token — brute-force signal) | ✓ |
+
+Design rationale on each row: brute-forcing a value (password, reset token) deserves the FE lockout. Fat-fingering a registration field doesn't.
+
 ## Files
 
-- `apps/crm/src/composables/useAuthRateLimit.ts` — the composable. Pure logic, reactive, session-scoped.
-- `apps/crm/src/__tests__/useAuthRateLimit.test.ts` — 11 tests covering the lockout math, persistence, countdown, and server-lockout path. Uses `vi.useFakeTimers` so the exponential schedule runs through in milliseconds.
-- `apps/crm/src/views/auth/SignInView.vue` — wired to the composable. Form inputs disabled during submit AND during lockout; the error slot carries the countdown text; the `Forgot?` link stays active (a locked-out user may need it).
+- `apps/crm/src/composables/useAuthRateLimit.ts` — the composable. Pure logic, reactive, session-scoped, per-form.
+- `apps/crm/src/__tests__/useAuthRateLimit.test.ts` — 12 tests covering the lockout math, persistence, countdown, server-lockout path, and per-form isolation.
+- `apps/crm/src/views/auth/SignInView.vue` + `RegisterView.vue` + `ForgotPasswordView.vue` + `ResetPasswordView.vue` — all four wired. Form inputs disabled during submit AND during lockout; error slots carry the countdown text via a `displayError` computed that prefers lockout text over form errors.
 
 ## Follow-ups
 
-- Wire to `RegisterView.vue` once the backend register endpoint is rate-limited.
-- Wire to `ForgotPasswordView.vue` for the same reason — forgot-password is a well-known enumeration vector.
-- Backend brief as described above.
+- Backend brief **120** specs the server-side rate limit that pairs with this FE.
+- When brief 119 lands (HttpOnly cookies), audit whether any of the recordFailure paths need updating — they shouldn't, but the auth error surface is about to change shape.
 - Decide whether `recordFailure()` on a 500 (vs 401) is appropriate. Right now only 401 counts, which is the right call for the common case — a server error shouldn't lock the user out — but a flapping server might deserve a token effort.

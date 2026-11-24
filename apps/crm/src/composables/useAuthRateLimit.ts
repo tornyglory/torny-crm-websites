@@ -19,9 +19,15 @@
  */
 import { computed, onBeforeUnmount, onMounted, readonly, ref, watch } from 'vue'
 
-const STORAGE_KEY_ATTEMPTS = 'torny.auth.failedAttempts'
-const STORAGE_KEY_LOCKED_UNTIL = 'torny.auth.lockedUntil'
-const STORAGE_KEY_LOCKOUT_COUNT = 'torny.auth.lockoutCount'
+/** Form key identifies which auth flow's counter this is — sign-in,
+ *  register, forgot-password, reset-password. Keeps each flow's
+ *  attempts separate so a user who got five register attempts wrong
+ *  isn't also locked out of sign-in. */
+export type AuthFormKey = 'signIn' | 'register' | 'forgot' | 'reset'
+
+function storageKey(formKey: AuthFormKey, slot: string): string {
+  return `torny.auth.${formKey}.${slot}`
+}
 
 const MAX_ATTEMPTS = 5
 
@@ -65,15 +71,19 @@ export interface AuthRateLimit {
   applyServerLockout(seconds: number): void
 }
 
-export function useAuthRateLimit(): AuthRateLimit {
-  const attempts = ref<number>(readNumber(STORAGE_KEY_ATTEMPTS))
-  const lockedUntilMs = ref<number>(readNumber(STORAGE_KEY_LOCKED_UNTIL))
+export function useAuthRateLimit(formKey: AuthFormKey): AuthRateLimit {
+  const keyAttempts = storageKey(formKey, 'failedAttempts')
+  const keyLockedUntil = storageKey(formKey, 'lockedUntil')
+  const keyLockoutCount = storageKey(formKey, 'lockoutCount')
+
+  const attempts = ref<number>(readNumber(keyAttempts))
+  const lockedUntilMs = ref<number>(readNumber(keyLockedUntil))
   const now = ref<number>(Date.now())
   let tickHandle: ReturnType<typeof setInterval> | null = null
 
   function syncFromStorage(): void {
-    attempts.value = readNumber(STORAGE_KEY_ATTEMPTS)
-    lockedUntilMs.value = readNumber(STORAGE_KEY_LOCKED_UNTIL)
+    attempts.value = readNumber(keyAttempts)
+    lockedUntilMs.value = readNumber(keyLockedUntil)
   }
 
   function startTicking(): void {
@@ -122,36 +132,36 @@ export function useAuthRateLimit(): AuthRateLimit {
   function recordFailure(): void {
     const nextAttempts = attempts.value + 1
     attempts.value = nextAttempts
-    writeNumber(STORAGE_KEY_ATTEMPTS, nextAttempts)
+    writeNumber(keyAttempts, nextAttempts)
 
     if (nextAttempts >= MAX_ATTEMPTS) {
-      const lockoutCount = readNumber(STORAGE_KEY_LOCKOUT_COUNT)
+      const lockoutCount = readNumber(keyLockoutCount)
       const scheduleIdx = Math.min(lockoutCount, LOCKOUT_SCHEDULE_MS.length - 1)
       const lockoutMs = LOCKOUT_SCHEDULE_MS[scheduleIdx]!
       const nextLockedUntil = Date.now() + lockoutMs
       lockedUntilMs.value = nextLockedUntil
-      writeNumber(STORAGE_KEY_LOCKED_UNTIL, nextLockedUntil)
-      writeNumber(STORAGE_KEY_LOCKOUT_COUNT, lockoutCount + 1)
+      writeNumber(keyLockedUntil, nextLockedUntil)
+      writeNumber(keyLockoutCount, lockoutCount + 1)
       // Fresh attempts counter — next failure after the lockout ends
       // counts from zero against the (now longer) next cool-off.
       attempts.value = 0
-      writeNumber(STORAGE_KEY_ATTEMPTS, 0)
+      writeNumber(keyAttempts, 0)
     }
   }
 
   function recordSuccess(): void {
     attempts.value = 0
     lockedUntilMs.value = 0
-    clearKey(STORAGE_KEY_ATTEMPTS)
-    clearKey(STORAGE_KEY_LOCKED_UNTIL)
-    clearKey(STORAGE_KEY_LOCKOUT_COUNT)
+    clearKey(keyAttempts)
+    clearKey(keyLockedUntil)
+    clearKey(keyLockoutCount)
   }
 
   function applyServerLockout(seconds: number): void {
     const safeSeconds = Math.max(1, Math.floor(seconds))
     const nextLockedUntil = Date.now() + safeSeconds * 1000
     lockedUntilMs.value = nextLockedUntil
-    writeNumber(STORAGE_KEY_LOCKED_UNTIL, nextLockedUntil)
+    writeNumber(keyLockedUntil, nextLockedUntil)
     // Server-side lockout doesn't advance the local schedule; the server
     // is authoritative on the retry window.
   }

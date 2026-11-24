@@ -6,7 +6,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
-import { useAuthRateLimit, type AuthRateLimit } from '@/composables/useAuthRateLimit'
+import { useAuthRateLimit, type AuthFormKey, type AuthRateLimit } from '@/composables/useAuthRateLimit'
+
+const testFormKey: AuthFormKey = 'signIn'
 
 // Mount the composable in a fake component so onMounted / onBeforeUnmount
 // / reactive refs all behave the way they would in SignInView.
@@ -14,7 +16,7 @@ function mountRateLimit(): { rl: AuthRateLimit; unmount: () => void } {
   let captured!: AuthRateLimit
   const Host = defineComponent({
     setup() {
-      captured = useAuthRateLimit()
+      captured = useAuthRateLimit(testFormKey)
       return () => null
     },
   })
@@ -112,9 +114,9 @@ describe('useAuthRateLimit', () => {
     await nextTick()
     expect(rl.isLocked.value).toBe(false)
     expect(rl.attempts.value).toBe(0)
-    expect(sessionStorage.getItem('torny.auth.failedAttempts')).toBeNull()
-    expect(sessionStorage.getItem('torny.auth.lockedUntil')).toBeNull()
-    expect(sessionStorage.getItem('torny.auth.lockoutCount')).toBeNull()
+    expect(sessionStorage.getItem('torny.auth.signIn.failedAttempts')).toBeNull()
+    expect(sessionStorage.getItem('torny.auth.signIn.lockedUntil')).toBeNull()
+    expect(sessionStorage.getItem('torny.auth.signIn.lockoutCount')).toBeNull()
     unmount()
   })
 
@@ -158,5 +160,37 @@ describe('useAuthRateLimit', () => {
     await nextTick()
     expect(rl.countdownLabel.value).toBe('2:05')
     unmount()
+  })
+
+  it('different formKeys are isolated — locking register does not lock signIn', async () => {
+    // Mount the sign-in form's limiter and drive it to lockout.
+    let signInRl!: AuthRateLimit
+    let registerRl!: AuthRateLimit
+    const SignInHost = defineComponent({
+      setup() { signInRl = useAuthRateLimit('signIn'); return () => null },
+    })
+    const RegisterHost = defineComponent({
+      setup() { registerRl = useAuthRateLimit('register'); return () => null },
+    })
+    const w1 = mount(SignInHost)
+    const w2 = mount(RegisterHost)
+
+    for (let i = 0; i < registerRl.maxAttempts; i++) registerRl.recordFailure()
+    await nextTick()
+
+    expect(registerRl.isLocked.value).toBe(true)
+    expect(signInRl.isLocked.value).toBe(false)
+    expect(signInRl.attempts.value).toBe(0)
+
+    // And the opposite — locking signIn doesn't touch register.
+    registerRl.recordSuccess()
+    for (let i = 0; i < signInRl.maxAttempts; i++) signInRl.recordFailure()
+    await nextTick()
+
+    expect(signInRl.isLocked.value).toBe(true)
+    expect(registerRl.isLocked.value).toBe(false)
+
+    w1.unmount()
+    w2.unmount()
   })
 })

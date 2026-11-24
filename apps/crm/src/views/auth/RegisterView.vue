@@ -4,12 +4,14 @@ import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { auth as authApi, AuthError } from '@torny/api-client'
 import { useAuthStore, fromApiUser } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
+import { useAuthRateLimit } from '@/composables/useAuthRateLimit'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const club = useClubStore()
+const rateLimit = useAuthRateLimit('register')
 
 const firstName = ref('')
 const lastName = ref('')
@@ -18,6 +20,17 @@ const password = ref('')
 const showPassword = ref(false)
 const submitting = ref(false)
 const error = ref<string | null>(null)
+
+/** Disable the form during submit AND while the backend has rate-limited us. */
+const formDisabled = computed(() => submitting.value || rateLimit.isLocked.value)
+/** Lockout countdown wins over the last form error — "try again in 10:00" is the
+ *  only actionable message when we're rate-limited. */
+const displayError = computed(() => {
+  if (rateLimit.isLocked.value) {
+    return `Too many attempts. Try again in ${rateLimit.countdownLabel.value}.`
+  }
+  return error.value
+})
 
 const API_BASE = import.meta.env.VITE_SAM_BASE_URL
 
@@ -36,6 +49,8 @@ const canSubmit = computed(
 async function submit(e: Event) {
   e.preventDefault()
   if (!canSubmit.value) return
+  if (rateLimit.isLocked.value) return
+
   submitting.value = true
   error.value = null
   try {
@@ -58,11 +73,28 @@ async function submit(e: Event) {
     const user = fromApiUser(apiUser)
     auth.setSession(token, user)
     club.syncFromUserClubs(user.clubs)
+    rateLimit.recordSuccess()
 
     const redirect = (route.query.redirect as string | undefined) ?? '/claim'
     await router.push(redirect)
   } catch (err) {
-    error.value = err instanceof AuthError ? err.message : (err as Error).message
+    if (err instanceof AuthError && err.status === 429) {
+      // Backend-authoritative rate limit on either register or the
+      // follow-up login — honour whatever retry window the server
+      // sent back. Surface the countdown via displayError; swallow
+      // the per-field error since "wait X minutes" is the only
+      // actionable thing right now.
+      const data = (err.data ?? {}) as { retry_after_seconds?: number }
+      const retryAfter = typeof data.retry_after_seconds === 'number' ? data.retry_after_seconds : 60
+      rateLimit.applyServerLockout(retryAfter)
+      error.value = null
+    } else {
+      // Form-level errors ("email already taken", "password too
+      // short") aren't credential-stuffing signal — don't count
+      // them against the FE lockout. Backend brief 120 §3.2 caps
+      // the real register flood per-IP.
+      error.value = err instanceof AuthError ? err.message : (err as Error).message
+    }
   } finally {
     submitting.value = false
   }
@@ -161,9 +193,14 @@ function ssoNotice(provider: string) {
         <p class="register__hint">10+ characters with at least one letter and one number.</p>
       </div>
 
-      <div v-if="error" class="auth-alert">{{ error }}</div>
+      <div
+        v-if="displayError"
+        class="auth-alert"
+        role="alert"
+        aria-live="assertive"
+      >{{ displayError }}</div>
 
-      <button type="submit" class="auth-btn" :disabled="!canSubmit || submitting">
+      <button type="submit" class="auth-btn" :disabled="!canSubmit || formDisabled">
         <span>{{ submitting ? 'Creating account…' : 'Create account' }}</span>
         <CrmSpinner v-if="submitting" size="sm" label="Creating account" />
         <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { auth as authApi, AuthError } from '@torny/api-client'
+import { useAuthRateLimit } from '@/composables/useAuthRateLimit'
 import CrmSpinner from '@/components/CrmSpinner.vue'
 
 const email = ref('')
@@ -9,24 +10,40 @@ const submitting = ref(false)
 const resending = ref(false)
 const sent = ref(false)
 const error = ref<string | null>(null)
+const rateLimit = useAuthRateLimit('forgot')
 
 const API_BASE = import.meta.env.VITE_SAM_BASE_URL
 const canSubmit = computed(() => /.+@.+\..+/.test(email.value.trim()))
 
+const formDisabled = computed(() => submitting.value || resending.value || rateLimit.isLocked.value)
+const displayError = computed(() => {
+  if (rateLimit.isLocked.value) {
+    return `Too many attempts. Try again in ${rateLimit.countdownLabel.value}.`
+  }
+  return error.value
+})
+
 async function submit(e: Event) {
   e.preventDefault()
   if (!canSubmit.value) return
+  if (rateLimit.isLocked.value) return
   submitting.value = true
   error.value = null
   try {
     await authApi.requestPasswordReset(email.value.trim(), { baseURL: API_BASE })
     sent.value = true
   } catch (err) {
-    // Backend doesn't leak whether the email exists — show the sent state
-    // unless we hit a server-side problem.
-    if (err instanceof AuthError && err.status >= 500) {
+    if (err instanceof AuthError && err.status === 429) {
+      // Backend rate-limited us — honour the retry window. Don't
+      // leak existence by falling through to the sent state.
+      const data = (err.data ?? {}) as { retry_after_seconds?: number }
+      const retryAfter = typeof data.retry_after_seconds === 'number' ? data.retry_after_seconds : 60
+      rateLimit.applyServerLockout(retryAfter)
+    } else if (err instanceof AuthError && err.status >= 500) {
       error.value = 'Something went wrong. Please try again.'
     } else {
+      // Backend intentionally doesn't leak whether the email exists —
+      // show the sent state on anything else (brief 03 §4).
       sent.value = true
     }
   } finally {
@@ -35,12 +52,17 @@ async function submit(e: Event) {
 }
 
 async function resend() {
+  if (rateLimit.isLocked.value) return
   resending.value = true
   error.value = null
   try {
     await authApi.requestPasswordReset(email.value.trim(), { baseURL: API_BASE })
   } catch (err) {
-    if (err instanceof AuthError && err.status >= 500) {
+    if (err instanceof AuthError && err.status === 429) {
+      const data = (err.data ?? {}) as { retry_after_seconds?: number }
+      const retryAfter = typeof data.retry_after_seconds === 'number' ? data.retry_after_seconds : 60
+      rateLimit.applyServerLockout(retryAfter)
+    } else if (err instanceof AuthError && err.status >= 500) {
       error.value = 'Something went wrong. Please try again.'
     }
   } finally {
@@ -75,14 +97,20 @@ function tryAnother() {
               required
               autocomplete="email"
               autofocus
+              :disabled="formDisabled"
               placeholder="you@yourclub.co.nz"
             />
           </div>
         </div>
 
-        <div v-if="error" class="auth-alert">{{ error }}</div>
+        <div
+          v-if="displayError"
+          class="auth-alert"
+          role="alert"
+          aria-live="assertive"
+        >{{ displayError }}</div>
 
-        <button type="submit" class="auth-btn" :disabled="submitting || !canSubmit">
+        <button type="submit" class="auth-btn" :disabled="formDisabled || !canSubmit">
           <span>{{ submitting ? 'Sending…' : 'Send reset link' }}</span>
           <CrmSpinner v-if="submitting" size="sm" label="Sending reset link" />
           <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -113,9 +141,14 @@ function tryAnother() {
           </svg>
         </div>
 
-        <div v-if="error" class="auth-alert">{{ error }}</div>
+        <div
+          v-if="displayError"
+          class="auth-alert"
+          role="alert"
+          aria-live="assertive"
+        >{{ displayError }}</div>
 
-        <button type="button" class="auth-btn auth-btn--ghost" :disabled="resending" @click="resend">
+        <button type="button" class="auth-btn auth-btn--ghost" :disabled="formDisabled" @click="resend">
           <span>{{ resending ? 'Resending…' : 'Resend link' }}</span>
           <CrmSpinner v-if="resending" size="sm" label="Resending" />
           <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -47,6 +47,20 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # vitest major bumps are blocked for two reasons:
+      #   1. Known Dependabot limitation with pnpm workspaces when a dep
+      #      is declared in multiple subpackages — the updater enters a
+      #      workspace subdirectory, pnpm detects the parent workspace,
+      #      and the job fails with `misconfigured_tooling`. See the
+      #      failed job for 2.x → 5.x (2026-11-25).
+      #   2. vitest majors often carry API breaks worth validating by
+      #      hand against the suite, so we'd want to manually bump
+      #      anyway. Minor + patch still flow through the dev-minor
+      #      group above.
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/*"
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions in .github/workflows. Keeps action pins current so
   # setup-node / checkout etc. don't lag.

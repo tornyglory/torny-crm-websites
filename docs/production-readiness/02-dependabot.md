@@ -25,7 +25,8 @@ Dependabot over Renovate because:
 1. **One `npm` entry at root.** The pnpm workspace has a single `pnpm-lock.yaml` covering all apps/* and packages/*. Dependabot resolves updates across workspaces via that lockfile — no need for per-workspace entries.
 2. **Weekly, Monday 08:00 Pacific/Auckland.** Keeps PR noise down and lands bumps before the week starts so the team has focus time to review.
 3. **Groups.** Patch + minor bumps batched into two PRs per week (prod, dev). Major bumps still flow as individual PRs.
-4. **Major-version ignores on load-bearing deps.** `vue`, `nuxt`, `vite`, `typescript` — these need manual migration work. Patch/minor still flow via the groups.
+4. **Major-version ignores on load-bearing deps.** `vue`, `nuxt`, `vite`, `typescript`, `vitest` + `@vitest/*` — these need manual migration work. Patch/minor still flow via the groups.
+   - **vitest major** is also blocked by a Dependabot limitation (on top of the usual manual-migration reason): when a dep is declared in multiple pnpm workspace subpackages, Dependabot's updater steps into one of those subdirectories, pnpm detects the parent workspace, and the job dies with `misconfigured_tooling: Updating workspaces from inside a workspace subdirectory is not supported`. Seen on the 2.x → 5.x attempt (2026-11-25). Until Dependabot ships proper pnpm workspace handling, bump vitest manually at the root: `pnpm -r up -L vitest@latest` then `pnpm -r test` to validate.
 5. **GitHub Actions ecosystem.** Keeps `actions/checkout`, `pnpm/action-setup`, `Azure/static-web-apps-deploy` pinned to current versions.
 6. **`open-pull-requests-limit: 10`.** Keeps the queue manageable if a backlog builds up.
 

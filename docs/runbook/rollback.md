@@ -30,30 +30,55 @@ Use the [decision framework](#decision-framework) below. Short version:
 - **Revert** if the broken deploy's blast radius is wide and the fix isn't obvious in 10 minutes.
 - **Hotfix forward** if you can diagnose and patch within a few minutes AND it's safer than reverting (e.g. when reverting would re-expose a different bug, undo a security fix, or require coordinated backend rollback).
 
-### Execute — two options
+### Execute — the script path (default)
 
-**Option A: GitHub revert (preferred)**
+Use the automation. Covers 95% of CRM rollbacks.
 
-1. Find the bad commit SHA — Sentry's release tag, or `git log origin/main`.
-2. On your laptop (or via `gh pr create` from a branch):
-   ```sh
-   git revert <bad-sha> --no-edit
-   git push origin main
-   ```
-   Admin bypass of branch protection means direct push works; otherwise open a revert PR.
-3. The `crm-azure-swa` workflow triggers, builds the reverted state, deploys over the current SWA production.
-4. Deploy takes ~2 minutes.
+```sh
+./bin/rollback-crm.sh            # dry-run: shows what would be reverted
+./bin/rollback-crm.sh --yes      # actually revert the last commit + push
+./bin/rollback-crm.sh 2 --yes    # revert the last 2 commits + push
+```
 
-**Option B: Azure SWA environment swap (faster, no commit)**
+The script:
+- Reverts the most recent N commit(s) on `main` and pushes
+- Triggers the `crm-azure-swa` workflow — redeploys in ~2 minutes
+- Refuses to run on a dirty tree, a non-`main` branch, or when local is out of sync with `origin/main`
+- Dry-runs by default — nothing happens without `--yes`
+- Prints the deploy workflow URL + Sentry URL so you can watch recovery
 
-If the revert build might also break (e.g. the dep graph is in a bad state), redeploy the last-known-good artefact directly:
+**Agent protocol** — if an AI agent (Claude Code or similar) is asked to rollback the CRM:
+
+1. **Always** run `./bin/rollback-crm.sh` (no args) first and share the output with the human. This confirms what would be reverted without touching anything.
+2. Wait for explicit human confirmation (e.g. "yes, revert" or "proceed").
+3. Only then run `./bin/rollback-crm.sh --yes` (or `./bin/rollback-crm.sh N --yes` if the human specified a count).
+4. Watch the redeploy workflow with `gh run watch` on the triggered run.
+5. Report: new main SHA, the SHA(s) that were reverted, and a link to the Sentry issue feed.
+
+Autonomous rollback (no human confirmation) is not supported today. If we add it later, it goes behind an explicit flag the agent must pass.
+
+### Execute — fallbacks
+
+**Fallback 1: manual git revert**
+
+If the script fails for a reason you can fix (merge conflict on revert, out-of-sync local), do the revert by hand. Same net effect:
+
+```sh
+git fetch origin main
+git revert <bad-sha> --no-edit
+git push origin main
+```
+
+**Fallback 2: Azure SWA environment swap (no git)**
+
+Use when git is unavailable OR the reverted state might also be broken (e.g. the dep graph is in a bad state across multiple commits).
 
 1. Azure portal → your Static Web App → **Environments**.
-2. The **Production** environment lists its deployment history. Pick a prior good deploy (look for the commit SHA you want).
+2. The **Production** environment lists its deployment history. Pick a prior good deploy by commit SHA.
 3. **Set as Production.**
 4. Takes effect within ~30 seconds.
 
-Record which option you used in the incident notes. Option A leaves a clean git history; option B leaves prod ahead of main (fix it by reverting on main afterwards).
+Fallback 2 leaves prod ahead of `main` — fix it afterwards by reverting the bad commit(s) on main so the branch matches prod.
 
 ### Coordinate
 
@@ -163,6 +188,7 @@ When in doubt, revert. You can always re-ship the good commits afterwards. You c
 
 ## Related
 
+- Rollback script: [`bin/rollback-crm.sh`](../../bin/rollback-crm.sh) — dry-runs by default, agent-executable, handles the common case.
 - Deploy workflow for CRM: [`.github/workflows/crm-azure-swa.yml`](../../.github/workflows/crm-azure-swa.yml)
 - Branch protection config: see this repo's **Settings → Branches** — enforces `verify` green before merge, admin bypass preserved for break-glass.
 - PR template: [`.github/pull_request_template.md`](../../.github/pull_request_template.md) — rollback plan is a required section on every PR.

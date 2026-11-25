@@ -4,8 +4,15 @@ const { data: site } = await useSite()
 
 const events = computed(() => site.value?.events_upcoming ?? [])
 const accent = computed(() => site.value?.club.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
+const clubName = computed(() => site.value?.club?.name ?? club.value?.name ?? 'the club')
 
 usePageMeta('events')
+
+useSeoMeta({
+  title: 'Events',
+  description: computed(() => `Upcoming tournaments, roll-ups, and social evenings at ${clubName.value}.`),
+  ogTitle: computed(() => `Events — ${clubName.value}`),
+})
 
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

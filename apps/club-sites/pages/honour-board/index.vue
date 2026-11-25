@@ -21,8 +21,15 @@ import {
 const club = useClub()
 const { data: site } = await useSite()
 const accent = computed(() => site.value?.club.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
+const clubName = computed(() => site.value?.club?.name ?? club.value?.name ?? 'the club')
 
 usePageMeta('honour-board')
+
+useSeoMeta({
+  title: 'Honour board',
+  description: computed(() => `Past champions and record-holders at ${clubName.value}.`),
+  ogTitle: computed(() => `Honour board — ${clubName.value}`),
+})
 
 // Brief 110 — honour-board lives on the SAM stack and keys on the
 // routing subdomain, not the canonical `clubs_data.slug`. For the ~2

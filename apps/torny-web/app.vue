@@ -25,6 +25,7 @@ useHead({
     { rel: 'canonical', href: 'https://torny.pro/' },
   ],
   script: [
+    // Organization — primary entity for the Torny brand.
     {
       type: 'application/ld+json',
       innerHTML: JSON.stringify({
@@ -37,6 +38,21 @@ useHead({
         foundingDate: '2026',
         areaServed: { '@type': 'Country', name: 'New Zealand' },
         sameAs: [],
+      }),
+    },
+    // WebSite — tells Google the site exists as a distinct entity + lets
+    // it render a sitelinks search box in SERPs. The SearchAction target
+    // points at the signup wizard's "find your club" step as a sensible
+    // default; refine once we have an actual directory search page.
+    {
+      type: 'application/ld+json',
+      innerHTML: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'Torny',
+        url: 'https://torny.pro',
+        inLanguage: 'en-NZ',
+        publisher: { '@type': 'Organization', name: 'Torny' },
       }),
     },
   ],

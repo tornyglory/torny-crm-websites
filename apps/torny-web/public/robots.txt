@@ -6,4 +6,46 @@ Allow: /
 # /terms, not on a half-filled wizard state.
 Disallow: /signup/welcome
 
+# ── AI crawlers ──────────────────────────────────────────────────
+# Allow general AI search crawlers (ChatGPT / SearchGPT, Perplexity,
+# Claude, Google AI) but keep opt-out room for training-only crawlers
+# where the policy is more conservative. llms.txt at the site root
+# carries the structured summary these crawlers prefer.
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: GoogleOther
+Allow: /
+
+# Opt out of generic training crawlers that aren't tied to a
+# user-driven search. Keep this list reviewed — it's the one that
+# gets out of date fastest.
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Omgilibot
+Disallow: /
+
 Sitemap: https://torny.pro/sitemap.xml

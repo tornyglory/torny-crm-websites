@@ -13,6 +13,18 @@ const accent = computed(() => club_.value?.brand_primary ?? club.value?.brand_pr
 
 usePageMeta('home')
 
+// Home page intentionally leaves `title` to inherit the layout's
+// default (just the club name). The description + OG fields fill the
+// rest so this page is social-share-ready regardless of where it's
+// linked from.
+useSeoMeta({
+  description: computed(() => `${heading.value} — ${tagline.value}`),
+  ogTitle: heading,
+  ogDescription: computed(() => tagline.value),
+  twitterTitle: heading,
+  twitterDescription: computed(() => tagline.value),
+})
+
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 function formatEventDate(iso: string): string {

@@ -4,8 +4,15 @@ const { data: site } = await useSite()
 
 const club_ = computed(() => site.value?.club)
 const accent = computed(() => club_.value?.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
+const clubName = computed(() => club_.value?.name ?? club.value?.name ?? 'the club')
 
 usePageMeta('about')
+
+useSeoMeta({
+  title: 'About',
+  description: computed(() => `About ${clubName.value} — our history, our members, and what the club stands for.`),
+  ogTitle: computed(() => `About ${clubName.value}`),
+})
 </script>
 
 <template>

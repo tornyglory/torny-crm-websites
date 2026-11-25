@@ -5,8 +5,15 @@ const { data: site } = await useSite()
 const tiers = computed(() => site.value?.membership_tiers ?? [])
 const firstYearDiscount = computed(() => site.value?.first_year_discount ?? false)
 const accent = computed(() => site.value?.club.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
+const clubName = computed(() => site.value?.club?.name ?? club.value?.name ?? 'the club')
 
 usePageMeta('membership')
+
+useSeoMeta({
+  title: 'Membership',
+  description: computed(() => `Join ${clubName.value} — membership tiers, fees, and how to sign up online.`),
+  ogTitle: computed(() => `Membership — ${clubName.value}`),
+})
 
 const cadenceLabel = (c: string | null): string =>
   c === 'annual' ? 'year' : c === 'monthly' ? 'month' : c === 'season' ? 'season' : ''

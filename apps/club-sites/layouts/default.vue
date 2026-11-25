@@ -108,35 +108,101 @@ useSeoMeta({
   themeColor: () => club.value?.brand_primary ?? '#0A0A0B',
 })
 
+/** Breadcrumb segments for the current route. Drives both visible nav
+ *  and the BreadcrumbList JSON-LD block below — AI crawlers rely on
+ *  this schema to understand where a given URL sits in the site tree,
+ *  which is why it beats putting the same info only in visible HTML. */
+const BREADCRUMB_LABELS: Record<string, string> = {
+  about: 'About',
+  membership: 'Membership',
+  contact: 'Contact',
+  events: 'Events',
+  'honour-board': 'Honour board',
+  'venue-hire': 'Venue hire',
+  book: 'Book',
+  tournaments: 'Tournaments',
+}
+const breadcrumbs = computed(() => {
+  const segments = route.path.split('/').filter(Boolean)
+  const origin = canonicalOrigin.value
+  if (!origin) return []
+  const items: Array<{ name: string; url: string }> = [
+    { name: 'Home', url: `${origin}/` },
+  ]
+  let accPath = ''
+  for (const seg of segments) {
+    accPath += `/${seg}`
+    const label = BREADCRUMB_LABELS[seg] ?? decodeURIComponent(seg).replace(/-/g, ' ')
+    items.push({ name: label.charAt(0).toUpperCase() + label.slice(1), url: `${origin}${accPath}` })
+  }
+  return items
+})
+
 useHead(() => {
   const url = canonicalUrl.value
   const origin = canonicalOrigin.value
   const c = club.value
+  const siteData = site.value
+  const crumbs = breadcrumbs.value
+
+  const schemaBlocks: Array<Record<string, unknown>> = []
+
+  // SportsClub — primary entity. Enriched with contact + hours when
+  // the site payload carries them.
+  if (c && origin) {
+    const contact = (siteData?.contact ?? null) as { email?: string; phone?: string; address?: string } | null
+    const hours = (siteData?.hours ?? []) as Array<{ day: string; open: string; close: string }>
+    const dayMap: Record<string, string> = {
+      mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday',
+      fri: 'Friday', sat: 'Saturday', sun: 'Sunday',
+    }
+    const openingHoursSpec = hours.length > 0
+      ? hours.map((h) => ({
+        '@type': 'OpeningHoursSpecification',
+        dayOfWeek: dayMap[h.day] ?? h.day,
+        opens: h.open,
+        closes: h.close,
+      }))
+      : undefined
+
+    schemaBlocks.push({
+      '@context': 'https://schema.org',
+      '@type': 'SportsClub',
+      name: c.name,
+      url: origin,
+      logo: c.logo_url ?? undefined,
+      sport: 'Lawn bowls',
+      email: contact?.email ?? undefined,
+      telephone: contact?.phone ?? undefined,
+      address: contact?.address
+        ? { '@type': 'PostalAddress', streetAddress: contact.address, addressCountry: 'NZ' }
+        : undefined,
+      openingHoursSpecification: openingHoursSpec,
+      areaServed: { '@type': 'Country', name: 'New Zealand' },
+    })
+  }
+
+  // BreadcrumbList — tells search + AI how this URL fits in the site.
+  if (crumbs.length > 1) {
+    schemaBlocks.push({
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: crumbs.map((item, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        name: item.name,
+        item: item.url,
+      })),
+    })
+  }
+
   return {
     htmlAttrs: { lang: 'en-NZ' },
     link: url ? [{ rel: 'canonical', href: url }] : [],
-    // SportsClub JSON-LD — only emit when the club payload has
-    // enough shape to be meaningful. Skips during the SSR-before-
-    // payload window instead of writing a half-formed Organization
-    // card into the <head> that Google would ignore anyway.
-    script: c && origin
-      ? [
-        {
-          type: 'application/ld+json',
-          innerHTML: JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'SportsClub',
-            name: c.name,
-            url: origin,
-            logo: c.logo_url ?? undefined,
-            // `sport` is a schema.org Thing — bowls suffices for the
-            // vertical we ship first. Make per-club when brief 105's
-            // variant terminology moves to a stable shape.
-            sport: 'Lawn bowls',
-          }),
-        },
-      ]
-      : [],
+    script: schemaBlocks.map((block) => ({
+      type: 'application/ld+json',
+      innerHTML: JSON.stringify(block),
+    })),
   }
 })
 

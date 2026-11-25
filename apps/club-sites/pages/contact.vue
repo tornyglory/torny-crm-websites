@@ -7,8 +7,15 @@ const { data: site } = await useSite()
 const contact = computed(() => site.value?.contact)
 const hours = computed(() => site.value?.hours ?? [])
 const accent = computed(() => site.value?.club.brand_primary ?? club.value?.brand_primary ?? '#2563EB')
+const clubName = computed(() => site.value?.club?.name ?? club.value?.name ?? 'the club')
 
 usePageMeta('contact')
+
+useSeoMeta({
+  title: 'Contact',
+  description: computed(() => `Get in touch with ${clubName.value} — email, phone, and where to find us.`),
+  ogTitle: computed(() => `Contact ${clubName.value}`),
+})
 
 const DAY_LABELS: Record<string, string> = {
   mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday',

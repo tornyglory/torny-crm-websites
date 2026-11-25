@@ -13,14 +13,24 @@
  */
 import { VenueBookingBlock } from '@torny/content-blocks'
 
+const club = useClub()
+const { data: site } = await useSite()
 const route = useRoute()
 const slug = computed(() => {
   const raw = route.params.slug
   const joined = Array.isArray(raw) ? raw.join('/') : (raw ?? '')
   return joined || 'venue-hire/book'
 })
+const clubName = computed(() => site.value?.club?.name ?? club.value?.name ?? 'the club')
 
 usePageMeta('venue-hire/book')
+
+useSeoMeta({
+  title: 'Venue hire',
+  description: computed(() => `Book ${clubName.value}'s space for your event — check availability and reserve online.`),
+  ogTitle: computed(() => `Venue hire — ${clubName.value}`),
+  robots: 'noindex, follow',  // Booking page carries ?package= + ?space= query combos that bloat the index without adding value
+})
 </script>
 
 <template>

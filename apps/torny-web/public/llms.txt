@@ -1,0 +1,32 @@
+# Torny
+
+> SaaS for sports clubs. Membership, communications, events, public website — one login, built in New Zealand.
+
+Torny provides software to help sports clubs manage their day-to-day operations. We started with lawn bowls clubs in New Zealand and expand from there. Every club gets a public website, member database, event / tournament management, email + text communications, and online membership + venue hire payments.
+
+## Who it's for
+
+- Committee members running a sports club (owner, secretary, treasurer, admin)
+- Members of a club signing up, renewing, booking venues, entering tournaments
+- Prospective members finding a club in their area
+
+## What's on this site
+
+- [Home](https://torny.pro/): Overview + sign-in / signup entry points
+- [Sign in](https://torny.pro/sign-in): For existing committee members
+- [Sign up](https://torny.pro/signup): Start a 30-day trial. No card up front.
+- [Register](https://torny.pro/register): Individual account registration
+- [Privacy](https://torny.pro/privacy): Privacy policy (NZ Privacy Act 2020)
+- [Terms](https://torny.pro/terms): Terms of service (NZ jurisdiction)
+
+## Pricing
+
+Two plans — Starter (free, limited) and Pro. Signup includes a 30-day free trial of Pro. See the [signup page](https://torny.pro/signup) for details.
+
+## Public club sites
+
+Every club gets a public-facing website at `<club-slug>.torny.pro` or on their own custom domain. Those sites are separate from this marketing site. If you're looking for a specific club, search the web for the club name or visit their custom domain.
+
+## Contact
+
+See [torny.pro](https://torny.pro/) for current contact details.

@@ -1,5 +1,13 @@
 name = "torny-crm-websites"
 compatibility_date = "2024-10-01"
+# nodejs_compat lets the Workers runtime polyfill Node built-ins
+# (buffer, events, util, crypto, …) so modules that expect a Node
+# environment work at the edge. Needed because isomorphic-dompurify
+# (used by RichTextBlock / CustomAiBlock in @torny/content-blocks) loads
+# jsdom on the server; without Node polyfills jsdom's module init leaves
+# DOMPurify's sanitize undefined, every page SSR 500s on module load
+# with "Cannot read properties of undefined (reading 'bind')".
+compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "dist"
 
 # ── KV: host → clubId mapping for fast edge tenant resolution ─────────────

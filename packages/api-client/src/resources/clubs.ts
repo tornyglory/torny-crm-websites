@@ -122,6 +122,24 @@ export async function checkEmailHandle(
   return res.data
 }
 
+/** GET /clubs/{clubId}/email-handle — read the current handle.
+ *  Routed through the Venue API (same stack as the PATCH) because
+ *  the CRM-stack `GET /clubs/{id}` doesn't return `email_handle`
+ *  in its payload today (see brief 121).
+ *
+ *  Returns null when the club hasn't picked a handle yet. The FE
+ *  surfaces that as the "Pick a handle" button. */
+export async function getEmailHandle(
+  clubId: number,
+  opts: { signal?: AbortSignal } = {},
+): Promise<string | null> {
+  const res = await authedFetch<Envelope<{ email_handle: string | null }>>(
+    `${VENUE_BASE}/clubs/${clubId}/email-handle`,
+    { method: 'GET', signal: opts.signal },
+  )
+  return res.data.email_handle ?? null
+}
+
 /** PATCH /clubs/{clubId}/email-handle — owner-only. Flips the mailbox
  *  the club sends from AND receives at. Brief 100 §4.2 / §10.2.
  *  Routed through the Venue API because the CRM stack hit the CFN

@@ -33,14 +33,32 @@ const INBOX_DOMAIN = 'torny.pro'
 const currentHandle = computed<string>(() => clubStore.current?.emailHandle ?? '')
 
 /** The `UserClub` stub we get from login doesn't carry `emailHandle`,
- *  and `hydrateFull` short-circuits once `slug` is cached — so an admin
- *  who sets a handle in another browser (or re-logs in on a new device
- *  after a handle was picked) sees the `yourclub@torny.pro` placeholder
- *  until they edit. Forcing a full hydrate on mount keeps the card in
- *  sync with the server. */
+ *  and the CRM-stack `GET /clubs/{id}` doesn't include it on the main
+ *  payload (brief 121 — pending backend). The Venue stack owns the
+ *  mailbox and ships a dedicated `GET /clubs/{id}/email-handle` that
+ *  returns the current value. Call that on mount so the card lands on
+ *  the real address instead of the placeholder.
+ *
+ *  Still fires hydrateFull so other cards (brand overrides, logo URL,
+ *  slug) get their refresh too — the two run in parallel. */
 onMounted(() => {
   void clubStore.hydrateFull({ force: true })
+  void refreshHandle()
 })
+
+async function refreshHandle(): Promise<void> {
+  const cid = clubStore.current?.id
+  if (typeof cid !== 'number') return
+  try {
+    const handle = await clubs.getEmailHandle(cid)
+    // Mirror what changeEmailHandle does on save — write through to the
+    // store so every other surface (SendEmailModal's From row, brief 103
+    // signature preview, etc.) sees the fresh value without a refresh.
+    clubStore.setCurrent({ ...clubStore.current!, emailHandle: handle })
+  } catch {
+    /* transport failure — the placeholder stays. Not user-facing. */
+  }
+}
 const currentAddress = computed<string>(() =>
   currentHandle.value ? `${currentHandle.value}@${INBOX_DOMAIN}` : '',
 )

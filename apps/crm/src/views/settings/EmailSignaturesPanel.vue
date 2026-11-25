@@ -28,7 +28,6 @@ const personalOpen = ref(false)
 const personalDraft = ref(signatures.personal.value)
 const personalDirty = computed(() => personalDraft.value !== signatures.personal.value)
 const personalRte = ref<RteHandle | null>(null)
-const personalFileInput = ref<HTMLInputElement | null>(null)
 
 function openPersonal() {
   personalDraft.value = signatures.personal.value
@@ -47,29 +46,34 @@ function savePersonal() {
 function clearPersonal() {
   personalDraft.value = ''
 }
-function pickSignatureImage() {
-  personalFileInput.value?.click()
-}
-function onSignatureImagePicked(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  if (!file.type.startsWith('image/')) {
-    window.alert('Pick an image file (PNG, JPG, SVG).')
-    return
-  }
+
+/** Signature-image uploader handed to the RichTextEditor.
+ *  Returns a data URL so the image rides along in localStorage until
+ *  brief 103 ships the proper media endpoint. Enforces a 500 KB cap so
+ *  the stored signature stays small enough for inbox previews.
+ *
+ *  The RTE's image modal uses this with `setImage({ src })` — the
+ *  canonical insertion path. This replaces the old
+ *  `insertText("<img ...>")` approach which parsed a raw HTML string
+ *  through TipTap's HTML parser and could silently fall back to text
+ *  nodes on edge cases. */
+function uploadSignatureImage(file: File): Promise<string> {
   if (file.size > 500 * 1024) {
-    window.alert('Signature images need to be under 500 KB so inbox previews stay snappy.')
-    return
+    return Promise.reject(new Error('Signature images need to be under 500 KB so inbox previews stay snappy.'))
   }
-  const reader = new FileReader()
-  reader.onload = () => {
-    const src = String(reader.result ?? '')
-    if (!src) return
-    personalRte.value?.insertText(`<img src="${src}" alt="" style="max-width:160px;height:auto;border-radius:6px;" />`)
+  if (!file.type.startsWith('image/')) {
+    return Promise.reject(new Error('Pick an image file (PNG, JPG, SVG).'))
   }
-  reader.readAsDataURL(file)
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const src = String(reader.result ?? '')
+      if (!src) reject(new Error('Could not read the image.'))
+      else resolve(src)
+    }
+    reader.onerror = () => reject(new Error('Could not read the image.'))
+    reader.readAsDataURL(file)
+  })
 }
 
 // ── Club footer ───────────────────────────────────────────────
@@ -200,25 +204,7 @@ const clubSet = computed(() => signatures.club.value.trim().length > 0)
       @close="closePersonal"
     >
       <p class="esig-modal__sub">Appears under every email you send through Torny — just yours, not shared with the rest of the committee.</p>
-
-      <div class="esig-modal__toolbar">
-        <button type="button" class="esig-btn esig-btn--ghost esig-btn--icon" @click="pickSignatureImage">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" stroke-width="1.4" />
-            <circle cx="6" cy="6.5" r="1.3" stroke="currentColor" stroke-width="1.4" />
-            <path d="M2 12l3.5-3 2 2 3-3 4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          Upload image
-        </button>
-        <span class="esig-modal__toolbar-hint">PNG, JPG, or SVG under 500 KB. Lands at your cursor.</span>
-        <input
-          ref="personalFileInput"
-          type="file"
-          accept="image/png,image/jpeg,image/svg+xml,image/gif,image/webp"
-          class="esig-modal__file"
-          @change="onSignatureImagePicked"
-        />
-      </div>
+      <p class="esig-modal__sub esig-modal__sub--hint">Use the editor's Image button to upload a logo (PNG, JPG, or SVG under 500 KB). It'll render inline in your emails.</p>
 
       <div class="esig-editor">
         <RichTextEditor
@@ -226,6 +212,7 @@ const clubSet = computed(() => signatures.club.value.trim().length > 0)
           v-model="personalDraft"
           size="sm"
           placeholder="Your name · role · phone"
+          :upload-image="uploadSignatureImage"
         />
       </div>
 
@@ -423,30 +410,17 @@ const clubSet = computed(() => signatures.club.value.trim().length > 0)
 
 /* ── Modal ─────────────────────────────────────────────────── */
 .esig-modal__sub {
-  margin: 0 0 16px;
+  margin: 0 0 8px;
   font-family: var(--font-body);
   font-size: 13px;
   color: var(--color-fog);
   line-height: 1.55;
 }
-
-.esig-modal__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 10px 12px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-hairline);
-  border-radius: 10px;
-  margin-bottom: 12px;
-}
-.esig-modal__toolbar-hint {
-  font-family: var(--font-body);
+.esig-modal__sub--hint {
+  margin-bottom: 16px;
   font-size: 12px;
-  color: var(--color-fog);
+  color: var(--color-mute);
 }
-.esig-modal__file { display: none; }
 
 .esig-editor {
   border: 1px solid var(--color-hairline);
@@ -503,11 +477,6 @@ const clubSet = computed(() => signatures.club.value.trim().length > 0)
   cursor: pointer;
   border: 0;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-}
-.esig-btn--icon {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
 }
 .esig-btn--ghost {
   background: transparent;

@@ -5,10 +5,13 @@
  *   1. Vite SPA (the CRM block editor preview)
  *   2. Nuxt SSR + CSR (public club sites: apps/club-sites)
  *
- * The `isomorphic-dompurify` wrapper switches between the browser's
- * native DOM and a jsdom instance on the server — same API either
- * way. Call sites import this file and bind the return value into
- * `v-html`.
+ * We use `sanitize-html` (pure JS, no DOM dependency) because the
+ * public sites deploy to Cloudflare Workers / Pages where jsdom doesn't
+ * run. The previous `isomorphic-dompurify` approach crashed SSR cold
+ * starts with "Cannot read properties of undefined (reading 'bind')"
+ * — jsdom silently failed to initialise, DOMPurify was left as a stub,
+ * and the module-level bind calls took the whole worker down. See the
+ * commit that landed this file for the full trace.
  *
  * Why not reuse apps/crm/src/utils/sanitizeHtml.ts: that one is scoped
  * to email HTML (narrow tag set, `target=_blank noopener` hardening on
@@ -19,10 +22,10 @@
  *
  * See docs/production-readiness/01b-xss-sanitize-content-blocks.md.
  */
-import DOMPurify from 'isomorphic-dompurify'
+import sanitizeHtml from 'sanitize-html'
 
-const WEBSITE_SAFE_CONFIG = {
-  ALLOWED_TAGS: [
+const WEBSITE_SAFE_CONFIG: sanitizeHtml.IOptions = {
+  allowedTags: [
     // Text + inline
     'a', 'abbr', 'b', 'br', 'cite', 'code', 'del', 'em', 'i', 'ins',
     'kbd', 'mark', 'q', 's', 'samp', 'small', 'span', 'strong', 'sub',
@@ -41,29 +44,24 @@ const WEBSITE_SAFE_CONFIG = {
     'caption', 'col', 'colgroup', 'table', 'tbody', 'td', 'tfoot', 'th',
     'thead', 'tr',
   ],
-  ALLOWED_ATTR: [
-    'alt', 'class', 'href', 'id', 'rel', 'src', 'srcset', 'sizes',
-    'style', 'target', 'title', 'width', 'height', 'loading', 'colspan',
-    'rowspan', 'align', 'valign', 'media', 'type', 'datetime', 'cite',
-    // Data attrs — common in block-authored content for hooks /
-    // custom targeting. Prefixed with a wildcard below via ADD_DATA_URI.
-    'data-*',
-  ],
-  // Allow https, http, mailto, tel, data: (images only — DOMPurify's
-  // default handling restricts data: to safe image subtypes). Everything
+  allowedAttributes: {
+    '*': [
+      'alt', 'class', 'href', 'id', 'rel', 'src', 'srcset', 'sizes',
+      'style', 'target', 'title', 'width', 'height', 'loading', 'colspan',
+      'rowspan', 'align', 'valign', 'media', 'type', 'datetime', 'cite',
+      // data-* attributes — common in block-authored content for hooks
+      // / custom targeting. sanitize-html supports the `data-*` wildcard.
+      'data-*',
+    ],
+  },
+  // Allow https, http, mailto, tel, data: (images only). Everything
   // else (javascript:, file:, etc.) gets stripped.
-  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|data):|[^a-z]|[a-z+.-]+(?:[^a-z+.:-]|$))/i,
-  FORBID_TAGS: [
-    'script', 'iframe', 'object', 'embed', 'form', 'input', 'button',
-    'base', 'link', 'meta', 'style', 'noscript',
-  ],
-  FORBID_ATTR: [
-    'onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur',
-    'onchange', 'onsubmit', 'onkeydown', 'onkeyup', 'onkeypress',
-    'formaction', 'srcdoc', 'autofocus',
-  ],
-  ALLOW_DATA_ATTR: true,
-  RETURN_TRUSTED_TYPE: false,
+  allowedSchemes: ['http', 'https', 'mailto', 'tel'],
+  allowedSchemesByTag: {
+    img: ['http', 'https', 'data'],
+  },
+  allowProtocolRelative: false,
+  parseStyleAttributes: false,
 }
 
 /**
@@ -73,5 +71,5 @@ const WEBSITE_SAFE_CONFIG = {
  */
 export function sanitizeWebsiteHtml(html: string | null | undefined): string {
   if (!html) return ''
-  return DOMPurify.sanitize(html, WEBSITE_SAFE_CONFIG)
+  return sanitizeHtml(html, WEBSITE_SAFE_CONFIG)
 }

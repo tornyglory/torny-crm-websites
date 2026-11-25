@@ -32,9 +32,10 @@
     "@tiptap/vue-3": "^3.35.0",
     "@torny/api-client": "workspace:*",
     "@torny/design-tokens": "workspace:*",
-    "isomorphic-dompurify": "^4.8.0"
+    "sanitize-html": "^2.13.0"
   },
   "devDependencies": {
+    "@types/sanitize-html": "^2.16.2",
     "jsdom": "^25",
     "typescript": "~5.9.3",
     "vitest": "^2",

@@ -63,17 +63,21 @@ async function attempt(input: { name?: string; password?: string } = {}) {
   try {
     const result = await invitesApi.acceptInvite(token, input)
 
-    // Signed in — stash token, rehydrate user from /me (richer shape than
-    // what accept returns), then land in the CRM for the invited club.
-    localStorage.setItem('torny.token', result.auth_token)
+    // Brief 119 Phase B: /accept-invite still returns auth_token but
+    // doesn't set a session cookie yet (Phase B.1 follow-up). After
+    // this view the user has a local user shape but no cookie, so the
+    // next authed request (likely on /crm/dashboard or /claim) will
+    // 401 and the router bounces them to sign-in to get a cookie.
+    // Short re-sign-in flash on invite accept is the trade-off until
+    // the backend brief for cookie-on-accept-invite lands.
     try {
       const apiUser = await claimsApi.me()
-      auth.setSession(result.auth_token, fromApiUser(apiUser))
+      auth.setSession(fromApiUser(apiUser))
     } catch {
       // /me failed (network blip, cold lambda) — fall back to the thin accept
       // payload so the user still lands signed-in; auth.refresh() on next load
       // will backfill the full user.
-      auth.setSession(result.auth_token, fromApiUser({
+      auth.setSession(fromApiUser({
         id: result.user.id,
         email: result.user.email,
         name: result.user.name,

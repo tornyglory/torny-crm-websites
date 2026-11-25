@@ -64,14 +64,16 @@ async function submit(e: Event) {
       { baseURL: API_BASE },
     )
     // Register doesn't return a session token today (brief 03 §2) — log in
-    // immediately so the user lands on /claim authenticated.
-    const { token, user: apiUser } = await authApi.login(
+    // immediately so the user lands on /claim authenticated. Brief 119
+    // Phase B: the /login call sets the session cookie; we ignore the
+    // token in the body.
+    const { user: apiUser } = await authApi.login(
       email.value.trim(),
       password.value,
       { baseURL: API_BASE },
     )
     const user = fromApiUser(apiUser)
-    auth.setSession(token, user)
+    auth.setSession(user)
     club.syncFromUserClubs(user.clubs)
     rateLimit.recordSuccess()
 

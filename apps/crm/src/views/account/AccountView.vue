@@ -169,14 +169,14 @@ async function changePasswordSubmit() {
   }
   saving.value = true
   try {
-    const res = await authApi.changePassword({
+    await authApi.changePassword({
       current_password: currentPw.value,
       new_password: newPw.value,
     })
-    // Brief 71 §5 — swap the fresh JWT in place of the current one; the old
-    // token dies in the ~5 min authorizer cache window. Every other session
-    // for this user is also killed by the token_version bump.
-    authStore.rotateToken(res.token)
+    // Brief 119 Phase B: the backend's /me/password-change response
+    // rotates the session cookie in-place via Set-Cookie, and bumps
+    // token_version to kill every other active session. No FE action
+    // needed. (Pre-Phase-B this call was `authStore.rotateToken(res.token)`.)
     passwordModalOpen.value = false
     toast.success('Password changed. Other devices signed out.')
   } catch (err) {

@@ -62,7 +62,10 @@ describe('teamAnnouncements.list', () => {
     const [url, init] = fetchMock.mock.calls[0]!
     expect(url).toBe(`${VENUE_BASE}/clubs/${CLUB_ID}/team-announcements?status=published`)
     expect(init.method).toBe('GET')
-    expect(init.headers).toMatchObject({ Authorization: 'Bearer test-token' })
+    // Brief 119 Phase B — session rides on the HttpOnly cookie, not a
+    // Bearer header. Pin that credentials: include is sent so the browser
+    // attaches the cookie on every authedFetch call.
+    expect(init.credentials).toBe('include')
   })
 
   it('omits status query param when not set', async () => {

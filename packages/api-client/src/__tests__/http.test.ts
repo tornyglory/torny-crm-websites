@@ -2,11 +2,18 @@
  * Contract tests for the shared http helpers. These cover every
  * resource module indirectly — if `authedFetch` changes its header
  * shape or envelope handling, the behaviour of every `members.*`,
- * `events.*`, `communications.*` call changes with it. Pin the
- * shape here so a refactor can't silently drift.
+ * `events.*`, `communications.*` call changes with it. Pin the shape
+ * here so a refactor can't silently drift.
+ *
+ * Brief 119 Phase B: the CRM moved off bearer-token-in-localStorage
+ * onto an HttpOnly session cookie. `authedFetch` now sends
+ * `credentials: 'include'` and does NOT read a token from storage.
+ * An explicit `token` override is still honoured for the legacy
+ * Bearer flows (accept-invite, torny-web signup) that haven't been
+ * migrated to cookie-setting on the backend yet.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { authedFetch, publicFetch, ApiError, TOKEN_STORAGE_KEY } from '../http'
+import { authedFetch, publicFetch, ApiError } from '../http'
 
 // Captures the last call so individual tests can assert URL / init.
 let lastCall: { url: string; init: RequestInit } | null = null
@@ -51,48 +58,39 @@ describe('ApiError', () => {
 })
 
 describe('authedFetch', () => {
-  it('attaches Authorization: Bearer <token> when token in localStorage', async () => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, 'tok-abc')
-    mockFetch({ body: { status: 'ok', data: 1 } })
+  it('sends credentials: include so the browser attaches the session cookie', async () => {
+    mockFetch({ body: { status: 'ok' } })
 
     await authedFetch('https://api.example/path')
 
     expect(lastCall).not.toBeNull()
-    const headers = lastCall!.init.headers as Record<string, string>
-    expect(headers.Authorization).toBe('Bearer tok-abc')
-    expect(headers['Content-Type']).toBe('application/json')
+    expect(lastCall!.init.credentials).toBe('include')
   })
 
-  it('omits Authorization when no token present', async () => {
+  it('does not add Authorization when no explicit token is passed', async () => {
     mockFetch({ body: { status: 'ok' } })
     await authedFetch('https://api.example/path')
     const headers = lastCall!.init.headers as Record<string, string>
     expect(headers.Authorization).toBeUndefined()
+    expect(headers['Content-Type']).toBe('application/json')
   })
 
-  it('token override wins over localStorage', async () => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, 'from-storage')
+  it('attaches Authorization: Bearer when a token is explicitly passed', async () => {
     mockFetch({ body: { status: 'ok' } })
 
-    await authedFetch('https://api.example/path', { token: 'from-override' })
+    await authedFetch('https://api.example/path', { token: 'legacy-bearer' })
 
     const headers = lastCall!.init.headers as Record<string, string>
-    expect(headers.Authorization).toBe('Bearer from-override')
+    expect(headers.Authorization).toBe('Bearer legacy-bearer')
+    // Still sends credentials — explicit token doesn't opt out of the cookie.
+    expect(lastCall!.init.credentials).toBe('include')
   })
 
-  // Known contract edge: passing `token: null` falls through the `??`
-  // guard to the localStorage token, *not* "opt out of auth." If a
-  // caller wants no Authorization header, use `publicFetch` instead.
-  // Pinning this as a test so a refactor can't silently change it
-  // (some callers rely on the fall-through).
-  it('token=null falls through to localStorage, does not opt out', async () => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, 'from-storage')
+  it('token=null opts out of the Bearer header even if truthy strings are the usual input', async () => {
     mockFetch({ body: { status: 'ok' } })
-
     await authedFetch('https://api.example/path', { token: null })
-
     const headers = lastCall!.init.headers as Record<string, string>
-    expect(headers.Authorization).toBe('Bearer from-storage')
+    expect(headers.Authorization).toBeUndefined()
   })
 
   it('caller-supplied headers merge without clobbering Content-Type', async () => {
@@ -159,12 +157,15 @@ describe('authedFetch', () => {
 })
 
 describe('publicFetch', () => {
-  it('never attaches Authorization even with a token in storage', async () => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, 'tok-xyz')
+  it('sends credentials: include so a session cookie — if any — reaches the server', async () => {
     mockFetch({ body: { status: 'ok' } })
-
     await publicFetch('https://api.example/public')
+    expect(lastCall!.init.credentials).toBe('include')
+  })
 
+  it('never attaches Authorization — publicFetch has no token path', async () => {
+    mockFetch({ body: { status: 'ok' } })
+    await publicFetch('https://api.example/public')
     const headers = lastCall!.init.headers as Record<string, string>
     expect(headers.Authorization).toBeUndefined()
     expect(headers['Content-Type']).toBe('application/json')

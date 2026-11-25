@@ -62,7 +62,9 @@ describe('tournamentResults.get', () => {
     const [url, init] = fetchMock.mock.calls[0]!
     expect(url).toBe(`${VENUE_BASE}/clubs/${CLUB_ID}/tournaments/${TOURNAMENT_ID}/results`)
     expect(init.method).toBe('GET')
-    expect(init.headers).toMatchObject({ Authorization: 'Bearer test-token' })
+    // Brief 119 Phase B — session rides on the HttpOnly cookie, not a
+    // Bearer header. Pin credentials: include instead.
+    expect(init.credentials).toBe('include')
     expect(res.entries).toHaveLength(2)
     expect(res.entries[1]!.result).toBeNull()
   })

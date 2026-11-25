@@ -43,6 +43,14 @@ export interface PlanState {
   /** True once the org has at least gone through Checkout once. Drives
    *  whether the FE offers Checkout or the Billing Portal. */
   has_stripe_customer: boolean
+  /** Currently-active paid add-on entitlement ids — brief 122. Kebab-case
+   *  strings that line up with `content-blocks` BLOCK_CATALOG entries
+   *  (e.g. `'tournaments-pro'`). Empty array when the club has no
+   *  add-ons; absent on backend responses that predate brief 122, in
+   *  which case the FE treats it as empty (no entitlements granted).
+   *  Mutated by the Stripe webhook that handles subscription-item
+   *  create / update / delete. */
+  addons?: string[]
 }
 
 export interface CheckoutInput {

@@ -48,3 +48,16 @@ export { default as Skeleton } from './components/Skeleton.vue'
 export { default as TornyImage } from './components/TornyImage.vue'
 
 export * from './types'
+
+// Catalog + entitlement helpers — brief 122 (paid add-on blocks). Today
+// every block is `tier: 'core'`; the scaffolding is here so flipping
+// one entry's tier is the whole FE change when a paid block ships.
+export {
+  BLOCK_CATALOG,
+  isBlockEntitled,
+  blocksByCategory,
+  addonBlocks,
+  type BlockCategory,
+  type BlockTier,
+  type BlockCatalogEntry,
+} from './blockCatalog'

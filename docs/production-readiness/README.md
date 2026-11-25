@@ -20,6 +20,7 @@ This folder captures the production-readiness audit and the remediation work tha
 - [`11-club-sites-vitest.md`](./11-club-sites-vitest.md) — vitest + 15 tests in `apps/club-sites` for the pure helpers in `server/utils/tornyApi.ts`. Closes the "shared workspace has zero tests" gap. **Complete.**
 - [`12-seo.md`](./12-seo.md) — robots.txt + sitemap.xml + canonical URLs + Organization/SportsClub JSON-LD across torny-web + club-sites; `noindex` on the CRM. **Complete.**
 - [`12b-seo-ai-ready.md`](./12b-seo-ai-ready.md) — AI crawler readiness: `llms.txt` on both sites, explicit AI bot directives in `robots.txt`, per-page `useSeoMeta` on all club-sites pages, `BreadcrumbList` + enriched `SportsClub` + `WebSite` JSON-LD. **Complete.**
+- [`12c-dynamic-og-images.md`](./12c-dynamic-og-images.md) — Dynamic per-tenant OG images via Nitro server routes. SVG rendering (PNG waits on Nuxt 4 migration), per-club brand color + name, per-page labels. **Complete.**
 
 ## Priority queue (from the audit)
 

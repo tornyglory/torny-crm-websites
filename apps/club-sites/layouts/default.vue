@@ -71,6 +71,75 @@ useHead(() => ({
   bodyAttrs: { 'data-image-style': imageStyle.value },
 }))
 
+// ── SEO ─────────────────────────────────────────────────────────
+// Per-tenant title + description defaults, canonical URL (prefers
+// the club's custom domain when they own one — authority should
+// accrue to the brand they control, not our subdomain), and a
+// SportsClub JSON-LD block so Google understands what each tenant
+// actually is.
+
+/** Canonical host — custom domain wins, falls back to the torny.pro
+ *  subdomain. Any SERP ends up at the club's brand, not ours. */
+const canonicalOrigin = computed(() => {
+  const customHost = club.value?.custom_hosts?.[0]
+  if (customHost) return `https://${customHost}`
+  const primary = club.value?.primary_host
+  if (primary) return `https://${primary}`
+  return null
+})
+
+const canonicalUrl = computed(() => {
+  if (!canonicalOrigin.value) return null
+  return `${canonicalOrigin.value}${route.path}`
+})
+
+const clubName = computed(() => club.value?.name ?? 'Club')
+const seoDescription = computed(() =>
+  `${clubName.value} — upcoming events, membership, venue hire and news.`,
+)
+
+useSeoMeta({
+  titleTemplate: (titleChunk) => (titleChunk ? `${titleChunk} — ${clubName.value}` : clubName.value),
+  description: seoDescription,
+  ogType: 'website',
+  ogSiteName: clubName,
+  ogImage: () => club.value?.logo_url ?? null,
+  twitterCard: 'summary_large_image',
+  themeColor: () => club.value?.brand_primary ?? '#0A0A0B',
+})
+
+useHead(() => {
+  const url = canonicalUrl.value
+  const origin = canonicalOrigin.value
+  const c = club.value
+  return {
+    htmlAttrs: { lang: 'en-NZ' },
+    link: url ? [{ rel: 'canonical', href: url }] : [],
+    // SportsClub JSON-LD — only emit when the club payload has
+    // enough shape to be meaningful. Skips during the SSR-before-
+    // payload window instead of writing a half-formed Organization
+    // card into the <head> that Google would ignore anyway.
+    script: c && origin
+      ? [
+        {
+          type: 'application/ld+json',
+          innerHTML: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'SportsClub',
+            name: c.name,
+            url: origin,
+            logo: c.logo_url ?? undefined,
+            // `sport` is a schema.org Thing — bowls suffices for the
+            // vertical we ship first. Make per-club when brief 105's
+            // variant terminology moves to a stable shape.
+            sport: 'Lawn bowls',
+          }),
+        },
+      ]
+      : [],
+  }
+})
+
 const chromeClub = computed<SiteChromeClub>(() => ({
   name: club.value?.name ?? 'Torny',
   logoUrl: club.value?.logo_url ?? null,

@@ -18,6 +18,7 @@ This folder captures the production-readiness audit and the remediation work tha
 - [`09-sign-in-rate-limit.md`](./09-sign-in-rate-limit.md) — Client-side lockout on failed sign-in attempts with exponential backoff; ready to honour a backend 429 + `retry_after_seconds` when the server rate limit ships. **FE shipped on all four auth forms; backend specced in brief 120.**
 - [`10-httponly-cookies-phase-b.md`](./10-httponly-cookies-phase-b.md) — CRM migration to HttpOnly session cookies per brief 119 Phase B. Closes the XSS → account-takeover path. **Branch ready (PR #17); blocked on one-line backend CORS fix before merge.**
 - [`11-club-sites-vitest.md`](./11-club-sites-vitest.md) — vitest + 15 tests in `apps/club-sites` for the pure helpers in `server/utils/tornyApi.ts`. Closes the "shared workspace has zero tests" gap. **Complete.**
+- [`12-seo.md`](./12-seo.md) — robots.txt + sitemap.xml + canonical URLs + Organization/SportsClub JSON-LD across torny-web + club-sites; `noindex` on the CRM. **Complete.**
 
 ## Priority queue (from the audit)
 

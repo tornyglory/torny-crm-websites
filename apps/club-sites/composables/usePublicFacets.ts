@@ -1,4 +1,4 @@
-import type { CustomFacet } from '~/server/utils/tornyApi'
+import type { CustomFacet } from '~/server/utils/tornyApiTypes'
 
 /**
  * Brief 105 — fetches the public custom facets for the active tenant.

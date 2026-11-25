@@ -288,9 +288,12 @@ interface Envelope<T> {
 const resolveMemo = new Map<string, { club: Club | null; expires: number }>()
 const RESOLVE_TTL_MS = 60_000
 
-// Re-exported from tornyApiHelpers.ts for backward compat. Pure helpers
-// live there so they're testable without the Nuxt `#imports` graph.
-export { normaliseHost, unwrapFacets } from './tornyApiHelpers'
+// Pure helpers live in tornyApiHelpers.ts (testable without the Nuxt
+// `#imports` graph). Call sites inside this file import them directly
+// below rather than via re-export, because Nuxt's auto-import would
+// otherwise see both names on tornyApi.ts and tornyApiHelpers.ts and
+// warn about duplicates on every build.
+import { normaliseHost, unwrapFacets } from './tornyApiHelpers'
 
 export async function resolveClubForHost(host: string): Promise<Club | null> {
   const key = normaliseHost(host)
@@ -396,10 +399,11 @@ export async function fetchVariant(slug: string): Promise<VariantConfig | null> 
 // Mirrors the api-client's CustomFacet shape — kept local so the
 // Nuxt server bundle doesn't pull in the CRM client just for types.
 
-// Types were moved to tornyApiTypes.ts so the pure helpers in
-// tornyApiHelpers.ts can import them without pulling the Nuxt `#imports`
-// graph. Re-exported here for backward compat.
-export type { FacetInputType, FacetOption, CustomFacet } from './tornyApiTypes'
+// Types live in tornyApiTypes.ts so the pure helpers in
+// tornyApiHelpers.ts can reference them without pulling this file's
+// Nuxt `#imports` graph. Not re-exported here — that would trip Nuxt's
+// auto-import "duplicated imports" warning on every build, and anyone
+// needing the types imports them from tornyApiTypes directly.
 import type { CustomFacet } from './tornyApiTypes'
 
 export async function fetchCustomFacets(slug: string): Promise<CustomFacet[]> {

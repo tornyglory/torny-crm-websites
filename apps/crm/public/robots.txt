@@ -1,0 +1,5 @@
+# Admin tool — do not index. The meta robots tag + the X-Robots-Tag
+# globalHeaders entry in staticwebapp.config.json cover anything that
+# slips past this file.
+User-agent: *
+Disallow: /

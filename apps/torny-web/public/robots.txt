@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Deliberately exclude the signup wizard's intermediate steps from
+# the index — we want Google to land people on /, /sign-in, /privacy,
+# /terms, not on a half-filled wizard state.
+Disallow: /signup/welcome
+
+Sitemap: https://torny.pro/sitemap.xml

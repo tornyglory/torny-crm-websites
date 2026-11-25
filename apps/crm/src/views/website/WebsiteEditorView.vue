@@ -24,6 +24,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
 import { sitePreviewUrl } from '@/composables/sitePreviewUrl'
 import { useClubStore } from '@/stores/club'
+import { useClubPlan } from '@/composables/useClubPlan'
 import { useOnboardingStore } from '@/stores/onboarding'
 import ImagePicker from '@/components/ImagePicker.vue'
 import PdfPicker from '@/components/PdfPicker.vue'
@@ -1032,8 +1033,22 @@ async function load(slug: PageSlug): Promise<void> {
   }
 }
 
+// Brief 122 — plan tier + add-on entitlements feed into the block
+// picker so Pro / add-on blocks render greyed out for Starter clubs.
+const { plan: currentPlan, addons: currentAddons, ensure: ensurePlan } = useClubPlan()
+
+/** Clicked a locked block in the picker. For Pro blocks we route to
+ *  Settings → Billing where the plan upgrade CTA lives; for add-on
+ *  blocks (once we ship the first paid add-on, brief 122 §6) the
+ *  upsell modal gets wired in here. */
+function onBlockUpsell(_type: BlockType) {
+  paletteOpen.value = null
+  void router.push({ name: 'settings', params: { section: 'billing' } })
+}
+
 onMounted(() => {
   void pagesStore.load()
+  void ensurePlan()
   if (!isSettingsView.value) void load(currentPage.value)
 })
 watch([() => clubStore.current?.id, currentPage, isSettingsView], ([, slug, settingsActive]) => {
@@ -1878,8 +1893,11 @@ const lastSavedLabel = computed(() => {
       <BlockPaletteDialog
         :open="paletteOpen !== null"
         :items="paletteFor(currentPage)"
+        :plan="currentPlan"
+        :club-addons="currentAddons"
         @close="paletteOpen = null"
         @select="(t) => addBlock(t, paletteOpen?.after ?? null)"
+        @upsell="onBlockUpsell"
       />
 
       <!-- Brief 106 — Edit join form modal. Scoped to the Join form

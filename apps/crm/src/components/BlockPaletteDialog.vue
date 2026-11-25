@@ -9,7 +9,8 @@
  * internals change.
  */
 import { computed, defineComponent, h, nextTick, ref, watch, type VNode } from 'vue'
-import type { BlockType } from '@torny/content-blocks'
+import { BLOCK_CATALOG, isBlockEntitled, type BlockType } from '@torny/content-blocks'
+import type { PlanKey } from '@torny/api-client'
 import CrmModal from './modals/CrmModal.vue'
 
 interface PaletteItem {
@@ -20,14 +21,30 @@ interface PaletteItem {
   defaults: () => unknown
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   open: boolean
   items: PaletteItem[]
-}>()
+  /** Current plan tier — brief 122. When undefined the picker acts as
+   *  if the club is on Starter (Pro blocks render as locked). Passed
+   *  down from the editor view which reads it from billing state. */
+  plan?: PlanKey | undefined
+  /** Active add-on entitlement ids — brief 122 §1. Forward-compatible
+   *  for when the first paid add-on block ships; today no catalog
+   *  entries are `tier: 'addon'` so this is effectively unused. */
+  clubAddons?: readonly string[]
+}>(), {
+  plan: undefined,
+  clubAddons: () => [],
+})
 
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'select', type: BlockType): void
+  /** Fired when the admin clicks a locked (Pro / unentitled addon)
+   *  block. Parent decides what to do — show the upgrade CTA, redirect
+   *  to Settings → Billing, open the Pro-plan upsell modal, etc. The
+   *  picker itself stays dumb about the upsell flow. */
+  (e: 'upsell', type: BlockType): void
 }>()
 
 // ── Category tags ────────────────────────────────────────────
@@ -117,7 +134,19 @@ const availableTags = computed<Tag[]>(() => {
   return order.filter((t) => set.has(t))
 })
 
+function entitlementOf(type: BlockType): { locked: boolean; tier: 'core' | 'pro' | 'addon' } {
+  const entry = BLOCK_CATALOG[type]
+  return {
+    locked: !isBlockEntitled(type, props.plan, props.clubAddons),
+    tier: entry.tier,
+  }
+}
+
 function pick(type: BlockType) {
+  if (entitlementOf(type).locked) {
+    emit('upsell', type)
+    return
+  }
   emit('select', type)
 }
 
@@ -975,10 +1004,27 @@ const BlockPreview = defineComponent({
         :key="item.type"
         type="button"
         class="bp__card"
+        :class="{ 'bp__card--locked': entitlementOf(item.type).locked }"
+        :aria-disabled="entitlementOf(item.type).locked ? 'true' : undefined"
+        :title="entitlementOf(item.type).locked
+          ? (entitlementOf(item.type).tier === 'pro'
+            ? 'Available on the Pro plan — click to upgrade'
+            : 'Add-on required — click to see details')
+          : undefined"
         @click="pick(item.type)"
       >
         <div class="bp__preview">
           <BlockPreview :type="item.type" />
+          <span
+            v-if="entitlementOf(item.type).tier === 'pro'"
+            class="bp__pill bp__pill--pro"
+            :class="{ 'bp__pill--unlocked': !entitlementOf(item.type).locked }"
+          >Pro</span>
+          <span
+            v-else-if="entitlementOf(item.type).tier === 'addon'"
+            class="bp__pill bp__pill--addon"
+            :class="{ 'bp__pill--unlocked': !entitlementOf(item.type).locked }"
+          >Add-on</span>
         </div>
         <div class="bp__meta">
           <div class="bp__label">{{ item.label }}</div>
@@ -1109,12 +1155,45 @@ const BlockPreview = defineComponent({
 .bp__card:active { transform: translateY(0); }
 
 .bp__preview {
+  position: relative;
   aspect-ratio: 5 / 3;
   border-radius: 6px;
   overflow: hidden;
   background: var(--color-surface);
   border: 1px solid var(--color-hairline);
 }
+
+/* ── Locked (Pro / unentitled addon) card treatment ─────────────
+   Grey out the preview + label so the card reads as unavailable at
+   a glance, but keep it focusable + clickable so clicking routes
+   through the upsell handler (not silently dropped). */
+.bp__card--locked { cursor: not-allowed; }
+.bp__card--locked .bp__preview { opacity: 0.4; filter: grayscale(100%); }
+.bp__card--locked .bp__label,
+.bp__card--locked .bp__hint { color: var(--color-fog); }
+.bp__card--locked:hover { transform: none; border-color: var(--color-hairline); }
+
+/* Tier pill — sits top-right of the preview thumbnail. When unlocked
+   (admin's club is Pro / has the entitlement), we still show the badge
+   but muted so admins recognise "this is a Pro feature" without the
+   card feeling disabled. */
+.bp__pill {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 1;
+}
+.bp__pill--pro { background: var(--color-ink); color: #fff; }
+.bp__pill--addon { background: var(--color-accent); color: var(--color-accent-ink, #fff); }
+.bp__pill--unlocked { opacity: 0.55; }
 
 .bp__meta { display: flex; flex-direction: column; gap: 2px; padding: 0 2px 2px; }
 .bp__label {

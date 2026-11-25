@@ -1,12 +1,12 @@
 /**
- * Guards for the block catalog — brief 122 §4.
+ * Guards for the block catalog — brief 122 §4 + plan-tier gating.
  *
  * The type-level `Record<BlockType, BlockCatalogEntry>` already catches
  * "you added a BlockType but forgot to catalog it" at compile time.
  * These tests cover runtime invariants that TS can't express:
  *   - every entry's `type` field matches its catalog key
- *   - addon entries have an entitlement id; core entries don't
- *   - isBlockEntitled handles every combination correctly
+ *   - addon entries have an entitlement id; core / pro entries don't
+ *   - isBlockEntitled handles every (tier × plan × addons) combination
  */
 import { describe, it, expect } from 'vitest'
 import {
@@ -16,6 +16,7 @@ import {
   addonBlocks,
   type BlockCatalogEntry,
 } from './blockCatalog'
+import type { BlockType } from './types'
 
 describe('block catalog', () => {
   it('every entry\'s `type` matches its key', () => {
@@ -31,44 +32,70 @@ describe('block catalog', () => {
     }
   })
 
-  it('core entries don\'t have an entitlement id (would be confusing)', () => {
-    const core = Object.values(BLOCK_CATALOG).filter((e) => e.tier === 'core')
-    for (const entry of core) {
-      expect(entry.entitlement, `core block ${entry.type} shouldn\'t carry an entitlement id`).toBeUndefined()
+  it('core and pro entries don\'t have an entitlement id (would be confusing)', () => {
+    const planTiered = Object.values(BLOCK_CATALOG).filter((e) => e.tier === 'core' || e.tier === 'pro')
+    for (const entry of planTiered) {
+      expect(entry.entitlement, `${entry.tier} block ${entry.type} shouldn\'t carry an entitlement id`).toBeUndefined()
     }
   })
 })
 
-describe('isBlockEntitled', () => {
-  it('returns true for every core block regardless of addons list', () => {
-    const coreTypes = Object.values(BLOCK_CATALOG)
-      .filter((e) => e.tier === 'core')
-      .map((e) => e.type)
+describe('isBlockEntitled — core blocks', () => {
+  const coreTypes: BlockType[] = Object.values(BLOCK_CATALOG)
+    .filter((e) => e.tier === 'core')
+    .map((e) => e.type)
+
+  it('returns true regardless of plan or addons', () => {
     for (const t of coreTypes) {
-      expect(isBlockEntitled(t, []), `${t} with empty addons`).toBe(true)
-      expect(isBlockEntitled(t, undefined), `${t} with undefined addons`).toBe(true)
-      expect(isBlockEntitled(t, ['tournaments-pro']), `${t} with unrelated addon`).toBe(true)
+      expect(isBlockEntitled(t, undefined, undefined), `${t} / no plan / no addons`).toBe(true)
+      expect(isBlockEntitled(t, 'starter', []), `${t} / starter`).toBe(true)
+      expect(isBlockEntitled(t, 'pro', []), `${t} / pro`).toBe(true)
     }
   })
+})
 
-  it('returns true for an addon block when the entitlement is in the list', () => {
-    // Construct a synthetic addon entry so the test doesn't depend on
-    // the catalog actually having an addon shipped yet.
+describe('isBlockEntitled — pro blocks', () => {
+  // Grab the first catalogued pro block for these tests — brittle to
+  // the catalog, but if we ever remove all pro blocks, the gating UX
+  // is dead anyway and we'd want to know.
+  const proBlock = Object.values(BLOCK_CATALOG).find((e) => e.tier === 'pro')
+
+  it('are entitled when plan is pro', () => {
+    if (!proBlock) return expect.fail('expected at least one pro block in the catalog')
+    expect(isBlockEntitled(proBlock.type, 'pro', [])).toBe(true)
+    expect(isBlockEntitled(proBlock.type, 'pro', ['anything'])).toBe(true)
+  })
+
+  it('are NOT entitled when plan is starter or undefined', () => {
+    if (!proBlock) return expect.fail('expected at least one pro block in the catalog')
+    expect(isBlockEntitled(proBlock.type, 'starter', [])).toBe(false)
+    expect(isBlockEntitled(proBlock.type, undefined, [])).toBe(false)
+    // An unrelated addon entitlement doesn't magically unlock a pro block
+    expect(isBlockEntitled(proBlock.type, 'starter', ['tournaments-pro'])).toBe(false)
+  })
+})
+
+describe('isBlockEntitled — addon blocks', () => {
+  it('returns true when the entitlement is in the addons list', () => {
+    // Synthetic addon entry — borrow a real BlockType key, swap its
+    // catalog entry for the scope of this test so we don't depend on
+    // an addon shipping in the catalog yet.
     const fakeEntry: BlockCatalogEntry = {
-      type: 'hero', // borrow a real BlockType — isBlockEntitled reads the catalog
+      type: 'hero',
       category: 'hero',
       tier: 'addon',
       entitlement: 'test-entitlement',
     }
-    // Monkey-patch for the duration of this test — avoid in prod code,
-    // but acceptable in a unit test that owns its state.
     const original = BLOCK_CATALOG.hero
     ;(BLOCK_CATALOG as Record<string, BlockCatalogEntry>).hero = fakeEntry
     try {
-      expect(isBlockEntitled('hero', ['test-entitlement'])).toBe(true)
-      expect(isBlockEntitled('hero', ['other-entitlement'])).toBe(false)
-      expect(isBlockEntitled('hero', [])).toBe(false)
-      expect(isBlockEntitled('hero', undefined)).toBe(false)
+      expect(isBlockEntitled('hero', 'starter', ['test-entitlement'])).toBe(true)
+      expect(isBlockEntitled('hero', 'pro', ['test-entitlement'])).toBe(true)
+      // Addons are plan-independent — a pro plan without the entitlement is still locked.
+      expect(isBlockEntitled('hero', 'pro', [])).toBe(false)
+      expect(isBlockEntitled('hero', 'starter', [])).toBe(false)
+      expect(isBlockEntitled('hero', 'starter', ['other'])).toBe(false)
+      expect(isBlockEntitled('hero', undefined, undefined)).toBe(false)
     } finally {
       ;(BLOCK_CATALOG as Record<string, BlockCatalogEntry>).hero = original
     }
@@ -79,12 +106,12 @@ describe('isBlockEntitled', () => {
       type: 'hero',
       category: 'hero',
       tier: 'addon',
-      // entitlement intentionally missing — a catalog misconfig
+      // entitlement intentionally missing
     }
     const original = BLOCK_CATALOG.hero
     ;(BLOCK_CATALOG as Record<string, BlockCatalogEntry>).hero = broken
     try {
-      expect(isBlockEntitled('hero', ['anything'])).toBe(false)
+      expect(isBlockEntitled('hero', 'pro', ['anything'])).toBe(false)
     } finally {
       ;(BLOCK_CATALOG as Record<string, BlockCatalogEntry>).hero = original
     }

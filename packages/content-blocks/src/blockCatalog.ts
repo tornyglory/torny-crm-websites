@@ -33,9 +33,17 @@ export type BlockCategory =
   | 'venue'        // venue hire, packages, booking
   | 'commerce'     // sponsors, bistro, contact — things that carry a "business" relationship
 
-/** Core blocks ship to every club on every plan. Addon blocks require a
- *  matching entry in the club's `addons` list — see brief 122 §1. */
-export type BlockTier = 'core' | 'addon'
+/** Three gating tiers:
+ *  - `core`: ships to every club on every plan (default).
+ *  - `pro`: requires `plan === 'pro'`. Starter clubs see it greyed out
+ *    in the picker with an "Upgrade to Pro" upsell path.
+ *  - `addon`: requires a matching entitlement in the club's `addons`
+ *    list — see brief 122 §1. Independent of plan tier so a Starter
+ *    club could theoretically unlock a specific add-on without going
+ *    Pro, if we ever decide to sell them à la carte.
+ *  Today the catalog uses `core` + `pro`; `addon` is scaffolded for
+ *  brief 122's follow-up work. */
+export type BlockTier = 'core' | 'pro' | 'addon'
 
 export interface BlockCatalogEntry {
   type: BlockType
@@ -43,9 +51,15 @@ export interface BlockCatalogEntry {
   tier: BlockTier
   /** Required when `tier === 'addon'`. Kebab-case, stable identifier —
    *  once published it's forever (matches the Stripe Price metadata
-   *  convention in brief 122 §2). Absent for core blocks. */
+   *  convention in brief 122 §2). Absent for core / pro blocks. */
   entitlement?: string
 }
+
+/** Match the PlanKey from @torny/api-client::billing. Duplicated here
+ *  rather than imported so the content-blocks package stays dep-free
+ *  on api-client (keeps the SSR bundle smaller + the dep graph
+ *  acyclic). Keep these unions in sync. */
+export type PlanTier = 'starter' | 'pro'
 
 /**
  * Every block in `BlockType` MUST have an entry here. The exhaustiveness
@@ -53,8 +67,19 @@ export interface BlockCatalogEntry {
  * you add a new block to `types.ts::BlockType`, the typescript error
  * will steer you back here.
  */
+/**
+ * Starting classification (2026-11-26):
+ *   - Basic presentational blocks (hero, rich text, layout chrome,
+ *     gallery, contact form, membership CTA, event list) stay `core`
+ *     so every Starter club can build a usable public site.
+ *   - Operationally-complex blocks that create real value — anything
+ *     backed by live members / tournaments / venue bookings / honour
+ *     board history, plus the AI block (expensive to run) — are
+ *     `pro`. These are the features that justify the plan upgrade.
+ *   - Reclassify by editing this file; it's the single source of truth.
+ */
 export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
-  // ── Hero / display ────────────────────────────────────────────
+  // ── Hero / display — core so Starter clubs can build an attractive site
   hero:                     { type: 'hero',                     category: 'hero',        tier: 'core' },
   fullBleedImage:           { type: 'fullBleedImage',           category: 'hero',        tier: 'core' },
   fullBleedMedia:           { type: 'fullBleedMedia',           category: 'hero',        tier: 'core' },
@@ -62,7 +87,7 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
   pullQuote:                { type: 'pullQuote',                category: 'hero',        tier: 'core' },
   gallery:                  { type: 'gallery',                  category: 'hero',        tier: 'core' },
 
-  // ── Layout / typography ───────────────────────────────────────
+  // ── Layout / typography — core, these are structural primitives
   sectionTitle:             { type: 'sectionTitle',             category: 'layout',      tier: 'core' },
   divider:                  { type: 'divider',                  category: 'layout',      tier: 'core' },
   twoColumn:                { type: 'twoColumn',                category: 'layout',      tier: 'core' },
@@ -73,58 +98,59 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
 
   // ── Content ───────────────────────────────────────────────────
   richText:                 { type: 'richText',                 category: 'content',     tier: 'core' },
-  customAi:                 { type: 'customAi',                 category: 'content',     tier: 'core' },
+  // AI block is pro — nontrivial LLM cost per render, premium feature
+  customAi:                 { type: 'customAi',                 category: 'content',     tier: 'pro' },
 
-  // ── Members ───────────────────────────────────────────────────
+  // ── Members — basic CTA is core; anything that reads live member data is pro
   peopleGrid:               { type: 'peopleGrid',               category: 'members',     tier: 'core' },
-  membersSearch:            { type: 'membersSearch',            category: 'members',     tier: 'core' },
-  membershipJoinForm:       { type: 'membershipJoinForm',       category: 'members',     tier: 'core' },
   membershipCta:            { type: 'membershipCta',            category: 'members',     tier: 'core' },
+  membersSearch:            { type: 'membersSearch',            category: 'members',     tier: 'pro' },
+  membershipJoinForm:       { type: 'membershipJoinForm',       category: 'members',     tier: 'pro' },
 
-  // ── Events ────────────────────────────────────────────────────
+  // ── Events — basic list is core; interactive calendar is pro
   eventList:                { type: 'eventList',                category: 'events',      tier: 'core' },
-  eventsCalendar:           { type: 'eventsCalendar',           category: 'events',      tier: 'core' },
+  eventsCalendar:           { type: 'eventsCalendar',           category: 'events',      tier: 'pro' },
 
-  // ── Tournaments ───────────────────────────────────────────────
-  // All tournament blocks start as core; brief 122 V1 ships a new
-  // `tournamentManagementPro` block as the first add-on, these stay free.
-  upcomingTournamentsList:  { type: 'upcomingTournamentsList',  category: 'tournaments', tier: 'core' },
-  upcomingTournamentHero:   { type: 'upcomingTournamentHero',   category: 'tournaments', tier: 'core' },
-  tournamentSearch:         { type: 'tournamentSearch',         category: 'tournaments', tier: 'core' },
+  // ── Tournaments — all pro, these are a core Pro-plan differentiator
+  upcomingTournamentsList:  { type: 'upcomingTournamentsList',  category: 'tournaments', tier: 'pro' },
+  upcomingTournamentHero:   { type: 'upcomingTournamentHero',   category: 'tournaments', tier: 'pro' },
+  tournamentSearch:         { type: 'tournamentSearch',         category: 'tournaments', tier: 'pro' },
 
-  // ── Honour board ──────────────────────────────────────────────
-  honourBoard:              { type: 'honourBoard',              category: 'honour',      tier: 'core' },
-  honourBoardSearch:        { type: 'honourBoardSearch',        category: 'honour',      tier: 'core' },
+  // ── Honour board — pro, requires historical data + search index
+  honourBoard:              { type: 'honourBoard',              category: 'honour',      tier: 'pro' },
+  honourBoardSearch:        { type: 'honourBoardSearch',        category: 'honour',      tier: 'pro' },
 
-  // ── Venue hire ────────────────────────────────────────────────
+  // ── Venue hire — hero + spaces are core marketing; packages + booking are pro (monetised)
   venueHireHero:            { type: 'venueHireHero',            category: 'venue',       tier: 'core' },
   venueSpaces:              { type: 'venueSpaces',              category: 'venue',       tier: 'core' },
-  venuePackages:            { type: 'venuePackages',            category: 'venue',       tier: 'core' },
-  venueBooking:             { type: 'venueBooking',             category: 'venue',       tier: 'core' },
+  venuePackages:            { type: 'venuePackages',            category: 'venue',       tier: 'pro' },
+  venueBooking:             { type: 'venueBooking',             category: 'venue',       tier: 'pro' },
 
-  // ── Commerce / relationships ──────────────────────────────────
+  // ── Commerce / relationships — all core, lightweight content blocks
   sponsors:                 { type: 'sponsors',                 category: 'commerce',    tier: 'core' },
   bistroMenu:               { type: 'bistroMenu',               category: 'commerce',    tier: 'core' },
   contactForm:              { type: 'contactForm',              category: 'commerce',    tier: 'core' },
 }
 
 /**
- * True when the block is either a core block (free for everyone) or an
- * add-on whose entitlement id is present in the club's addons list.
+ * True when the block is unlocked for the given club context:
+ *   - `core` blocks are always entitled.
+ *   - `pro` blocks need `plan === 'pro'`.
+ *   - `addon` blocks need their entitlement id in `clubAddons`.
  *
- * Accepts `readonly string[] | undefined` so callers don't need to
- * normalise the payload shape — missing / undefined addons behave the
- * same as an empty list (no entitlements granted).
+ * `plan` and `clubAddons` are both optional so callers don't need to
+ * normalise. Undefined plan behaves like Starter (locks pro); undefined
+ * addons behaves like an empty list (locks every addon block).
  */
 export function isBlockEntitled(
   type: BlockType,
+  plan: PlanTier | undefined,
   clubAddons: readonly string[] | undefined,
 ): boolean {
   const entry = BLOCK_CATALOG[type]
   if (entry.tier === 'core') return true
-  // Defensive: an addon entry without an entitlement id is a catalog
-  // misconfiguration. Treat it as locked so bad config doesn't give
-  // a block away for free.
+  if (entry.tier === 'pro') return plan === 'pro'
+  // addon tier
   if (!entry.entitlement) return false
   return (clubAddons ?? []).includes(entry.entitlement)
 }

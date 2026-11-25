@@ -29,6 +29,7 @@ import CrmSpinner from '@/components/CrmSpinner.vue'
 import { useToast } from '@/composables/useToast'
 import { usePermissions } from '@/composables/usePermissions'
 import { sanitizeEmailHtml } from '@/utils/sanitizeHtml'
+import { useEmailSignatures, stitchSignature } from '@/composables/useEmailSignatures'
 
 const props = defineProps<{
   clubId: number
@@ -148,6 +149,22 @@ const replySending = ref(false)
 const replyError = ref<string | null>(null)
 const replyEditor = ref<{ focus: () => void } | null>(null)
 
+/** Stitches the admin's personal signature + the club footer onto the
+ *  drafted reply body. Matches the SendEmailModal composer so replies
+ *  carry the same identity + unsubscribe copy as fresh sends. Admins
+ *  can untick to opt out per-reply (same UX as the main composer). */
+const signatures = useEmailSignatures()
+const includeSignature = ref(true)
+function finalReplyHtml(): string {
+  const body = replyBody.value
+  if (!includeSignature.value) return body
+  return stitchSignature({
+    bodyHtml: body,
+    personalHtml: signatures.personal.value || null,
+    clubHtml: signatures.club.value || null,
+  })
+}
+
 function openReply() {
   if (!canManageTeam.value) return
   replyOpen.value = true
@@ -169,8 +186,9 @@ async function sendReply() {
   const anchor = anchorId.value
   if (anchor == null) return
   try {
+    const bodyHtml = finalReplyHtml()
     const res = await communicationsApi.replyToCommunication(props.clubId, anchor, {
-      body_html: replyBody.value,
+      body_html: bodyHtml,
     })
     toast.success('Reply sent.')
     // Brief 101 §4.3: wait for 201, then append the server row. We don't
@@ -182,7 +200,7 @@ async function sendReply() {
       channel: 'email',
       subject: `Re: ${subject.value}`,
       body: null,
-      body_html: replyBody.value,
+      body_html: bodyHtml,
       message_id: res.message_id,
       in_reply_to: null,
       parent_communication_id: res.parent_communication_id,
@@ -459,7 +477,14 @@ function bodyKind(m: ThreadMessage): BodyRender['kind'] {
       <div v-if="replyError" class="thread__dock-error">{{ replyError }}</div>
 
       <div class="thread__dock-foot">
-        <span class="thread__dock-hint">Replies go to the sender and thread automatically in their inbox.</span>
+        <label
+          v-if="signatures.personal.value.trim().length > 0 || signatures.club.value.trim().length > 0"
+          class="thread__dock-sig"
+        >
+          <input v-model="includeSignature" type="checkbox" />
+          <span>Include signature</span>
+        </label>
+        <span v-else class="thread__dock-hint">Replies go to the sender and thread automatically in their inbox.</span>
         <button
           type="button"
           class="thread__send"
@@ -831,6 +856,20 @@ function bodyKind(m: ThreadMessage): BodyRender['kind'] {
   font-family: var(--font-body);
   font-size: 11px;
   color: var(--color-fog);
+}
+.thread__dock-sig {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--color-ink);
+  cursor: pointer;
+  user-select: none;
+}
+.thread__dock-sig input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-ink);
 }
 .thread__send {
   display: inline-flex;

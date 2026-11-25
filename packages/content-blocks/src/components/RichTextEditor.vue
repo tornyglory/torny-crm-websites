@@ -56,8 +56,33 @@ const editor = useEditor({
       // The backend sanitiser is the final trust boundary; here we just
       // enforce the two attributes every email link needs.
     }),
-    Image.configure({
-      HTMLAttributes: { style: 'max-width: 100%; height: auto; border-radius: 10px;' },
+    // Extend the Image node with a `size` attribute so admins can pick
+    // Small / Medium / Large on insert. The attribute is persisted on
+    // the <img> markup as `data-size` + mirrored into an inline style
+    // so the image renders correctly even outside the editor (email
+    // clients, published pages, saved signatures). Default 'md' matches
+    // the pre-picker baseline.
+    Image.extend({
+      addAttributes() {
+        return {
+          ...this.parent?.(),
+          size: {
+            default: 'md',
+            parseHTML: (el) => el.getAttribute('data-size') ?? 'md',
+            renderHTML: (attrs) => {
+              const size = (attrs.size as 'sm' | 'md' | 'lg' | undefined) ?? 'md'
+              const maxWidth = size === 'sm' ? '120px' : size === 'lg' ? '100%' : '280px'
+              return {
+                'data-size': size,
+                style: `max-width: ${maxWidth}; height: auto; border-radius: 10px;`,
+              }
+            },
+          },
+        }
+      },
+    }).configure({
+      // No HTMLAttributes.style here — the size attribute renders style
+      // inline via the override above, so a per-image style wins.
     }),
     Placeholder.configure({ placeholder: () => props.placeholder }),
   ],
@@ -153,6 +178,14 @@ const imageUploading = ref(false)
 const imageError = ref<string | null>(null)
 const imageFileInput = ref<HTMLInputElement | null>(null)
 const imageUrlInput = ref<HTMLInputElement | null>(null)
+/** Admin-selected size for the inserted image. Persists as a `data-size`
+ *  attribute via the extended Image node (see schema above). */
+const imageSize = ref<'sm' | 'md' | 'lg'>('md')
+const imageSizeOptions: Array<{ value: 'sm' | 'md' | 'lg'; label: string; sub: string }> = [
+  { value: 'sm', label: 'Small',  sub: '120px' },
+  { value: 'md', label: 'Medium', sub: '280px' },
+  { value: 'lg', label: 'Large',  sub: 'Full width' },
+]
 
 const imageCanUpload = computed(() => typeof props.uploadImage === 'function')
 
@@ -162,6 +195,7 @@ function insertImage() {
   imageFile.value = null
   imageFilePreview.value = null
   imageError.value = null
+  imageSize.value = 'md'
   imageOpen.value = true
   void nextTick(() => {
     if (imageMode.value === 'url') {
@@ -223,7 +257,7 @@ async function confirmImage() {
     imageUploading.value = true
     try {
       const url = await upload(f)
-      e.chain().focus().setImage({ src: url }).run()
+      e.chain().focus().setImage({ src: url, size: imageSize.value } as { src: string }).run()
       clearImageSelection()
       imageOpen.value = false
     } catch (err) {
@@ -237,7 +271,7 @@ async function confirmImage() {
       imageError.value = 'Image URLs must start with https://'
       return
     }
-    e.chain().focus().setImage({ src: url }).run()
+    e.chain().focus().setImage({ src: url, size: imageSize.value } as { src: string }).run()
     imageOpen.value = false
   }
 }
@@ -510,6 +544,28 @@ defineExpose({ insertText, focus })
                 </span>
               </label>
             </template>
+
+            <!-- Size picker applies to both Upload + URL modes. Admins
+                 can pick smaller for signatures/logos or Large for
+                 hero images. -->
+            <div class="rte-modal__size">
+              <span class="rte-modal__label">Size</span>
+              <div class="rte-modal__size-row" role="radiogroup" aria-label="Image size">
+                <button
+                  v-for="opt in imageSizeOptions"
+                  :key="opt.value"
+                  type="button"
+                  class="rte-modal__size-btn"
+                  :class="{ 'is-active': imageSize === opt.value }"
+                  role="radio"
+                  :aria-checked="imageSize === opt.value"
+                  @click="imageSize = opt.value"
+                >
+                  <span class="rte-modal__size-label">{{ opt.label }}</span>
+                  <span class="rte-modal__size-sub">{{ opt.sub }}</span>
+                </button>
+              </div>
+            </div>
 
             <div v-if="imageError" class="rte-modal__error">{{ imageError }}</div>
           </div>
@@ -861,6 +917,48 @@ defineExpose({ insertText, focus })
   cursor: pointer;
 }
 .rte-modal__preview-change:hover { text-decoration: underline; }
+
+.rte-modal__size {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+.rte-modal__size-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.rte-modal__size-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--color-surface, #f6f5f1);
+  border: 1px solid var(--color-hairline, #e5e4de);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-body, 'Inter'), sans-serif;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.rte-modal__size-btn:hover:not(.is-active) {
+  border-color: var(--color-fog, #a3a09a);
+}
+.rte-modal__size-btn.is-active {
+  background: var(--color-ink, #0a0a0b);
+  border-color: var(--color-ink, #0a0a0b);
+  color: #fff;
+}
+.rte-modal__size-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.rte-modal__size-sub {
+  font-size: 11px;
+  opacity: 0.65;
+}
 
 .rte-modal__error {
   padding: 10px 12px;

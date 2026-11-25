@@ -9,6 +9,16 @@ The audit baseline (`audit-2026-11-11.md`) scored the overall build **5.5 / 10**
 
 Three candidate pushes, ranked by leverage.
 
+> **Strategic ordering confirmed 2026-11-25** — after ships 1 + 2 land, the editor experience push continues in this order:
+>
+> 1. **Live preview** (Candidate 3 below). Split-pane editor with real `BlockRenderer` — the force multiplier that makes every other knob you add feel native. Non-designer admins (holiday hosts, real-estate agents, club secretaries) all have the same reaction to text-settings-and-save-to-preview: cognitive overhead. Live preview collapses it.
+> 2. **Vertical-flavoured starting points.** Torny stops being "Torny for clubs" by default — admins pick their vertical at signup ("Clubs", "Stays", "Property", "Hospitality"), and each vertical ships its own default block library, token palette, and variant catalog. Same underlying renderer; different first-30-seconds feel. Makes expansion to adjacent markets a configuration change, not a fork.
+> 3. **Block variants.** 3–5 presentations per block per vertical, picked from a dropdown. Fields identical, variant swaps the look. Shopify Sections pattern.
+> 4. **Power-user overrides.** Per-block background slot (ground / surface / ink / accent-soft — token-bounded, not hex), token-level overrides (radius, type weight, density). Chrome variants (`SiteHeader.variant`, `SiteFooter.variant`) land here too — same "pick a presentation" primitive, scoped to Settings.
+> 5. **AI / MCP design assistance.** Natural-language intent → token adjustments + variant swaps. `CustomAiBlock` is the escape hatch for the "just give me HTML" long tail. Requires (3) and (4) to be the primitives the agent calls into — building AI before the rails exist produces incoherent output.
+>
+> Full discussion thread lives in conversation history 2026-11-25. Themes-as-you-knew-them stay dead.
+
 ---
 
 ## Candidate 1 — Inline asset uploads (small, tangible)

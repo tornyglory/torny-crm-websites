@@ -29,6 +29,8 @@ useSeoMeta({
   title: 'Honour board',
   description: computed(() => `Past champions and record-holders at ${clubName.value}.`),
   ogTitle: computed(() => `Honour board — ${clubName.value}`),
+  ogImage: '/og.svg?label=Honour+Board',
+  twitterImage: '/og.svg?label=Honour+Board',
 })
 
 // Brief 110 — honour-board lives on the SAM stack and keys on the

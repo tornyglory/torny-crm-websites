@@ -98,13 +98,26 @@ const seoDescription = computed(() =>
   `${clubName.value} — upcoming events, membership, venue hire and news.`,
 )
 
+/** Dynamic OG image URL — points at the per-tenant server route in
+ *  `server/routes/og.svg.ts`. Pages override the `label` query param
+ *  via their own useSeoMeta calls so the card shows "EVENTS",
+ *  "ABOUT", etc. above the club name. */
+const ogImageUrl = computed(() => {
+  if (!canonicalOrigin.value) return null
+  return `${canonicalOrigin.value}/og.svg`
+})
+
 useSeoMeta({
   titleTemplate: (titleChunk) => (titleChunk ? `${titleChunk} — ${clubName.value}` : clubName.value),
   description: seoDescription,
   ogType: 'website',
   ogSiteName: clubName,
-  ogImage: () => club.value?.logo_url ?? null,
+  ogImage: ogImageUrl,
+  ogImageWidth: 1200,
+  ogImageHeight: 630,
+  ogImageAlt: computed(() => `${clubName.value} — social card`),
   twitterCard: 'summary_large_image',
+  twitterImage: ogImageUrl,
   themeColor: () => club.value?.brand_primary ?? '#0A0A0B',
 })
 

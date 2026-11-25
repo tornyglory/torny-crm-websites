@@ -10,12 +10,15 @@ useSeoMeta({
   description: 'Software to run your bowls club — membership, communications, events, website. Signup takes two minutes; first bookings go live in two weeks.',
   ogType: 'website',
   ogSiteName: 'Torny',
-  ogImage: 'https://torny.pro/og-default.png',
+  // Dynamic OG image rendered by server/routes/og.svg.ts. Pages can
+  // override with their own useSeoMeta({ ogImage: '/og.svg?title=…' }).
+  ogImage: 'https://torny.pro/og.svg',
   ogImageWidth: 1200,
   ogImageHeight: 630,
   ogImageAlt: 'Torny — The Bowls Club Network',
   twitterCard: 'summary_large_image',
   twitterSite: '@torny',
+  twitterImage: 'https://torny.pro/og.svg',
   themeColor: '#0A0A0B',
 })
 

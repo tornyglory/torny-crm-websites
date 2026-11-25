@@ -15,6 +15,8 @@ useSeoMeta({
   title: 'Contact',
   description: computed(() => `Get in touch with ${clubName.value} — email, phone, and where to find us.`),
   ogTitle: computed(() => `Contact ${clubName.value}`),
+  ogImage: '/og.svg?label=Contact',
+  twitterImage: '/og.svg?label=Contact',
 })
 
 const DAY_LABELS: Record<string, string> = {

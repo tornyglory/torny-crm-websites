@@ -29,6 +29,8 @@ useSeoMeta({
   title: 'Venue hire',
   description: computed(() => `Book ${clubName.value}'s space for your event — check availability and reserve online.`),
   ogTitle: computed(() => `Venue hire — ${clubName.value}`),
+  ogImage: '/og.svg?label=Venue+Hire',
+  twitterImage: '/og.svg?label=Venue+Hire',
   robots: 'noindex, follow',  // Booking page carries ?package= + ?space= query combos that bloat the index without adding value
 })
 </script>

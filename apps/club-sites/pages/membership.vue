@@ -13,6 +13,8 @@ useSeoMeta({
   title: 'Membership',
   description: computed(() => `Join ${clubName.value} — membership tiers, fees, and how to sign up online.`),
   ogTitle: computed(() => `Membership — ${clubName.value}`),
+  ogImage: '/og.svg?label=Membership',
+  twitterImage: '/og.svg?label=Membership',
 })
 
 const cadenceLabel = (c: string | null): string =>

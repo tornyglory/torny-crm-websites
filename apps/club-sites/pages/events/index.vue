@@ -12,6 +12,8 @@ useSeoMeta({
   title: 'Events',
   description: computed(() => `Upcoming tournaments, roll-ups, and social evenings at ${clubName.value}.`),
   ogTitle: computed(() => `Events — ${clubName.value}`),
+  ogImage: '/og.svg?label=Events',
+  twitterImage: '/og.svg?label=Events',
 })
 
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']

@@ -12,6 +12,8 @@ useSeoMeta({
   title: 'About',
   description: computed(() => `About ${clubName.value} — our history, our members, and what the club stands for.`),
   ogTitle: computed(() => `About ${clubName.value}`),
+  ogImage: '/og.svg?label=About',
+  twitterImage: '/og.svg?label=About',
 })
 </script>
 

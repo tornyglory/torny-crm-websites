@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Hourly smoke of the deployed public sites. Catches regressions
+    # that only reproduce on the live CF Workers runtime (the class
+    # that silently 500'd every page for ~2 weeks before a10ced3).
+    - cron: '17 * * * *'
   workflow_dispatch: {}
 
 concurrency:
@@ -13,6 +18,10 @@ concurrency:
 
 jobs:
   verify:
+    # Skip the PR gate on scheduled runs — the smoke job carries the
+    # scheduled traffic and verify's output is identical to the last
+    # push on main.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -37,3 +46,52 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  smoke:
+    # Runs after a push to main (waits for CF Pages to deploy), on the
+    # hourly schedule, and on manual dispatch. Doesn't block PRs —
+    # PR gating is verify's job. This is a post-deploy health check,
+    # and runs in parallel with verify on push; the deploy-wait buys
+    # enough time for verify to finish first in practice, but failures
+    # in either job surface independently rather than cascading.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: pnpm --filter @torny/club-sites exec playwright install --with-deps chromium
+
+      - name: Wait for CF Pages deploy
+        # CF Pages auto-deploys on push; typical build is 2-4 min. Skip
+        # on scheduled / manual runs since there's no new deploy to
+        # wait on.
+        if: github.event_name == 'push'
+        run: sleep 240
+
+      - name: Smoke the deployed public site
+        env:
+          # Default tenant for smoke — override by setting SMOKE_SITE_URL
+          # on workflow_dispatch if debugging a specific tenant.
+          SMOKE_SITE_URL: https://naenae-bowling-club.torny.pro
+        run: pnpm --filter @torny/club-sites smoke
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/club-sites/playwright-report
+          retention-days: 7

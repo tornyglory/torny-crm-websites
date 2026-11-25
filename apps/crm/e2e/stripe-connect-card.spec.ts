@@ -17,7 +17,6 @@ const CLUB_ID = 1
 
 async function seedAuthAndClub(page: Page, role: 'owner' | 'admin' = 'owner'): Promise<void> {
   await page.addInitScript((roleArg) => {
-    localStorage.setItem('torny.token', 'test-jwt-token-not-real')
     localStorage.setItem('torny.user', JSON.stringify({
       id: 1, email: 'test-admin@example.com', firstName: 'Test', lastName: 'Admin',
       role: roleArg, isPlatformAdmin: false,

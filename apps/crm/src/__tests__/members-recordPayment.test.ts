@@ -94,12 +94,16 @@ describe('members.recordPayment — request shape', () => {
     })
   })
 
-  it('attaches the bearer token from localStorage', async () => {
+  it('sends credentials: include so the browser attaches the session cookie', async () => {
+    // Brief 119 Phase B — session rides on the HttpOnly cookie, not a
+    // Bearer header. Pre-Phase B this test asserted
+    // `Authorization: Bearer test-token`. Now we verify the cookie
+    // path via credentials: include.
     fetchMock.mockResolvedValueOnce(okResponse(SUCCESS_PAYLOAD))
     await members.recordPayment(CLUB_ID, USER_ID, { amount: 100 })
     const [, init] = fetchMock.mock.calls[0]!
-    const auth = (init.headers as Record<string, string>)['Authorization']
-    expect(auth).toBe('Bearer test-token')
+    expect(init.credentials).toBe('include')
+    expect((init.headers as Record<string, string>).Authorization).toBeUndefined()
   })
 
   it('passes season_id through when provided', async () => {

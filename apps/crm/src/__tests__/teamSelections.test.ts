@@ -71,7 +71,9 @@ describe('teamSelections.list', () => {
       `${CRM_BASE}/clubs/${CLUB_ID}/team-selections?scope=upcoming&include_drafts=false&limit=25&offset=50`,
     )
     expect(init.method).toBe('GET')
-    expect(init.headers).toMatchObject({ Authorization: 'Bearer test-token' })
+    // Brief 119 Phase B — session rides on the HttpOnly cookie, not a
+    // Bearer header. Pin credentials: include instead.
+    expect(init.credentials).toBe('include')
   })
 
   it('omits the querystring entirely when no params are passed', async () => {

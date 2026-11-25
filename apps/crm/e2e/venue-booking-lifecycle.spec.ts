@@ -40,7 +40,6 @@ async function snap(page: Page, label: string): Promise<void> {
 
 async function seedAuthAndClub(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    localStorage.setItem('torny.token', 'test-jwt-token-not-real')
     localStorage.setItem('torny.user', JSON.stringify({
       id: 1, email: 'test-admin@example.com', firstName: 'Nev', lastName: 'Rodda',
       role: 'owner', isPlatformAdmin: false,

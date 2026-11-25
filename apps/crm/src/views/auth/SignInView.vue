@@ -56,13 +56,16 @@ async function submit(e: Event) {
   submitting.value = true
   error.value = null
   try {
-    const { token, user: apiUser } = await authApi.login(
+    // Brief 119 Phase B: the Set-Cookie on this response is the
+    // session. We ignore `token` in the body — still sent for the
+    // native Bearer flow but the browser lives off the cookie now.
+    const { user: apiUser } = await authApi.login(
       email.value.trim(),
       password.value,
       { baseURL: API_BASE },
     )
     const user = fromApiUser(apiUser)
-    auth.setSession(token, user)
+    auth.setSession(user)
     club.syncFromUserClubs(user.clubs)
     rateLimit.recordSuccess()
 

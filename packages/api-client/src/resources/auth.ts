@@ -90,8 +90,13 @@ export async function login(
   password: string,
   opts: { baseURL: string; signal?: AbortSignal },
 ): Promise<LoginResponse> {
+  // Brief 119: credentials: 'include' is required so the browser
+  // stores the Set-Cookie (`torny_sid`) the backend attaches on a
+  // successful /login response. Without it, the cookie is silently
+  // dropped on cross-origin responses.
   const res = await fetch(`${opts.baseURL}/login`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
     signal: opts.signal,
@@ -100,7 +105,27 @@ export async function login(
   if (!res.ok || json.status !== 'success' || !json.token || !json.user) {
     throw new AuthError(res.status, json.message ?? 'Invalid credentials', json.code)
   }
+  // Token is still returned for the native Bearer flow; the browser
+  // CRM ignores it and leans on the cookie that just got set.
   return { token: json.token, user: json.user }
+}
+
+/**
+ * Clears the server-side session row and tells the browser to drop
+ * the session cookie. Idempotent — 204 whether or not a session
+ * existed. See brief 119 §1.2.
+ */
+export async function logout(opts: { baseURL: string; signal?: AbortSignal }): Promise<void> {
+  // credentials: 'include' is required so the browser attaches the
+  // session cookie the backend needs to look up and delete the row.
+  await fetch(`${opts.baseURL}/logout`, {
+    method: 'POST',
+    credentials: 'include',
+    signal: opts.signal,
+  })
+  // Don't throw on 4xx/5xx — logout is best-effort. If the server
+  // can't reach the session store we'd rather the local state still
+  // clear than trap the user signed in.
 }
 
 export interface RegisterInput {
@@ -114,8 +139,12 @@ export async function register(
   input: RegisterInput,
   opts: { baseURL: string; signal?: AbortSignal },
 ): Promise<{ userId?: number }> {
+  // credentials: 'include' is safe even though /register doesn't set a
+  // cookie today (brief 119 Phase B.1 follow-up). Keeps the fetch
+  // consistent across the auth endpoints.
   const res = await fetch(`${opts.baseURL}/register`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
     signal: opts.signal,
@@ -137,6 +166,7 @@ export async function requestPasswordReset(
 ): Promise<void> {
   const res = await fetch(`${opts.baseURL}/request-password-reset`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
     signal: opts.signal,
@@ -151,6 +181,7 @@ export async function resetPassword(
 ): Promise<void> {
   const res = await fetch(`${opts.baseURL}/reset-password`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, newPassword }),
     signal: opts.signal,

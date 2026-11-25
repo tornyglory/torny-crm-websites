@@ -1,6 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { claims as claimsApi, ApiError, type AuthUser as ApiUser, type Role, type UserClub } from '@torny/api-client'
+import {
+  auth as authApi,
+  claims as claimsApi,
+  ApiError,
+  type AuthUser as ApiUser,
+  type Role,
+  type UserClub,
+} from '@torny/api-client'
+import { captureException } from '@/utils/sentry'
 
 export type { Role }
 
@@ -47,11 +55,19 @@ export function fromApiUser(u: ApiUser): AuthUser {
   }
 }
 
+/** Brief 119 Phase B: sessions live in an HttpOnly cookie, not localStorage.
+ *  Only the user shape is cached locally so the sidebar / nav can render
+ *  on first paint without waiting for /me. The persisted user is the only
+ *  thing we read on bootstrap; the session itself is proved by whatever
+ *  cookie the browser has (or doesn't). */
+const USER_STORAGE_KEY = 'torny.user'
+
+const SAM_BASE = import.meta.env.VITE_SAM_BASE_URL
+
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem('torny.token'))
   const user = ref<AuthUser | null>(
     (() => {
-      const raw = localStorage.getItem('torny.user')
+      const raw = localStorage.getItem(USER_STORAGE_KEY)
       if (!raw) return null
       try {
         return JSON.parse(raw) as AuthUser
@@ -61,7 +77,7 @@ export const useAuthStore = defineStore('auth', () => {
     })(),
   )
 
-  const isAuthenticated = computed(() => !!token.value)
+  const isAuthenticated = computed(() => user.value !== null)
   const role = computed(() => user.value?.role ?? null)
   const isPlatformAdmin = computed(() => user.value?.isPlatformAdmin === true)
   // Post-M3, canManageClub will also require a matching club_members role.
@@ -69,18 +85,32 @@ export const useAuthStore = defineStore('auth', () => {
   const canManageClub = computed(() => role.value === 'owner' || role.value === 'admin')
   const hasClubAccess = computed(() => (user.value?.clubs ?? []).length > 0)
 
-  function setSession(nextToken: string, nextUser: AuthUser) {
-    token.value = nextToken
+  /** Called on sign-in / register success. The session cookie is already
+   *  set by the time this runs — we only need to stash the user shape. */
+  function setSession(nextUser: AuthUser) {
     user.value = nextUser
-    localStorage.setItem('torny.token', nextToken)
-    localStorage.setItem('torny.user', JSON.stringify(nextUser))
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser))
   }
 
+  /** Local-only clear. Used when the server tells us the session's gone
+   *  (401 on /me) so there's nothing to log out of. */
   function clearSession() {
-    token.value = null
     user.value = null
-    localStorage.removeItem('torny.token')
-    localStorage.removeItem('torny.user')
+    localStorage.removeItem(USER_STORAGE_KEY)
+  }
+
+  /** Full sign-out: POST /logout so the server deletes the session row +
+   *  tells the browser to drop the cookie, then clears local state. If
+   *  the server call fails (network, 5xx) we still clear locally so the
+   *  user isn't trapped — the cookie will expire naturally in at most
+   *  30 days even if we couldn't tell the server now. */
+  async function logout(): Promise<void> {
+    try {
+      await authApi.logout({ baseURL: SAM_BASE })
+    } catch (err) {
+      captureException(err, { tags: { route: 'auth', step: 'logout' } })
+    }
+    clearSession()
   }
 
   /**
@@ -93,11 +123,11 @@ export const useAuthStore = defineStore('auth', () => {
    * circular import.
    */
   async function refresh(): Promise<void> {
-    if (!token.value) return
+    if (!user.value) return
     try {
       const apiUser = await claimsApi.me()
       user.value = fromApiUser(apiUser)
-      localStorage.setItem('torny.user', JSON.stringify(user.value))
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user.value))
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         clearSession()
@@ -111,19 +141,10 @@ export const useAuthStore = defineStore('auth', () => {
    *  the new values without a round-trip to GET /me. */
   function updateFromApi(apiUser: ApiUser): void {
     user.value = fromApiUser(apiUser)
-    localStorage.setItem('torny.user', JSON.stringify(user.value))
-  }
-
-  /** Swap the current JWT for a fresh one. Required after
-   *  POST /me/password-change (brief 71 §5) — the old token dies within
-   *  the ~5 min authorizer cache window. */
-  function rotateToken(nextToken: string): void {
-    token.value = nextToken
-    localStorage.setItem('torny.token', nextToken)
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user.value))
   }
 
   return {
-    token,
     user,
     isAuthenticated,
     role,
@@ -132,8 +153,8 @@ export const useAuthStore = defineStore('auth', () => {
     hasClubAccess,
     setSession,
     clearSession,
+    logout,
     refresh,
     updateFromApi,
-    rotateToken,
   }
 })

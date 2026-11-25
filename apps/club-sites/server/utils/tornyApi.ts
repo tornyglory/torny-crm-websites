@@ -288,9 +288,9 @@ interface Envelope<T> {
 const resolveMemo = new Map<string, { club: Club | null; expires: number }>()
 const RESOLVE_TTL_MS = 60_000
 
-function normaliseHost(h: string): string {
-  return h.toLowerCase().replace(/^www\./, '').replace(/:\d+$/, '')
-}
+// Re-exported from tornyApiHelpers.ts for backward compat. Pure helpers
+// live there so they're testable without the Nuxt `#imports` graph.
+export { normaliseHost, unwrapFacets } from './tornyApiHelpers'
 
 export async function resolveClubForHost(host: string): Promise<Club | null> {
   const key = normaliseHost(host)
@@ -396,53 +396,11 @@ export async function fetchVariant(slug: string): Promise<VariantConfig | null> 
 // Mirrors the api-client's CustomFacet shape — kept local so the
 // Nuxt server bundle doesn't pull in the CRM client just for types.
 
-export type FacetInputType =
-  | 'select'
-  | 'multi_select'
-  | 'radio'
-  | 'checkboxes'
-  | 'text'
-  | 'long_text'
-  | 'number'
-  | 'date'
-  | 'boolean'
-
-export interface FacetOption {
-  value: string
-  label: string
-}
-
-export interface CustomFacet {
-  facet_id: number
-  slug: string
-  label: string
-  helper_text: string | null
-  input_type: FacetInputType
-  options: FacetOption[]
-  required: boolean
-  searchable: boolean
-  section_key: string
-  display_order: number
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
-
-/** Unwrap a facets list payload. The backend uses `{data: [...]}` on
- *  some endpoints and `{data: {facets: [...]}}` on others; accept
- *  either so the FE doesn't silently drop rows when the shape shifts.
- *  Mirrors the equivalent helper in the api-client's customFacets
- *  resource (kept inline here so the server bundle stays slim). */
-function unwrapFacets(data: unknown): CustomFacet[] {
-  if (Array.isArray(data)) return data as CustomFacet[]
-  if (data && typeof data === 'object') {
-    const candidate = (data as Record<string, unknown>).facets
-      ?? (data as Record<string, unknown>).rows
-      ?? (data as Record<string, unknown>).items
-    if (Array.isArray(candidate)) return candidate as CustomFacet[]
-  }
-  return []
-}
+// Types were moved to tornyApiTypes.ts so the pure helpers in
+// tornyApiHelpers.ts can import them without pulling the Nuxt `#imports`
+// graph. Re-exported here for backward compat.
+export type { FacetInputType, FacetOption, CustomFacet } from './tornyApiTypes'
+import type { CustomFacet } from './tornyApiTypes'
 
 export async function fetchCustomFacets(slug: string): Promise<CustomFacet[]> {
   const config = useRuntimeConfig()

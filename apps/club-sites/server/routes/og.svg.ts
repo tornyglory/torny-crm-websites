@@ -67,7 +67,15 @@ function textColorFor(bg: string): { fg: string; muted: string } {
 }
 
 export default defineEventHandler(async (event) => {
-  const host = getRequestHeader(event, 'host') ?? 'torny.pro'
+  // CF tenant-router Worker fronts *.torny.pro and rewrites Host to the
+  // pages.dev origin — the real tenant host arrives in x-torny-tenant-host.
+  // Mirrors server/middleware/tenant.ts so this route resolves the same
+  // tenant the rest of the app does. Brief 97.
+  const host = (
+    getRequestHeader(event, 'x-torny-tenant-host')
+    ?? getRequestHeader(event, 'host')
+    ?? 'torny.pro'
+  ).toLowerCase()
   const query = getQuery(event)
   const labelParam = typeof query.label === 'string' ? query.label.trim() : ''
 

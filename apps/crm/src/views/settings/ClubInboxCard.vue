@@ -10,7 +10,7 @@
  * inline "Edit" button, debounced availability check, confirm modal
  * before save. Keeps the two handle-picking surfaces feeling identical.
  */
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import {
   ApiError,
   clubs,
@@ -31,6 +31,16 @@ const { isOwner } = usePermissions()
 const INBOX_DOMAIN = 'torny.pro'
 
 const currentHandle = computed<string>(() => clubStore.current?.emailHandle ?? '')
+
+/** The `UserClub` stub we get from login doesn't carry `emailHandle`,
+ *  and `hydrateFull` short-circuits once `slug` is cached — so an admin
+ *  who sets a handle in another browser (or re-logs in on a new device
+ *  after a handle was picked) sees the `yourclub@torny.pro` placeholder
+ *  until they edit. Forcing a full hydrate on mount keeps the card in
+ *  sync with the server. */
+onMounted(() => {
+  void clubStore.hydrateFull({ force: true })
+})
 const currentAddress = computed<string>(() =>
   currentHandle.value ? `${currentHandle.value}@${INBOX_DOMAIN}` : '',
 )

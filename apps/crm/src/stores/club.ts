@@ -126,6 +126,21 @@ export const useClubStore = defineStore('club', () => {
       const res = await authedFetch<Envelope<Club>>(`${CRM_BASE}/clubs/${c.id}`)
       const full = res.data
       if (!full) return
+      // The GET /clubs/:id payload uses snake_case for most fields
+      // (`email_handle`, `brand_primary`, `logo_url`, …) while the FE
+      // Club type uses camelCase — this hydrator was silently reading
+      // the camelCase keys only, so `emailHandle` + brand overrides
+      // never made it off the wire and the Inbox card kept rendering
+      // the `yourclub@torny.pro` placeholder even for clubs that had
+      // picked a handle months ago. Accept either spelling so we're
+      // resilient to further contract drift too.
+      const anyFull = full as unknown as Record<string, unknown>
+      const pick = <T>(camel: string, snake: string): T | undefined => {
+        const c = anyFull[camel]
+        if (c !== undefined) return c as T
+        const s = anyFull[snake]
+        return s === undefined ? undefined : (s as T)
+      }
       setCurrent({
         id: full.id,
         name: full.name ?? c.name,
@@ -136,15 +151,15 @@ export const useClubStore = defineStore('club', () => {
         // ship the field.
         subdomain: full.subdomain ?? full.slug ?? c.subdomain ?? null,
         domain: full.domain ?? null,
-        emailHandle: full.emailHandle ?? c.emailHandle ?? null,
-        brandPrimary: full.brandPrimary ?? c.brandPrimary ?? null,
-        brandAccent: full.brandAccent ?? c.brandAccent ?? null,
-        logoUrl: full.logoUrl ?? c.logoUrl ?? null,
-        faviconUrl: full.faviconUrl ?? c.faviconUrl ?? null,
-        imageStyle: full.imageStyle ?? c.imageStyle,
+        emailHandle: pick<string | null>('emailHandle', 'email_handle') ?? c.emailHandle ?? null,
+        brandPrimary: pick<string | null>('brandPrimary', 'brand_primary') ?? c.brandPrimary ?? null,
+        brandAccent: pick<string | null>('brandAccent', 'brand_accent') ?? c.brandAccent ?? null,
+        logoUrl: pick<string | null>('logoUrl', 'logo_url') ?? c.logoUrl ?? null,
+        faviconUrl: pick<string | null>('faviconUrl', 'favicon_url') ?? c.faviconUrl ?? null,
+        imageStyle: pick<Club['imageStyle']>('imageStyle', 'image_style') ?? c.imageStyle,
         fonts: full.fonts ?? c.fonts,
         style: full.style ?? c.style,
-        colorScheme: full.colorScheme ?? c.colorScheme,
+        colorScheme: pick<Club['colorScheme']>('colorScheme', 'color_scheme') ?? c.colorScheme,
         navigation: full.navigation ?? c.navigation,
       })
     } catch {

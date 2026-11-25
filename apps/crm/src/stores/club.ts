@@ -134,12 +134,23 @@ export const useClubStore = defineStore('club', () => {
       // the `yourclub@torny.pro` placeholder even for clubs that had
       // picked a handle months ago. Accept either spelling so we're
       // resilient to further contract drift too.
+      //
+      // Brief 100 ambiguity: the brief said the handle would be on
+      // `GET /clubs/{id}`, but the shape wasn't pinned down — some
+      // servers may nest the main club record under `data.club` with
+      // sibling sections alongside it. Look at both the flat and
+      // nested shapes before giving up.
       const anyFull = full as unknown as Record<string, unknown>
+      const nested = (anyFull.club ?? null) as Record<string, unknown> | null
       const pick = <T>(camel: string, snake: string): T | undefined => {
-        const c = anyFull[camel]
-        if (c !== undefined) return c as T
-        const s = anyFull[snake]
-        return s === undefined ? undefined : (s as T)
+        for (const bag of [anyFull, nested]) {
+          if (!bag) continue
+          const c = bag[camel]
+          if (c !== undefined) return c as T
+          const s = bag[snake]
+          if (s !== undefined) return s as T
+        }
+        return undefined
       }
       setCurrent({
         id: full.id,

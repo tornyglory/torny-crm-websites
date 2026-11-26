@@ -24,6 +24,7 @@ import NewMenu from '@/components/NewMenu.vue'
 import UserMenu from '@/components/UserMenu.vue'
 import CrmToast from '@/components/CrmToast.vue'
 import AccountSuspendedModal from '@/components/AccountSuspendedModal.vue'
+import AdminImpersonationBanner from '@/components/admin/AdminImpersonationBanner.vue'
 
 const auth = useAuthStore()
 const club = useClubStore()
@@ -676,6 +677,10 @@ const bottomTabs = computed<TabItem[]>(() => {
 
 <template>
   <div class="shell">
+    <!-- Brief 123 §6.1 — sticky impersonation banner. Mounted at the
+         top of the shell so every CRM route in an impersonated session
+         keeps the context (and the exit button) visible. -->
+    <AdminImpersonationBanner />
     <!-- Backdrop for the mobile / tablet drawer. -->
     <div
       v-if="drawerOpen"

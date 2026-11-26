@@ -33,6 +33,7 @@ const routes: RouteRecordRaw[] = [
       { path: '', redirect: { name: 'admin-dashboard' } },
       { path: 'dashboard', name: 'admin-dashboard', component: () => import('@/views/admin/AdminDashboardView.vue') },
       { path: 'accounts', name: 'admin-accounts', component: () => import('@/views/admin/AdminClubsView.vue') },
+      { path: 'accounts/:id', name: 'admin-account-detail', component: () => import('@/views/admin/AdminAccountDetailView.vue') },
       { path: 'users', name: 'admin-users', component: () => import('@/views/admin/AdminUsersView.vue') },
     ],
   },

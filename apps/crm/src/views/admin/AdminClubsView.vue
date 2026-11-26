@@ -12,6 +12,7 @@
  * ship reviewable.
  */
 import { ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { admin, ApiError, type AdminAccountRow, type AdminAccountsList } from '@torny/api-client'
 import { useAdminWindow } from '@/composables/useAdminWindow'
 import AdminWindowToggle from '@/components/admin/AdminWindowToggle.vue'
@@ -19,7 +20,12 @@ import AdminMoney from '@/components/admin/AdminMoney.vue'
 import AdminFlagBadges from '@/components/admin/AdminFlagBadges.vue'
 import AdminEmptyState from '@/components/admin/AdminEmptyState.vue'
 
+const router = useRouter()
 const { window, setWindow } = useAdminWindow()
+
+function openDetail(id: number) {
+  void router.push({ name: 'admin-account-detail', params: { id: String(id) } })
+}
 const search = ref('')
 
 const data = ref<AdminAccountsList | null>(null)
@@ -133,7 +139,12 @@ const PLAN_LABELS: Record<string, string> = { starter: 'Starter', pro: 'Pro', co
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in data?.items" :key="row.id">
+          <tr
+            v-for="row in data?.items"
+            :key="row.id"
+            class="accounts__row"
+            @click="openDetail(row.id)"
+          >
             <td>
               <div class="accounts__name">{{ row.name }}</div>
               <div class="accounts__sub-name">{{ row.subdomain }} · {{ row.owner_email ?? '—' }}</div>
@@ -189,6 +200,7 @@ const PLAN_LABELS: Record<string, string> = { starter: 'Starter', pro: 'Pro', co
 .accounts__table td { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); }
 .accounts__table td.num,
 .accounts__table th.num { text-align: right; }
+.accounts__row { cursor: pointer; }
 .accounts__table tbody tr:hover { background: var(--color-surface); }
 .accounts__table tbody tr:last-child td { border-bottom: 0; }
 .accounts__name { font-weight: 600; color: var(--color-ink); }

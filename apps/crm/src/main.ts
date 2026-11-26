@@ -6,6 +6,7 @@ import { router } from './router'
 import { initSentry } from './utils/sentry'
 import { installPreloadErrorRecovery } from './utils/preloadErrorRecovery'
 import { onApiError as onApiErrorSuspension } from './composables/useAccountSuspendedModal'
+import { restore as restoreImpersonation } from './composables/useImpersonation'
 
 import '@torny/design-tokens/fonts.css'
 import '@torny/design-tokens/tokens.css'
@@ -20,6 +21,11 @@ installPreloadErrorRecovery()
 // at the api-client level and trigger the blocking modal; no per-view
 // catch wiring required.
 registerApiErrorObserver(onApiErrorSuspension)
+
+// Brief 123 §6.1 — rehydrate impersonation session from sessionStorage
+// so a mid-session refresh doesn't drop the admin's short-lived Bearer
+// override. Safe to call before mount; it just sets module state.
+restoreImpersonation()
 
 const app = createApp(App)
 // Sentry before plugins so it can wrap the Vue error handler + the

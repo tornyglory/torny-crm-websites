@@ -59,6 +59,23 @@ function readToken(): string | null {
   return localStorage.getItem(TOKEN_STORAGE_KEY)
 }
 
+// ── Short-lived token override (impersonation) ─────────────────────
+// Set by the platform-admin impersonation flow (brief 123 §6.1). When
+// non-null, authedFetch uses this JWT instead of the one in
+// localStorage. Clearing it (setImpersonationToken(null)) restores the
+// normal flow — the admin's cookie session is untouched throughout.
+//
+// Not persisted here — the CRM stashes it in sessionStorage separately
+// so a refresh mid-session keeps the override; this module stays
+// stateless to simplify testing.
+let impersonationToken: string | null = null
+
+/** Set / clear the temporary auth override. Pass null to restore the
+ *  localStorage-backed session token. */
+export function setImpersonationToken(token: string | null): void {
+  impersonationToken = token
+}
+
 export interface AuthedFetchInit extends RequestInit {
   /** Optional override — otherwise reads from localStorage. */
   token?: string | null
@@ -75,7 +92,8 @@ export async function authedFetch<T = unknown>(
   init: AuthedFetchInit = {},
 ): Promise<T> {
   const { token: overrideToken, headers, ...rest } = init
-  const token = overrideToken ?? readToken()
+  // Priority: per-call `token` arg → impersonation override → localStorage.
+  const token = overrideToken ?? impersonationToken ?? readToken()
 
   return doFetch<T>(url, {
     ...rest,

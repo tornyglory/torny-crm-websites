@@ -621,3 +621,215 @@ export async function updateUser(
   )
   return res.data
 }
+
+// ════════════════════════════════════════════════════════════════
+// Phase 3 — transactions drilldown, communications, timeline
+// enrichment on getAccount (shape unchanged from Phase 2),
+// nightly plan-reverter (operational — no FE surface)
+// ════════════════════════════════════════════════════════════════
+
+// ── Transactions drilldown ───────────────────────────────────────
+
+/** Polymorphic transaction kinds. Phase 3 ships `venue_booking` +
+ *  `tournament_entry`; `subscription_charge` + `addon_charge` land
+ *  when their own tables arrive (Stripe sub webhook mirror + brief
+ *  122). Forward-compat via `| (string & {})`. */
+export type AdminTransactionKind =
+  | 'venue_booking'
+  | 'tournament_entry'
+  | 'subscription_charge'
+  | 'addon_charge'
+  | (string & {})
+
+/** Public status enum. Server maps per-kind DB enums into this set —
+ *  confirmed|completed → succeeded, pending|pending_payment → pending,
+ *  cancelled|declined|withdrew → failed, refunded → refunded. */
+export type AdminTransactionStatus = 'succeeded' | 'refunded' | 'failed' | 'pending'
+
+export interface AdminTransactionRef {
+  kind: AdminTransactionKind
+  id: number
+  /** Human-readable label — rendered as the row's primary descriptor
+   *  in the Transactions tab. */
+  label: string
+}
+
+export interface AdminTransactionMember {
+  id: number
+  name: string
+  email: string
+}
+
+export interface AdminTransactionRow {
+  /** Prefixed string id — `vb_<n>` for venue bookings, `te_<n>` for
+   *  tournament entries. Reserved prefixes: `sc_` (subscription_charge),
+   *  `ac_` (addon_charge). */
+  id: string
+  at: string
+  kind: AdminTransactionKind
+  amount_cents: number
+  platform_fee_cents: number
+  club_net_cents: number
+  stripe_charge_id: string | null
+  stripe_dashboard_url: string | null
+  ref: AdminTransactionRef
+  /** Null when the transaction was anonymous (guest booking w/out
+   *  member linkage). */
+  member: AdminTransactionMember | null
+  status: AdminTransactionStatus
+}
+
+export interface AdminTransactionsList {
+  items: AdminTransactionRow[]
+  next_cursor: string | null
+  total_count: number
+  aggregates: {
+    gross_cents: number
+    platform_take_cents: number
+    /** Partial `Record<AdminTransactionKind, number>` — only the kinds
+     *  with non-zero counts in the window appear. */
+    count_by_kind: Partial<Record<AdminTransactionKind, number>>
+  }
+}
+
+export interface ListTransactionsParams {
+  window?: AdminWindow
+  filter?: {
+    /** Comma-separated string accepted by the server; the FE helper
+     *  joins arrays into that shape. */
+    kind?: AdminTransactionKind | AdminTransactionKind[]
+    status?: AdminTransactionStatus
+  }
+  /** Default `-at` (newest first). `-amount_cents` supported. */
+  sort?: '-at' | '-amount_cents'
+  limit?: number
+  cursor?: string
+  signal?: AbortSignal
+}
+
+/** `GET /admin/accounts/:id/transactions` — polymorphic stream of
+ *  bookings + entries + (future) charges for the Transactions tab. */
+export async function listTransactions(
+  accountId: number,
+  params: ListTransactionsParams = {},
+): Promise<AdminTransactionsList> {
+  const query: Record<string, string | number | boolean | undefined> = {
+    window: params.window,
+    sort: params.sort,
+    limit: params.limit,
+    cursor: params.cursor,
+  }
+  if (params.filter) {
+    for (const [k, v] of Object.entries(params.filter)) {
+      if (v === undefined) continue
+      // Join arrays into comma-separated server shape.
+      query[`filter[${k}]`] = Array.isArray(v) ? v.join(',') : (v as string | number | boolean)
+    }
+  }
+  const res = await authedFetch<Envelope<AdminTransactionsList>>(
+    `${VENUE_BASE}/admin/accounts/${accountId}/transactions${toQuery(query)}`,
+    { method: 'GET', signal: params.signal, bypassImpersonation: true },
+  )
+  return res.data
+}
+
+// ── Per-club communications ──────────────────────────────────────
+
+export interface AdminCommunicationBatch {
+  id: number
+  sent_at: string
+  subject: string
+  /** e.g. `'club_newsletter'`, `'event_reminder'`. Forward-compat. */
+  flavor: string
+  /** Human-readable audience descriptor — "All active members", "Pro
+   *  members only", etc. */
+  audience_label: string
+  sent_by_user_id: number | null
+  sent_by_user_name: string | null
+  sent_by_user_email: string | null
+  /** Per-batch click count — available in Phase 3. No per-batch
+   *  unsub count (email_unsubscribes is keyed by `(club_id, email)`);
+   *  use aggregates.unsubs_in_window for the club-level total. */
+  click_count: number
+}
+
+export interface AdminCommunicationsList {
+  items: AdminCommunicationBatch[]
+  next_cursor: string | null
+  total_count: number
+  aggregates: {
+    sent_in_window: number
+    clicks_in_window: number
+    unsubs_in_window: number
+    /** Null until Phase 3b lights up SES per-recipient events. Treat
+     *  as "no bounce data yet" in the UI, not "0% bounce rate". */
+    bounce_rate_in_window: number | null
+    /** Null until Phase 3b — needs delivered count. */
+    unsub_rate_in_window: number | null
+  }
+  /** Phase 3b flips this on when SES event tracking ships. */
+  ses_events_available: boolean
+}
+
+export interface ListCommunicationsParams {
+  window?: AdminWindow
+  limit?: number
+  cursor?: string
+  signal?: AbortSignal
+}
+
+/** `GET /admin/accounts/:id/communications` — per-club email batch
+ *  history for the Communications tab. */
+export async function listCommunications(
+  accountId: number,
+  params: ListCommunicationsParams = {},
+): Promise<AdminCommunicationsList> {
+  const query: Record<string, string | number | boolean | undefined> = {
+    window: params.window,
+    limit: params.limit,
+    cursor: params.cursor,
+  }
+  const res = await authedFetch<Envelope<AdminCommunicationsList>>(
+    `${VENUE_BASE}/admin/accounts/${accountId}/communications${toQuery(query)}`,
+    { method: 'GET', signal: params.signal, bypassImpersonation: true },
+  )
+  return res.data
+}
+
+// ── Platform-wide communications metrics ─────────────────────────
+
+export interface AdminHighBounceAccount {
+  account_id: number
+  name: string
+  bounce_rate: number
+  sent: number
+}
+
+export interface AdminMetricsCommunications {
+  window: AdminWindow
+  sent_batches: number
+  clicks: number
+  unsubscribes: number
+  /** Null until Phase 3b — needs SES per-recipient event tracking. */
+  delivered_rate: number | null
+  bounce_rate: number | null
+  complaint_rate: number | null
+  high_bounce_accounts: AdminHighBounceAccount[]
+  ses_events_available: boolean
+  /** Null until Phase 3b — needs SES API integration. */
+  ses_daily_quota: number | null
+  ses_daily_sent: number | null
+  ses_sandbox_mode: boolean | null
+}
+
+/** `GET /admin/metrics/communications` — platform-wide SES health.
+ *  Rate fields ship as honest null in Phase 3; Phase 3b fills them. */
+export async function metricsCommunications(
+  params: { window?: AdminWindow; signal?: AbortSignal } = {},
+): Promise<AdminMetricsCommunications> {
+  const res = await authedFetch<Envelope<AdminMetricsCommunications>>(
+    `${VENUE_BASE}/admin/metrics/communications${toQuery({ window: params.window })}`,
+    { method: 'GET', signal: params.signal, bypassImpersonation: true },
+  )
+  return res.data
+}

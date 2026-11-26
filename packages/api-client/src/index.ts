@@ -253,6 +253,20 @@ export type {
   ListUsersParams as AdminListUsersParams,
   UpdateUserInput as AdminUpdateUserInput,
   UpdatedUser as AdminUpdatedUser,
+  // Phase 3 — transactions drilldown
+  AdminTransactionKind,
+  AdminTransactionStatus,
+  AdminTransactionRef,
+  AdminTransactionMember,
+  AdminTransactionRow,
+  AdminTransactionsList,
+  ListTransactionsParams as AdminListTransactionsParams,
+  // Phase 3 — communications
+  AdminCommunicationBatch,
+  AdminCommunicationsList,
+  ListCommunicationsParams as AdminListCommunicationsParams,
+  AdminHighBounceAccount,
+  AdminMetricsCommunications,
 } from './resources/admin'
 export * as notifications from './resources/notifications'
 export type {

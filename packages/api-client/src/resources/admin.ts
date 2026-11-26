@@ -280,7 +280,7 @@ export async function listAccounts(
   }
   const res = await authedFetch<Envelope<AdminAccountsList>>(
     `${VENUE_BASE}/admin/accounts${toQuery(query)}`,
-    { method: 'GET', signal: params.signal },
+    { method: 'GET', signal: params.signal, bypassImpersonation: true },
   )
   return res.data
 }
@@ -293,7 +293,7 @@ export async function getAccount(
 ): Promise<AdminAccountDetail> {
   const res = await authedFetch<Envelope<AdminAccountDetail>>(
     `${VENUE_BASE}/admin/accounts/${id}${toQuery({ window: params.window })}`,
-    { method: 'GET', signal: params.signal },
+    { method: 'GET', signal: params.signal, bypassImpersonation: true },
   )
   return res.data
 }
@@ -304,7 +304,7 @@ export async function metricsOverview(
 ): Promise<AdminMetricsOverview> {
   const res = await authedFetch<Envelope<AdminMetricsOverview>>(
     `${VENUE_BASE}/admin/metrics/overview${toQuery({ window: params.window })}`,
-    { method: 'GET', signal: params.signal },
+    { method: 'GET', signal: params.signal, bypassImpersonation: true },
   )
   return res.data
 }
@@ -316,7 +316,7 @@ export async function metricsBilling(
 ): Promise<AdminMetricsBilling> {
   const res = await authedFetch<Envelope<AdminMetricsBilling>>(
     `${VENUE_BASE}/admin/metrics/billing${toQuery({ window: params.window })}`,
-    { method: 'GET', signal: params.signal },
+    { method: 'GET', signal: params.signal, bypassImpersonation: true },
   )
   return res.data
 }
@@ -361,7 +361,7 @@ export async function impersonate(
 ): Promise<AdminImpersonateResult> {
   const res = await authedFetch<Envelope<AdminImpersonateResult>>(
     `${VENUE_BASE}/admin/accounts/${accountId}/impersonate`,
-    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal, bypassImpersonation: true },
   )
   return res.data
 }
@@ -400,7 +400,7 @@ export async function planOverride(
 ): Promise<AdminPlanOverrideResult> {
   const res = await authedFetch<Envelope<AdminPlanOverrideResult>>(
     `${VENUE_BASE}/admin/accounts/${accountId}/plan-override`,
-    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal, bypassImpersonation: true },
   )
   return res.data
 }
@@ -431,7 +431,7 @@ export async function suspend(
 ): Promise<AdminSuspendResult> {
   const res = await authedFetch<Envelope<AdminSuspendResult>>(
     `${VENUE_BASE}/admin/accounts/${accountId}/suspend`,
-    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal, bypassImpersonation: true },
   )
   return res.data
 }
@@ -449,7 +449,7 @@ export async function unsuspend(
 ): Promise<{ ok: true }> {
   const res = await authedFetch<Envelope<{ ok: true }>>(
     `${VENUE_BASE}/admin/accounts/${accountId}/unsuspend`,
-    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal, bypassImpersonation: true },
   )
   return res.data
 }
@@ -533,7 +533,7 @@ export async function listAudit(
   }
   const res = await authedFetch<Envelope<AdminAuditList>>(
     `${VENUE_BASE}/admin/audit${toQuery(query)}`,
-    { method: 'GET', signal: params.signal },
+    { method: 'GET', signal: params.signal, bypassImpersonation: true },
   )
   return res.data
 }
@@ -592,7 +592,7 @@ export async function listUsers(
   }
   const res = await authedFetch<Envelope<AdminUsersList>>(
     `${VENUE_BASE}/admin/users${toQuery(query)}`,
-    { method: 'GET', signal: params.signal },
+    { method: 'GET', signal: params.signal, bypassImpersonation: true },
   )
   return res.data
 }
@@ -617,7 +617,7 @@ export async function updateUser(
 ): Promise<UpdatedUser> {
   const res = await authedFetch<Envelope<UpdatedUser>>(
     `${VENUE_BASE}/admin/users/${userId}`,
-    { method: 'PATCH', body: JSON.stringify(input), signal: opts.signal },
+    { method: 'PATCH', body: JSON.stringify(input), signal: opts.signal, bypassImpersonation: true },
   )
   return res.data
 }

@@ -79,6 +79,13 @@ export function setImpersonationToken(token: string | null): void {
 export interface AuthedFetchInit extends RequestInit {
   /** Optional override — otherwise reads from localStorage. */
   token?: string | null
+  /** When true, skip the impersonation token override and read
+   *  straight from localStorage. Admin endpoints must run as the
+   *  platform admin, never as the impersonated user — otherwise a
+   *  mid-impersonation admin action gets 403 not_platform_owner from
+   *  its own Bearer JWT (the impersonation JWT has isPlatformAdmin:
+   *  false by design — brief 123 §6.1). */
+  bypassImpersonation?: boolean
 }
 
 /**
@@ -91,9 +98,12 @@ export async function authedFetch<T = unknown>(
   url: string,
   init: AuthedFetchInit = {},
 ): Promise<T> {
-  const { token: overrideToken, headers, ...rest } = init
-  // Priority: per-call `token` arg → impersonation override → localStorage.
-  const token = overrideToken ?? impersonationToken ?? readToken()
+  const { token: overrideToken, bypassImpersonation, headers, ...rest } = init
+  // Priority: per-call `token` arg → impersonation override (unless
+  // bypassed) → localStorage.
+  const token = overrideToken
+    ?? (bypassImpersonation ? null : impersonationToken)
+    ?? readToken()
 
   return doFetch<T>(url, {
     ...rest,

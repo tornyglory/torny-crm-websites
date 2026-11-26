@@ -213,9 +213,11 @@ export type {
   PortalInput as BillingPortalInput,
   PortalResult as BillingPortalResult,
 } from './resources/billing'
-// Brief 123 — platform admin portal. Phase 1 (read-only) live.
+// Brief 123 — platform admin portal. Phase 1 (read) + Phase 2
+// (actions + audit + users) live.
 export * as admin from './resources/admin'
 export type {
+  // Phase 1 — read
   AdminWindow,
   AdminAccountPlan,
   AdminAccountSubscriptionStatus,
@@ -228,6 +230,29 @@ export type {
   AdminMetricsOverview,
   AdminMetricsBilling,
   ListAccountsParams as AdminListAccountsParams,
+  // Phase 2 — actions
+  AdminImpersonateInput,
+  AdminImpersonateResult,
+  AdminPlanOverrideInput,
+  AdminPlanOverrideResult,
+  AdminSuspendInput,
+  AdminSuspendResult,
+  AdminUnsuspendInput,
+  // Phase 2 — audit log
+  AdminAuditAction,
+  AdminAuditActor,
+  AdminAuditTargetClub,
+  AdminAuditTargetUser,
+  AdminAuditEntry,
+  AdminAuditList,
+  ListAuditParams as AdminListAuditParams,
+  // Phase 2 — platform users
+  AdminUserClubMembership,
+  AdminUser,
+  AdminUsersList,
+  ListUsersParams as AdminListUsersParams,
+  UpdateUserInput as AdminUpdateUserInput,
+  UpdatedUser as AdminUpdatedUser,
 } from './resources/admin'
 export * as notifications from './resources/notifications'
 export type {

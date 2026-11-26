@@ -1,35 +1,40 @@
 # Brief 123 — Platform admin portal redesign
 
-**STATUS — PHASE 1 SHIPPED 2026-11-26 (commit 562541b).**
+**STATUS — PHASE 1 + PHASE 2 SHIPPED 2026-11-26 (commits `562541b`, `c53bcdd`).**
 
-Read-only slice of the new admin surface is live — accounts list + detail + two metrics dashboards. The FE can start building the new Admin shell against these endpoints today. Admin actions (§8 in the original brief) and system health (§10) + communications (§6) land in Phase 2 and 3.
+Phase 1 (read endpoints) + Phase 2 (admin actions + audit + users + suspension gate) are live. Only Phase 3 (transactions drilldown + communications + system health + trend sparklines) remains.
+
+The FE can now build the full admin shell end-to-end — all the support tools (impersonate, comp plan, suspend) are available.
 
 **URL deviation from the brief spec:** endpoints live on `VENUE_BASE`, not the CRM base. Same reason as every recent admin-adjacent endpoint — TornyCrmStack is at the CloudFormation 500-resource cap.
 
 **Role-gate deviation:** backend reuses the existing `users.is_platform_admin` column + the existing `isPlatformAdmin` JWT claim. The brief calls the role `platform_owner`; backend treats the terms as synonyms. Response payloads keep the brief's naming conventions so the FE contract is stable.
 
-**Scope shipped (Phase 1):**
+**Scope shipped (Phase 1 + Phase 2):**
 
+Phase 1 (read endpoints):
 - `GET /admin/accounts` — list with filters, sort, search, cursor pagination
 - `GET /admin/accounts/{account_id}` — detail + lightweight timeline
 - `GET /admin/metrics/overview` — platform dashboard
 - `GET /admin/metrics/billing` — billing dashboard
 
-**Deferred to Phase 2:**
-
-- Admin actions: impersonate, plan-override, suspend/unsuspend (§8)
-- `/admin/audit` endpoint + writes to the already-provisioned `platform_admin_audit` table
-- `/admin/users` reshape + platform-owner grant/revoke (§7)
-- Timeline event kinds beyond the Phase 1 basics
-- `past_due` / `churned_in_window` flags (need Stripe subscription webhook mirror)
+Phase 2 (admin actions + audit + users):
+- `POST /admin/accounts/{account_id}/impersonate` — 15-min JWT with `impersonated_by` claim
+- `POST /admin/accounts/{account_id}/plan-override` — comp plan with time-boxed `until`
+- `POST /admin/accounts/{account_id}/suspend` — soft-disable
+- `POST /admin/accounts/{account_id}/unsuspend` — restore
+- `GET /admin/audit` — paginated audit log reader with filters
+- `GET /admin/users` — cross-tenant user list + club memberships
+- `PATCH /admin/users/{user_id}` — grant / revoke `is_platform_owner`
+- **Suspension enforcement** — every mutating CRM handler that passes through `requireClubRole()` returns `409 account_suspended` for suspended clubs. Blast radius covers the whole admin write surface.
 
 **Deferred to Phase 3:**
-
-- `/admin/accounts/:id/transactions` drilldown (§4.3)
-- `/admin/accounts/:id/communications` + `/admin/metrics/communications` (§6)
-- `/admin/system/health` — Sentry + GitHub deploys + SES + smoke gate (§10)
+- `/admin/accounts/:id/transactions` drilldown (§4.3 of original brief)
+- `/admin/accounts/:id/communications` + `/admin/metrics/communications`
+- `/admin/system/health` — Sentry + GitHub deploys + SES + smoke gate
 - `high_bounce_rate` flag (SES stats integration)
 - Trend sparklines (returns empty arrays today; FE should treat empty as "no trend data")
+- Nightly job that reverts expired `plan_manual_until` (today manual overrides persist indefinitely past `until` until a human takes action — FE should treat `plan_manual_until < NOW()` as "override expired, pending revert")
 
 ---
 
@@ -45,292 +50,353 @@ Every endpoint requires a JWT (Bearer header) or HttpOnly session cookie (brief 
 
 ## 2. `GET /admin/accounts` — list
 
-```
-GET /admin/accounts
-    ?window=7d|30d|90d|ytd|all        default 30d
-    ?filter[plan]=starter|pro|comped
-    ?filter[status]=active|suspended  Phase 1 limited set; more in Phase 2
-    ?filter[inactive_days]=N          clubs with no admin login in >N days
-    ?filter[has_transactions]=true    clubs with bookings OR entries in window
-    ?sort=mrr|revenue|members|signup|last_login|bookings|tournament_gmv
-        prefix with `-` for desc. Default `-last_login`.
-    ?q=<search>                       matches name, subdomain, owner_email
-    ?limit=50                         max 200
-    ?cursor=<opaque>                  continue
-```
-
-**Response:**
-
-```jsonc
-{
-    "status": "success",
-    "data": {
-        "items": [
-            {
-                "id": 5,
-                "name": "Naenae Bowling Club",
-                "subdomain": "naenae-bowling-club",
-                "owner_email": "neville@naenaebc.co.nz",
-                "signup_at": "2026-08-24T09:43:22.000Z",
-                "last_admin_login_at": "2026-11-26T00:35:00.000Z",
-
-                "plan": "pro",                      // 'starter' | 'pro' | 'comped'
-                "plan_actual": "pro",               // the DB value — useful when plan === 'comped'
-                "plan_source": "derived",           // 'derived' from Stripe | 'manual' (comp)
-                "subscription_status": "active",    // Phase 1: 'active' | 'inactive' | 'suspended'
-                "mrr_cents": 7900,
-                "lifetime_revenue_cents": 12015,    // platform fee lifetime, booking + tournament
-                "addons": [],                       // Brief 122 — empty until first paid addon ships
-
-                "member_count": 9,
-                "member_joins_30d": 4,              // field renames to _7d / _90d / _ytd / _all per window
-                "bookings_30d": 9,
-                "bookings_gmv_30d_cents": 1824500,
-                "tournament_entries_30d": 1,
-                "tournament_gmv_30d_cents": 2500,
-                "emails_sent_30d": 6,               // currently counts batches, not recipients — Phase 3 switches to recipient count
-                "platform_take_30d_cents": 12015,
-
-                "flags": {
-                    "past_due": false,              // Phase 2 — Stripe webhook mirror
-                    "high_bounce_rate": false,      // Phase 3 — SES stats
-                    "suspended": false,
-                    "comped_until": null            // non-null ISO when plan_source === 'manual'
-                }
-            }
-        ],
-        "next_cursor": null,
-        "total_count": 4
-    }
-}
-```
-
-### 2.1 Window field renaming
-
-The `_30d` suffix tracks the `?window` param. `?window=7d` renames `bookings_30d → bookings_7d`, etc. Same for `_90d`, `_ytd`, `_all`. The FE should read the field keys dynamically rather than hardcoding `_30d`.
+Unchanged from Phase 1. See prior revision of this doc for the full shape — summary:
+- `?window=7d|30d|90d|ytd|all` (default `30d`)
+- `?filter[plan|status|inactive_days|has_transactions]`
+- `?sort=mrr|revenue|members|signup|last_login|bookings|tournament_gmv` with `-` prefix for desc
+- `?q=<search>`, `?limit`, `?cursor`
+- Row shape renames `_30d` → `_7d`/`_90d`/`_ytd`/`_all` to match the window
 
 ---
 
 ## 3. `GET /admin/accounts/{account_id}` — detail
 
-Same row shape as §2 plus a `timeline` array.
+Same row shape + a `timeline` array. Phase 1 timeline kinds are `signup`, `suspended`, `plan_change` (manual-only). Phase 2 adds real-event timeline from the audit table — see §6.5.
+
+FE should render unknown `kind` values gracefully (generic chip + raw `detail`).
+
+---
+
+## 4. `GET /admin/metrics/overview` — unchanged
+
+## 5. `GET /admin/metrics/billing` — unchanged
+
+(Shapes as per the Phase 1 doc — trend arrays still empty until Phase 3.)
+
+---
+
+## 6. Phase 2 — admin actions (all live)
+
+### 6.1 `POST /admin/accounts/{account_id}/impersonate`
 
 ```jsonc
+// Request — reason is required, max 500 chars
+{ "reason": "support-ticket-4421" }
+
+// 200
 {
-    "status": "success",
-    "data": {
-        "account": { /* row shape from §2 */ },
-        "timeline": [
-            { "at": "2026-08-24T09:43:22.000Z", "kind": "signup", "detail": null }
-            // More kinds land in Phase 2 — see below for the Phase 1 catalog.
+  "status": "success",
+  "data": {
+    "impersonation_jwt": "eyJhbGciOi…",
+    "expires_at": "2026-11-26T02:00:00.000Z",       // 15 min from now
+    "impersonated_user_id": 1111,
+    "impersonated_user_email": "nigel@torny.co"
+  }
+}
+```
+
+**JWT semantics:**
+- 15-minute TTL (JWT `expiresIn`)
+- Shape matches a normal login JWT so downstream handlers treat it identically
+- Carries an `impersonated_by: <platform_admin_user_id>` claim for attribution
+- `isPlatformAdmin: false` — the target cannot elevate via the session
+
+**FE wiring:** drop the JWT into `Authorization: Bearer <jwt>` as a temporary override of the admin's own cookie. Don't persist it. When the 15 min expires or the admin clicks "exit impersonation", restore the cookie-based session (do nothing — the cookie's still there, you just stop sending Bearer).
+
+**Guards:**
+- `409 cannot_impersonate_platform_owner` if the target club's owner is also a platform owner
+- `409 no_owner` if the account has no `owner_user_id`
+- `400 reason_required` if reason is missing or empty
+
+### 6.2 `POST /admin/accounts/{account_id}/plan-override`
+
+```jsonc
+// Request
+{
+  "plan": "pro",                          // 'starter' or 'pro'
+  "until": "2027-04-12T00:00:00Z",        // optional; null = indefinite; must be future
+  "reason": "BW-free-build-deal"          // required
+}
+
+// 200
+{
+  "status": "success",
+  "data": {
+    "ok": true,
+    "effective_plan": "pro",
+    "plan_source": "manual",
+    "comped_until": "2027-04-12T00:00:00.000Z"
+  }
+}
+```
+
+**Effect:** writes `clubs_data.plan = plan, plan_source = 'manual', plan_manual_until = <until>`. The accounts row's `plan` field flips to `'comped'` on subsequent reads.
+
+**When `until` passes:** a nightly job (to be added in Phase 3, not shipped yet) will revert and emit a `plan_change` audit event. For now, manual overrides persist indefinitely past `until` until someone takes action — the FE should treat `plan_manual_until < NOW()` as "override expired, pending revert" in the UI.
+
+### 6.3 `POST /admin/accounts/{account_id}/suspend`
+
+```jsonc
+// Request
+{
+  "reason": "payment-dispute-2026-11-25",
+  "notify_owner": true                    // optional — email not sent yet in Phase 2
+}
+
+// 200
+{ "status": "success", "data": { "ok": true, "suspended_at": "2026-11-26T14:12:00.000Z" } }
+```
+
+**Effect:** writes `clubs_data.suspended_at = NOW(), suspended_reason, suspended_by_user_id`. Every subsequent mutating CRM endpoint for that club returns:
+
+```jsonc
+// Any PUT/POST/PATCH/DELETE on /clubs/{suspended_cid}/…
+{
+  "status": "error",
+  "code": "account_suspended",
+  "message": "This account is suspended. Contact Torny support for assistance."
+}
+```
+
+with HTTP 409.
+
+**What's NOT blocked by suspension:**
+- Read endpoints (GET)
+- Public site (`/public/clubs/{slug}/site` still renders)
+- The owner can still sign in and see the Settings page — they just can't change anything
+
+**FE pattern:** admin shell shows a red banner + modal when any CRM write returns `account_suspended`. "Contact support" CTA.
+
+**Guards:** `409 already_suspended` if `suspended_at` is already non-null. `400 reason_required`.
+
+### 6.4 `POST /admin/accounts/{account_id}/unsuspend`
+
+```jsonc
+// Request
+{ "reason": "resolved-2026-11-27" }
+
+// 200
+{ "status": "success", "data": { "ok": true } }
+```
+
+Clears `suspended_at, suspended_reason, suspended_by_user_id`. Audit-logged.
+
+**Guard:** `409 not_suspended` if the account isn't currently suspended.
+
+### 6.5 `GET /admin/audit`
+
+```
+GET /admin/audit
+    ?filter[actor]=<user_id>
+    ?filter[target_club]=<club_id>
+    ?filter[target_user]=<user_id>
+    ?filter[action]=impersonate|comp_plan|suspend|unsuspend|grant_platform_owner|revoke_platform_owner
+    ?limit=50                    max 200
+    ?cursor=<opaque>
+```
+
+```jsonc
+// 200
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "id": 1821,
+        "at": "2026-11-26T01:44:25.000Z",
+        "action": "impersonate",
+        "actor": { "user_id": 53, "email": "nev@torny.co", "name": "Neville Rodda" },
+        "target_club": { "id": 5, "name": "Naenae Bowling Club", "subdomain": "naenae-bowling-club" },
+        "target_user": { "id": 1111, "email": "nigel@torny.co" },
+        "reason": "support-ticket-4421",
+        "payload": { "reason": "support-ticket-4421" },
+        "ip": "202.37.71.10",
+        "user_agent": "Mozilla/5.0 …"
+      }
+    ],
+    "next_cursor": null,
+    "total_count": 142
+  }
+}
+```
+
+Sorted by `at DESC`, then `id DESC`.
+
+### 6.6 `GET /admin/users`
+
+```
+GET /admin/users
+    ?q=<search>                              // email or name substring
+    ?filter[is_platform_owner]=true
+    ?filter[multi_club]=true                 // users with ≥2 active club memberships
+    ?limit=50                                max 200
+    ?cursor=<opaque>
+```
+
+```jsonc
+// 200
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "id": 1111,
+        "name": "Neville Rodda",
+        "email": "nigel@torny.co",
+        "signup_at": "2026-08-20T09:00:14.000Z",
+        "last_login_at": "2026-11-26T00:54:09.000Z",
+        "is_platform_owner": false,
+        "club_memberships": [
+          { "club_id": 5, "club_name": "Naenae Bowling Club", "role": "owner" },
+          { "club_id": 3, "club_name": "Melbourne Bowling Club", "role": "owner" }
         ]
-    }
+      }
+    ],
+    "next_cursor": "NTA=",
+    "total_count": 1113
+  }
 }
 ```
 
-**Phase 1 timeline event kinds** — only those that can be derived from existing DB state:
-
-| kind | When |
-|---|---|
-| `signup` | `clubs_data.provisioned_at` — always present |
-| `suspended` | When `clubs_data.suspended_at` is non-null. `detail: { reason, by_user_id }` |
-| `plan_change` | When `plan_source === 'manual'`. `detail: { to, source: 'manual', until }`. Phase 2 moves this to real event rows from the audit table. |
-
-**Timeline kinds coming in Phase 2 / 3:** `plan_change` (real events), `addon_added`, `addon_removed`, `payment_succeeded`, `payment_failed`, `payment_recovered`, `subscription_canceled`, `impersonated`, `comped`, `unsuspended`, `support_flagged`. The FE should render unknown `kind` values gracefully (generic chip + raw `detail`) so new kinds landing server-side don't require a FE release.
-
-Query param `?timeline_since=<iso>` is accepted today but currently ignored by the Phase 1 lightweight timeline; it becomes meaningful in Phase 2.
-
----
-
-## 4. `GET /admin/metrics/overview`
+### 6.7 `PATCH /admin/users/{user_id}`
 
 ```jsonc
+// Request
+{ "is_platform_owner": true }   // or false
+
+// 200
 {
-    "status": "success",
-    "data": {
-        "window": "30d",
-        "accounts": {
-            "total": 4,
-            "signups_in_window": 0,
-            "active_in_window": 4,            // had admin login in window
-            "paying": 1,
-            "comped": 0,
-            "suspended": 0,
-            "past_due": 0,                    // Phase 2
-            "churned_in_window": 0            // Phase 2
-        },
-        "revenue_cents": {
-            "mrr": 7900,
-            "transactional_in_window": 12015,
-            "total_in_window": 19915
-        },
-        "activity": {
-            "bookings_in_window": 9,
-            "bookings_gmv_in_window_cents": 1824500,
-            "tournament_entries_in_window": 1,
-            "tournament_gmv_in_window_cents": 2500,
-            "emails_sent_in_window": 6,
-            "member_joins_in_window": 3
-        },
-        "trends": {
-            "mrr_cents": [],                  // empty in Phase 1 — Phase 2 fills 12-point sparkline
-            "transactional_cents": [],
-            "signups": [],
-            "churn": []
-        }
-    }
+  "status": "success",
+  "data": {
+    "id": 182,
+    "email": "neville@naenaebc.co.nz",
+    "is_platform_owner": true
+  }
 }
 ```
 
----
+Writes `users.is_platform_admin`. Audit-logged with `action: 'grant_platform_owner'` or `'revoke_platform_owner'`.
 
-## 5. `GET /admin/metrics/billing`
-
-```jsonc
-{
-    "status": "success",
-    "data": {
-        "window": "30d",
-        "subscription": {
-            "mrr_cents": 7900,
-            "annualised_cents": 94800,       // mrr × 12
-            "trend_cents": []                // Phase 2
-        },
-        "transactional": {
-            "gmv_cents": 1827000,
-            "platform_take_cents": 12015,
-            "effective_take_rate": 0.00658,  // 0.658%
-            "trend_platform_take_cents": [],
-            "by_kind": {
-                "venue_booking_gmv_cents": 1824500,
-                "venue_booking_take_cents": 11915,
-                "tournament_entry_gmv_cents": 2500,
-                "tournament_entry_take_cents": 100,
-                "addon_gmv_cents": 0,         // Brief 122 — zero until paid addons ship
-                "addon_take_cents": 0
-            }
-        },
-        "failed_payments": {                 // Phase 2 — all zero in Phase 1
-            "past_due_count": 0,
-            "past_due_value_cents": 0,
-            "retrying": 0
-        },
-        "stripe_payouts": {                  // Phase 3 — all zero/null in Phase 1
-            "pending_cents": 0,
-            "last_payout_at": null,
-            "last_payout_cents": 0
-        }
-    }
-}
-```
+**Guard:** `409 cannot_demote_self` if you try to revoke your own flag (defence against locking everyone out of the admin portal).
 
 ---
 
-## 6. Error codes
+## 7. Error codes
 
 | HTTP | code | When |
 |---|---|---|
 | 400 | `bad_window` | `?window` not in `7d\|30d\|90d\|ytd\|all` |
 | 400 | `bad_sort` | `?sort` key not in the allow-list (§2) |
 | 400 | `bad_filter` | invalid filter value |
-| 400 | `bad_params` | path param missing (e.g. `/admin/accounts/` with no id) |
+| 400 | `bad_params` | path param missing |
+| 400 | `bad_json` | body isn't valid JSON |
+| 400 | `bad_plan` | plan not `'starter'` or `'pro'` (§6.2) |
+| 400 | `bad_until` | `until` not ISO 8601 or not in the future (§6.2) |
+| 400 | `reason_required` | reason field missing (all action endpoints) |
+| 400 | `reason_too_long` | reason > 500 chars |
 | 401 | — | no valid JWT / cookie session |
 | 403 | `not_platform_owner` | authed user lacks `is_platform_admin = 1` |
-| 404 | (no code) | account id doesn't exist |
-| 405 | `method_not_allowed` | something other than GET |
+| 404 | `account_not_found` | account id doesn't exist |
+| 404 | `user_not_found` | user id doesn't exist |
+| 405 | `method_not_allowed` | wrong HTTP method |
+| 409 | `account_suspended` | any CRM mutation on a suspended club (§6.3) |
+| 409 | `already_suspended` / `not_suspended` | suspend/unsuspend state guards (§6.3, §6.4) |
+| 409 | `cannot_impersonate_platform_owner` | §6.1 |
+| 409 | `cannot_demote_self` | §6.7 |
+| 409 | `no_owner` | §6.1 — account has no `owner_user_id` |
 | 500 | `internal` | unexpected error |
 
 ---
 
-## 7. FE wiring
+## 8. FE wiring
 
-### 7.1 `packages/api-client/src/resources/admin.ts` (new)
+Admin resource lives at `packages/api-client/src/resources/admin.ts`. Phase 2 adds `impersonate`, `planOverride`, `suspend`, `unsuspend`, `listAudit`, `listUsers`, `updateUser`.
 
-See the backend team's sample code at the end of this file for a starter resource module. Key points:
+**`409 account_suspended` is a CRM-wide concern**, not just admin: every mutating handler for a suspended club returns this code. Wire a global `ApiError` handler that shows a blocking modal with "Contact support" CTA when the code surfaces anywhere in the CRM — not just the admin surface. This is the suspension enforcement UX.
 
-- Endpoints live on `VENUE_BASE`, not CRM base
-- Use `authedFetch<Envelope<T>>` and return `res.data`
-- Window-variant field keys use template literal types so TS stays strict
+### 8.1 Window toggle
 
-### 7.2 Window toggle
+Build one top-level `<AdminWindowToggle>` component with the 5 values. URL-driven state via `useAdminWindow` composable.
 
-Build one top-level `<WindowToggle>` component with the 5 values. It controls both metrics endpoints + the accounts list. The field-name rename (§2.1) means you can't just template the suffix — read `Object.keys(row)` and detect the window-scoped keys at render time, OR store the current window in the store and template as `row[`bookings_${window}`]`. Latter is cleaner.
-
-### 7.3 Role check on client
+### 8.2 Role check on client
 
 `isPlatformOwner` check for showing the Admin shell: inspect `authStore.user.is_platform_admin` (or whatever the `/me` response names it today). The brief uses `is_platform_owner` on API responses; just accept both when wiring.
 
 ---
 
-## 8. Verification (live, 2026-11-26)
+## 9. Verification (live, 2026-11-26)
+
+Phase 1 verification commands unchanged. Phase 2 additions:
 
 ```bash
 VENUE="https://tbqlfxlc0e.execute-api.ap-southeast-2.amazonaws.com/Prod"
 TOKEN=<platform admin JWT or cookie session>
 
-# 1. List — default window=30d, default sort=-last_login
-curl -s "$VENUE/admin/accounts?limit=5&sort=-revenue" -H "Cookie: torny_sid=$TOKEN" | jq '.data.items[0] | {id, name, plan, mrr_cents, lifetime_revenue_cents, bookings_30d, platform_take_30d_cents}'
-# → Naenae with real production numbers
+# Impersonate
+curl -s "$VENUE/admin/accounts/5/impersonate" -XPOST -H "Cookie: torny_sid=$TOKEN" -H "Content-Type: application/json" \
+  -d '{"reason":"support-check"}' | jq '.data | {expires_at, impersonated_user_email}'
 
-# 2. Detail + timeline
-curl -s "$VENUE/admin/accounts/5" -H "Cookie: torny_sid=$TOKEN" | jq '{plan: .data.account.plan, timeline: [.data.timeline[].kind]}'
+# Comp plan
+curl -s "$VENUE/admin/accounts/5/plan-override" -XPOST -H "Cookie: torny_sid=$TOKEN" -H "Content-Type: application/json" \
+  -d '{"plan":"pro","until":"2027-04-12T00:00:00Z","reason":"BW-deal"}'
 
-# 3. Overview metrics
-curl -s "$VENUE/admin/metrics/overview" -H "Cookie: torny_sid=$TOKEN" | jq '.data'
+# Suspend + unsuspend (round trip)
+curl -s "$VENUE/admin/accounts/5/suspend" -XPOST -H "Cookie: torny_sid=$TOKEN" -H "Content-Type: application/json" \
+  -d '{"reason":"test","notify_owner":false}'
+curl -s "$VENUE/admin/accounts/5/unsuspend" -XPOST -H "Cookie: torny_sid=$TOKEN" -H "Content-Type: application/json" \
+  -d '{"reason":"test resolved"}'
 
-# 4. Billing metrics
-curl -s "$VENUE/admin/metrics/billing" -H "Cookie: torny_sid=$TOKEN" | jq '.data.transactional.by_kind'
+# Audit log tail
+curl -s "$VENUE/admin/audit?limit=5" -H "Cookie: torny_sid=$TOKEN" | jq '.data.items[] | {at, action, reason}'
 
-# 5. 403 non-admin
-curl -s -o /dev/null -w "%{http_code}\n" "$VENUE/admin/accounts" -H "Cookie: torny_sid=<non-admin session>"
-# → 403
+# Users
+curl -s "$VENUE/admin/users?q=neville" -H "Cookie: torny_sid=$TOKEN" | jq '.data.items[0] | {id, email, is_platform_owner, club_memberships}'
+
+# Grant platform owner
+curl -s "$VENUE/admin/users/182" -XPATCH -H "Cookie: torny_sid=$TOKEN" -H "Content-Type: application/json" \
+  -d '{"is_platform_owner":true}'
 ```
 
-**Live sample numbers (Naenae, 2026-11-26):**
-- `plan: pro`, `plan_source: derived`
-- MRR: $79, lifetime platform take: $120.15
-- 9 bookings in 30d worth $18,245 GMV
-- 1 tournament entry worth $25 GMV
-- 9 members, 4 joined in 30d
+---
+
+## 10. Pass criteria
+
+### Phase 1 (unchanged — all previously verified)
+
+### Phase 2 (verify after FE wires actions)
+
+- [ ] Impersonate mints a 15-min JWT that logs in as the target owner. Session shows an exit banner.
+- [ ] Impersonation emits a timeline event on the target account (via audit log tail).
+- [ ] Comp plan flips `plan` to `'comped'` on the next account read, with `comped_until` populated.
+- [ ] Suspend → any CRM mutation on that club returns `409 account_suspended`. Public site still renders. Settings page still loads read-only.
+- [ ] Unsuspend restores mutations.
+- [ ] Audit log includes one row per action with the correct `reason`.
+- [ ] Grant/revoke platform owner flips `is_platform_admin`.
+- [ ] `cannot_demote_self` prevents self-revoke.
+- [ ] Nothing in the audit `payload` field leaks credentials or JWT contents.
+
+### Phase 3 criteria (not yet shipped)
+
+Transactions drilldown, communications, system health — land with the matching ship.
 
 ---
 
-## 9. Pass criteria
-
-### Phase 1 (what you can test today)
-
-- ✓ `GET /admin/accounts` returns the row shape in §2 with real numbers from a pro club
-- ✓ `?window=7d|30d|90d|ytd|all` honored; metric fields rename accordingly
-- ✓ `?filter[plan]=pro&sort=-mrr` filters + sorts correctly
-- ✓ `?q=naenae` returns Naenae on the first page
-- ✓ `GET /admin/accounts/5` timeline includes `signup` at minimum
-- ✓ `GET /admin/metrics/overview.revenue_cents.mrr` matches sum of pro-plan subscriptions × $79
-- ✓ `GET /admin/metrics/billing.transactional.platform_take_cents` matches lifetime bookings + entries platform fee
-- ✓ Non-admin JWT / cookie → `403 not_platform_owner` on every endpoint
-- ✓ CORS allows the current CRM dev origin
-
-### Phase 2 / 3 criteria (not yet shipped)
-
-The remaining pass-criteria from the original brief §13 — impersonation, plan override, suspension, timeline full catalog, `past_due` flag, audit table GET, non-platform_owner grant/revoke — land with the matching ships.
-
----
-
-## 10. Non-goals (per original brief §14)
+## 11. Non-goals
 
 Unchanged — multi-currency, real-time push, deep historical OLAP, GDPR / DSR flow, team collaboration UX, billing writes from admin portal, FE-triggered CSV exports, fine-grained admin roles beyond `platform_owner`. All deferred for V1.
 
 ---
 
-## 11. Related briefs
+## 12. Related briefs
 
-- Brief 86 — plan tiers (MRR source of truth). Phase 1 reads the `plan` + `plan_source` columns.
+- Brief 86 — plan tiers (MRR source of truth)
 - Brief 93 — plan on session hydrate. Same gate reuses `isPlatformAdmin` claim.
 - Brief 100 — per-club inbox. Email metrics in Phase 3 will join to batches by `club_id`.
-- Brief 119 — HttpOnly cookies. Cookie path authorizer picks up `is_platform_admin` as part of this ship's bugfix.
-- Brief 122 — paid addon blocks. `addons` + `addon_gmv_cents` + `addon_take_cents` surfaces are already shaped; they'll start carrying data when the first paid addon ships.
+- Brief 119 — HttpOnly cookies. Cookie path authorizer picks up `is_platform_admin`.
+- Brief 122 — paid addon blocks. `addons` + `addon_gmv_cents` + `addon_take_cents` shapes ready.
 
 ---
 
-## 12. Contact
+## 13. Contact
 
-Nev on #torny-eng. Phase 2 work starts after Phase 1 is wired into the FE and we've seen a few live admin sessions.
+Nev on #torny-eng. Phase 3 timing TBD.

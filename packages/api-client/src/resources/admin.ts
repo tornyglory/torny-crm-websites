@@ -1,15 +1,23 @@
-// Platform admin portal — backend brief 123 §7.1 (live doc).
+// Platform admin portal — backend brief 123.
 //
-// Phase 1 is read-only: accounts list + detail + two metrics dashboards.
-// Phase 2 (impersonate, plan-override, suspend/unsuspend, audit, users
-// reshape) and Phase 3 (transactions drilldown, communications, system
-// health) will extend this file — keep the exports additive.
+// Phase 1 (read) + Phase 2 (actions + audit + users) are live. Phase 3
+// (transactions drilldown, communications, system health, trend
+// sparklines) is still pending.
 //
-// Endpoints:
-//   GET /admin/accounts                 — list with filters + sort + search + cursor pagination
-//   GET /admin/accounts/:id             — detail + timeline
-//   GET /admin/metrics/overview         — platform dashboard
-//   GET /admin/metrics/billing          — billing dashboard
+// Phase 1 endpoints:
+//   GET    /admin/accounts                            — list with filters + sort + search + cursor pagination
+//   GET    /admin/accounts/:id                        — detail + timeline
+//   GET    /admin/metrics/overview                    — platform dashboard
+//   GET    /admin/metrics/billing                     — billing dashboard
+//
+// Phase 2 endpoints:
+//   POST   /admin/accounts/:id/impersonate            — mint 15-min JWT to act as the account's owner
+//   POST   /admin/accounts/:id/plan-override          — comp plan with time-boxed `until`
+//   POST   /admin/accounts/:id/suspend                — soft-disable (blocks CRM mutations)
+//   POST   /admin/accounts/:id/unsuspend              — restore
+//   GET    /admin/audit                               — paginated audit log reader
+//   GET    /admin/users                               — cross-tenant user list
+//   PATCH  /admin/users/:id                           — grant / revoke is_platform_owner
 //
 // URL note: admin endpoints live on VENUE_BASE (same as every recent
 // admin-adjacent endpoint — TornyCrmStack is at the CloudFormation 500-
@@ -18,6 +26,12 @@
 // Role gate: every endpoint requires an authed session with
 // `users.is_platform_admin = 1`. Non-admins get `403 not_platform_owner`
 // with a spartan body (no shape hints).
+//
+// Suspension enforcement: when an account is suspended (§Phase 2), every
+// mutating CRM handler for that club returns `409 account_suspended`.
+// This affects the whole CRM, not just the admin shell — the global
+// ApiError handler should surface a "Contact support" modal when the
+// code appears.
 
 import { VENUE_BASE } from '../config'
 import { authedFetch } from '../http'
@@ -303,6 +317,307 @@ export async function metricsBilling(
   const res = await authedFetch<Envelope<AdminMetricsBilling>>(
     `${VENUE_BASE}/admin/metrics/billing${toQuery({ window: params.window })}`,
     { method: 'GET', signal: params.signal },
+  )
+  return res.data
+}
+
+// ════════════════════════════════════════════════════════════════
+// Phase 2 — admin actions, audit log, platform users
+// ════════════════════════════════════════════════════════════════
+
+// ── Impersonation ────────────────────────────────────────────────
+
+export interface AdminImpersonateInput {
+  /** Required by backend. Max 500 chars. Audit-logged on the target
+   *  account so every impersonation session is attributable. */
+  reason: string
+}
+
+export interface AdminImpersonateResult {
+  /** 15-minute JWT. Drop into `Authorization: Bearer <jwt>` as a
+   *  temporary override of the admin's cookie session; don't persist
+   *  to localStorage or a store. When the TTL expires or admin exits,
+   *  just stop sending the Bearer header — the cookie's still there. */
+  impersonation_jwt: string
+  /** ISO 8601. 15 minutes from mint time. */
+  expires_at: string
+  impersonated_user_id: number
+  impersonated_user_email: string
+}
+
+/** `POST /admin/accounts/:id/impersonate` — mint a short-lived JWT
+ *  that logs the caller in as the target account's owner. Carries an
+ *  `impersonated_by` claim for attribution, `isPlatformAdmin: false`
+ *  so the target cannot elevate via the session.
+ *
+ *  Errors:
+ *    - `409 cannot_impersonate_platform_owner` — target owner is also a platform owner
+ *    - `409 no_owner` — account has no owner_user_id
+ *    - `400 reason_required` — empty / missing reason */
+export async function impersonate(
+  accountId: number,
+  input: AdminImpersonateInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<AdminImpersonateResult> {
+  const res = await authedFetch<Envelope<AdminImpersonateResult>>(
+    `${VENUE_BASE}/admin/accounts/${accountId}/impersonate`,
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+  )
+  return res.data
+}
+
+// ── Plan override (comp) ─────────────────────────────────────────
+
+export interface AdminPlanOverrideInput {
+  /** The plan to assign. Writing the current plan is allowed (idempotent-ish). */
+  plan: 'starter' | 'pro'
+  /** ISO 8601 — when the override expires and reverts to Stripe truth.
+   *  Must be in the future. Null / omitted = indefinite. Note Phase 2
+   *  limitation: the nightly revert job lands in Phase 3; today manual
+   *  overrides persist past `until` until a human takes action. The FE
+   *  should treat `plan_manual_until < NOW()` as "override expired,
+   *  pending revert" in the UI. */
+  until?: string | null
+  /** Required. Audit-logged + visible on the account timeline. */
+  reason: string
+}
+
+export interface AdminPlanOverrideResult {
+  ok: true
+  effective_plan: 'starter' | 'pro'
+  plan_source: 'manual'
+  comped_until: string | null
+}
+
+/** `POST /admin/accounts/:id/plan-override` — strategic comps (e.g.
+ *  free Pro for Bowls Wellington in exchange for the case study).
+ *  Overrides Stripe-derived plan resolution; `plan_source` flips to
+ *  `'manual'`. */
+export async function planOverride(
+  accountId: number,
+  input: AdminPlanOverrideInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<AdminPlanOverrideResult> {
+  const res = await authedFetch<Envelope<AdminPlanOverrideResult>>(
+    `${VENUE_BASE}/admin/accounts/${accountId}/plan-override`,
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+  )
+  return res.data
+}
+
+// ── Suspend / unsuspend ──────────────────────────────────────────
+
+export interface AdminSuspendInput {
+  reason: string
+  /** Optional — when true the server sends a templated email to the
+   *  owner. Phase 2: field accepted but email not yet sent server-side. */
+  notify_owner?: boolean
+}
+
+export interface AdminSuspendResult {
+  ok: true
+  suspended_at: string
+}
+
+/** `POST /admin/accounts/:id/suspend` — soft-disable. Blocks every
+ *  mutating CRM handler for the club with `409 account_suspended`.
+ *  Reads + public site keep working. Reversible via `unsuspend`.
+ *
+ *  Error: `409 already_suspended` if `suspended_at` is already set. */
+export async function suspend(
+  accountId: number,
+  input: AdminSuspendInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<AdminSuspendResult> {
+  const res = await authedFetch<Envelope<AdminSuspendResult>>(
+    `${VENUE_BASE}/admin/accounts/${accountId}/suspend`,
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+  )
+  return res.data
+}
+
+export interface AdminUnsuspendInput {
+  reason: string
+}
+
+/** `POST /admin/accounts/:id/unsuspend` — restore CRM mutations.
+ *  Error: `409 not_suspended` if the account isn't currently suspended. */
+export async function unsuspend(
+  accountId: number,
+  input: AdminUnsuspendInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<{ ok: true }> {
+  const res = await authedFetch<Envelope<{ ok: true }>>(
+    `${VENUE_BASE}/admin/accounts/${accountId}/unsuspend`,
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal },
+  )
+  return res.data
+}
+
+// ── Audit log ────────────────────────────────────────────────────
+
+export type AdminAuditAction =
+  | 'impersonate'
+  | 'comp_plan'
+  | 'suspend'
+  | 'unsuspend'
+  | 'grant_platform_owner'
+  | 'revoke_platform_owner'
+
+export interface AdminAuditActor {
+  user_id: number
+  email: string
+  name: string | null
+}
+
+export interface AdminAuditTargetClub {
+  id: number
+  name: string
+  subdomain: string
+}
+
+export interface AdminAuditTargetUser {
+  id: number
+  email: string
+}
+
+export interface AdminAuditEntry {
+  id: number
+  at: string
+  action: AdminAuditAction
+  actor: AdminAuditActor
+  /** Null for user-scoped actions (grant / revoke platform owner). */
+  target_club: AdminAuditTargetClub | null
+  /** Null for club-scoped actions (comp, suspend). */
+  target_user: AdminAuditTargetUser | null
+  reason: string
+  /** Full request body of the action. Sanitised server-side — no
+   *  credentials or JWT contents; verify in audit verification §10.
+   *  Shape depends on action; render raw JSON in the UI for forensic use. */
+  payload: unknown
+  ip: string
+  user_agent: string
+}
+
+export interface AdminAuditList {
+  items: AdminAuditEntry[]
+  next_cursor: string | null
+  total_count: number
+}
+
+export interface ListAuditParams {
+  filter?: {
+    actor?: number
+    target_club?: number
+    target_user?: number
+    action?: AdminAuditAction
+  }
+  limit?: number
+  cursor?: string
+  signal?: AbortSignal
+}
+
+/** `GET /admin/audit` — paginated audit log. Sorted `at DESC, id DESC`. */
+export async function listAudit(
+  params: ListAuditParams = {},
+): Promise<AdminAuditList> {
+  const query: Record<string, string | number | boolean | undefined> = {
+    limit: params.limit,
+    cursor: params.cursor,
+  }
+  if (params.filter) {
+    for (const [k, v] of Object.entries(params.filter)) {
+      if (v === undefined) continue
+      query[`filter[${k}]`] = v as string | number | boolean
+    }
+  }
+  const res = await authedFetch<Envelope<AdminAuditList>>(
+    `${VENUE_BASE}/admin/audit${toQuery(query)}`,
+    { method: 'GET', signal: params.signal },
+  )
+  return res.data
+}
+
+// ── Platform users ───────────────────────────────────────────────
+
+export interface AdminUserClubMembership {
+  club_id: number
+  club_name: string
+  role: 'owner' | 'admin' | 'staff' | (string & {})
+}
+
+export interface AdminUser {
+  id: number
+  name: string | null
+  email: string
+  signup_at: string | null
+  last_login_at: string | null
+  is_platform_owner: boolean
+  club_memberships: AdminUserClubMembership[]
+}
+
+export interface AdminUsersList {
+  items: AdminUser[]
+  next_cursor: string | null
+  total_count: number
+}
+
+export interface ListUsersParams {
+  q?: string
+  filter?: {
+    is_platform_owner?: true
+    /** Users with ≥2 active club memberships. Useful for support
+     *  triage ("which humans touch multiple clubs"). */
+    multi_club?: true
+  }
+  limit?: number
+  cursor?: string
+  signal?: AbortSignal
+}
+
+/** `GET /admin/users` — cross-tenant user list. */
+export async function listUsers(
+  params: ListUsersParams = {},
+): Promise<AdminUsersList> {
+  const query: Record<string, string | number | boolean | undefined> = {
+    q: params.q,
+    limit: params.limit,
+    cursor: params.cursor,
+  }
+  if (params.filter) {
+    for (const [k, v] of Object.entries(params.filter)) {
+      if (v === undefined) continue
+      query[`filter[${k}]`] = v as string | number | boolean
+    }
+  }
+  const res = await authedFetch<Envelope<AdminUsersList>>(
+    `${VENUE_BASE}/admin/users${toQuery(query)}`,
+    { method: 'GET', signal: params.signal },
+  )
+  return res.data
+}
+
+export interface UpdateUserInput {
+  is_platform_owner: boolean
+}
+
+export interface UpdatedUser {
+  id: number
+  email: string
+  is_platform_owner: boolean
+}
+
+/** `PATCH /admin/users/:id` — grant / revoke the platform-owner flag.
+ *  Audit-logged. Guard: `409 cannot_demote_self` if you try to revoke
+ *  your own flag (defence against locking everyone out). */
+export async function updateUser(
+  userId: number,
+  input: UpdateUserInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<UpdatedUser> {
+  const res = await authedFetch<Envelope<UpdatedUser>>(
+    `${VENUE_BASE}/admin/users/${userId}`,
+    { method: 'PATCH', body: JSON.stringify(input), signal: opts.signal },
   )
   return res.data
 }

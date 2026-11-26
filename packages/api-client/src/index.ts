@@ -213,6 +213,22 @@ export type {
   PortalInput as BillingPortalInput,
   PortalResult as BillingPortalResult,
 } from './resources/billing'
+// Brief 123 — platform admin portal. Phase 1 (read-only) live.
+export * as admin from './resources/admin'
+export type {
+  AdminWindow,
+  AdminAccountPlan,
+  AdminAccountSubscriptionStatus,
+  AdminAccountSort,
+  AdminTimelineKind,
+  AdminAccountRow,
+  AdminTimelineEvent,
+  AdminAccountDetail,
+  AdminAccountsList,
+  AdminMetricsOverview,
+  AdminMetricsBilling,
+  ListAccountsParams as AdminListAccountsParams,
+} from './resources/admin'
 export * as notifications from './resources/notifications'
 export type {
   NotificationKind,

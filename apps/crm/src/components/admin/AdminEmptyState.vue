@@ -1,0 +1,91 @@
+<script setup lang="ts">
+/**
+ * Shared empty / deferred state across the admin shell. Three flavours:
+ *   - "no-results" (filter returned nothing)
+ *   - "deferred" (feature waiting on backend Phase 2/3 — surface the
+ *     wait + its brief reference so admins know why)
+ *   - "error" (fetch failed — surface retry)
+ */
+withDefaults(defineProps<{
+  tone?: 'no-results' | 'deferred' | 'error'
+  title: string
+  detail?: string
+  /** Reference brief / phase for `deferred` tone — rendered as a small
+   *  monospace chip for engineers viewing the admin. */
+  waitsOn?: string
+}>(), {
+  tone: 'no-results',
+})
+
+defineEmits<{ (e: 'retry'): void }>()
+</script>
+
+<template>
+  <div class="empty" :class="`empty--${tone}`">
+    <div class="empty__title">{{ title }}</div>
+    <div v-if="detail" class="empty__detail">{{ detail }}</div>
+    <div v-if="waitsOn" class="empty__waits-on">Waits on <code>{{ waitsOn }}</code></div>
+    <button
+      v-if="tone === 'error'"
+      type="button"
+      class="empty__retry"
+      @click="$emit('retry')"
+    >Retry</button>
+  </div>
+</template>
+
+<style scoped>
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 24px;
+  background: rgba(255,255,255,0.02);
+  border: 1px dashed rgba(255,255,255,0.12);
+  border-radius: 14px;
+  text-align: center;
+}
+.empty__title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+}
+.empty__detail {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: rgba(255,255,255,0.55);
+  max-width: 44ch;
+  line-height: 1.5;
+}
+.empty__waits-on {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
+  margin-top: 4px;
+}
+.empty__waits-on code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  color: rgba(255,255,255,0.8);
+}
+.empty__retry {
+  margin-top: 8px;
+  padding: 8px 18px;
+  background: #fff;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.empty--error { border-color: #d14e4e55; }
+.empty--deferred { border-style: solid; border-color: rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); }
+</style>

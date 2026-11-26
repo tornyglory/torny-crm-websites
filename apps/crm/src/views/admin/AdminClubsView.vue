@@ -1,177 +1,200 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useClaimsStore } from '@/stores/claims'
-import { usePlatformStatsStore } from '@/stores/platformStats'
-import { SPORTS, SPORT_CODES, sportShort, type SportCode } from '@/stores/sports'
+/**
+ * Accounts list — brief 123 §2, backend Phase 1.
+ *
+ * Phase A ships a basic table against `admin.listAccounts`. Phase A
+ * follow-up (next ship) adds the full filter rail, sort controls,
+ * cursor "Load more", and detail navigation. For now: window toggle,
+ * search box, and a readable row per account with the critical metrics.
+ *
+ * Route stays `/admin/accounts` even though the view file retains the
+ * old `AdminClubsView.vue` name — rename in a follow-up to keep this
+ * ship reviewable.
+ */
+import { ref, watch } from 'vue'
+import { admin, ApiError, type AdminAccountRow, type AdminAccountsList } from '@torny/api-client'
+import { useAdminWindow } from '@/composables/useAdminWindow'
+import AdminWindowToggle from '@/components/admin/AdminWindowToggle.vue'
+import AdminMoney from '@/components/admin/AdminMoney.vue'
+import AdminFlagBadges from '@/components/admin/AdminFlagBadges.vue'
+import AdminEmptyState from '@/components/admin/AdminEmptyState.vue'
 
-const claims = useClaimsStore()
-const platform = usePlatformStatsStore()
+const { window, setWindow } = useAdminWindow()
+const search = ref('')
 
-interface ClubRow { name: string; region: string; sport: SportCode; status: 'active' | 'pending' | 'rejected'; members: number; joined: string }
+const data = ref<AdminAccountsList | null>(null)
+const loading = ref(false)
+const error = ref<string | null>(null)
+let inFlight: AbortController | null = null
 
-const sample: ClubRow[] = [
-  { name: 'Naenae Bowling', region: 'Wellington', sport: 'bowls', status: 'active', members: 142, joined: '2026-01-12' },
-  { name: 'Kelburn Bowling Club', region: 'Wellington', sport: 'bowls', status: 'pending', members: 0, joined: '2026-08-19' },
-  { name: 'Petone Central', region: 'Wellington', sport: 'bowls', status: 'pending', members: 0, joined: '2026-08-19' },
-  { name: 'Ashburton MSA Bowls', region: 'Canterbury', sport: 'bowls', status: 'pending', members: 0, joined: '2026-08-18' },
-  { name: 'Cambridge Bowls', region: 'Waikato', sport: 'bowls', status: 'active', members: 189, joined: '2026-03-04' },
-  { name: 'Titirangi RSA', region: 'Auckland', sport: 'bowls', status: 'active', members: 96, joined: '2026-02-22' },
-  { name: 'Whangarei Bowling Club', region: 'Northland', sport: 'bowls', status: 'pending', members: 0, joined: '2026-08-18' },
-  { name: 'Waihi Beach Bowls', region: 'Bay of Plenty', sport: 'bowls', status: 'rejected', members: 0, joined: '2026-08-14' },
-  { name: 'Waitakere Tennis', region: 'Auckland', sport: 'tennis', status: 'active', members: 214, joined: '2026-06-01' },
-  { name: 'Christchurch Golf', region: 'Canterbury', sport: 'golf', status: 'active', members: 312, joined: '2026-05-18' },
-  { name: 'Wellington Pétanque', region: 'Wellington', sport: 'petanque', status: 'active', members: 42, joined: '2026-07-02' },
-  { name: 'Karori Croquet', region: 'Wellington', sport: 'croquet', status: 'pending', members: 0, joined: '2026-08-19' },
-]
-
-const query = ref('')
-const statusFilter = ref<'all' | 'active' | 'pending' | 'rejected'>('all')
-const sportFilter = ref<'all' | SportCode>('all')
-
-const rows = computed(() => {
-  const q = query.value.trim().toLowerCase()
-  return sample.filter(r => {
-    if (statusFilter.value !== 'all' && r.status !== statusFilter.value) return false
-    if (sportFilter.value !== 'all' && r.sport !== sportFilter.value) return false
-    if (q && !`${r.name} ${r.region}`.toLowerCase().includes(q)) return false
-    return true
-  })
-})
-
-const sportBreakdown = computed(() => {
-  const counts = new Map<SportCode, number>()
-  for (const r of sample) {
-    if (r.status !== 'active') continue
-    counts.set(r.sport, (counts.get(r.sport) ?? 0) + 1)
+async function load() {
+  inFlight?.abort()
+  const ctrl = new AbortController()
+  inFlight = ctrl
+  loading.value = true
+  error.value = null
+  try {
+    const res = await admin.listAccounts({
+      window: window.value,
+      q: search.value.trim() || undefined,
+      sort: '-last_login',
+      signal: ctrl.signal,
+    })
+    if (ctrl.signal.aborted) return
+    data.value = res
+  } catch (err) {
+    if (ctrl.signal.aborted) return
+    error.value = err instanceof ApiError ? err.message : 'Could not load accounts.'
+  } finally {
+    if (!ctrl.signal.aborted) loading.value = false
   }
-  return SPORT_CODES.filter(c => counts.has(c)).map(c => ({ code: c, count: counts.get(c) ?? 0 }))
-})
+}
 
-function initials(name: string) { return name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() }
+// Debounce search input so typing doesn't blast the backend.
+let searchDebounce: ReturnType<typeof setTimeout> | null = null
+watch(search, () => {
+  if (searchDebounce) clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(() => void load(), 300)
+})
+watch(window, () => void load(), { immediate: true })
+
+// Read the windowed fields (e.g. `bookings_30d`) — cast via unknown
+// since TS can't resolve the template-literal key against the row's
+// index signatures when K is a union. Runtime correctness is covered
+// by the index signatures themselves + the api-client types.
+type WindowedCountKey = 'bookings' | 'tournament_entries' | 'member_joins' | 'emails_sent'
+type WindowedMoneyKey = 'bookings_gmv' | 'tournament_gmv' | 'platform_take'
+function w(row: AdminAccountRow, key: WindowedCountKey | WindowedMoneyKey): number {
+  const field = key.endsWith('_gmv') || key === 'platform_take'
+    ? `${key}_${window.value}_cents`
+    : `${key}_${window.value}`
+  const value = (row as unknown as Record<string, number | undefined>)[field]
+  return value ?? 0
+}
+
+const PLAN_LABELS: Record<string, string> = { starter: 'Starter', pro: 'Pro', comped: 'Comped' }
 </script>
 
 <template>
-  <div class="page">
-    <header class="head">
+  <div class="accounts">
+    <header class="accounts__head">
       <div>
-        <div class="head__eyebrow">Platform · Directory</div>
-        <h1 class="head__title">All clubs</h1>
-        <p class="head__sub">
-          Every club on Torny — {{ platform.stats.activeClubs }} active, {{ claims.pendingCount }} awaiting review, across {{ sportBreakdown.length }} sport{{ sportBreakdown.length === 1 ? '' : 's' }}.
-        </p>
+        <div class="accounts__eyebrow">PLATFORM · ACCOUNTS</div>
+        <h1 class="accounts__title">Accounts</h1>
+        <p class="accounts__sub">Every tenant, their usage, their revenue contribution.</p>
       </div>
+      <AdminWindowToggle :model-value="window" @update:model-value="setWindow" />
     </header>
 
-    <section class="sport-summary">
-      <div v-for="s in sportBreakdown" :key="s.code" class="sport-summary__pill">
-        <span class="sport-summary__label">{{ SPORTS[s.code].label }}</span>
-        <span class="sport-summary__count">{{ s.count }}</span>
-      </div>
-    </section>
-
-    <div class="filters">
-      <div class="search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-        <input v-model="query" type="search" placeholder="Search by club or region…" />
-      </div>
-      <div class="segmented">
-        <button :class="{ 'is-on': statusFilter === 'all' }" @click="statusFilter = 'all'">All</button>
-        <button :class="{ 'is-on': statusFilter === 'active' }" @click="statusFilter = 'active'">Active</button>
-        <button :class="{ 'is-on': statusFilter === 'pending' }" @click="statusFilter = 'pending'">Pending</button>
-        <button :class="{ 'is-on': statusFilter === 'rejected' }" @click="statusFilter = 'rejected'">Rejected</button>
-      </div>
-      <select v-model="sportFilter" class="select">
-        <option value="all">All sports</option>
-        <option v-for="code in SPORT_CODES" :key="code" :value="code">{{ SPORTS[code].label }}</option>
-      </select>
-    </div>
-
-    <div v-if="rows.length" class="table">
-      <div class="table__head">
-        <span>Club</span>
-        <span>Sport</span>
-        <span>Region</span>
-        <span>Members</span>
-        <span>Joined</span>
-        <span>Status</span>
-      </div>
-      <div v-for="r in rows" :key="r.name" class="table__row">
-        <div class="cell cell--club">
-          <div class="avatar">{{ initials(r.name) }}</div>
-          <span>{{ r.name }}</span>
-        </div>
-        <span class="cell">
-          <span class="sport-chip">{{ sportShort(r.sport) }}</span>
-        </span>
-        <span class="cell">{{ r.region }}</span>
-        <span class="cell cell--num">{{ r.members.toLocaleString() }}</span>
-        <span class="cell cell--num">{{ new Date(r.joined).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: '2-digit' }) }}</span>
-        <span class="cell"><span class="pill" :class="`pill--${r.status}`">{{ r.status }}</span></span>
+    <div class="accounts__controls">
+      <input
+        v-model="search"
+        type="search"
+        class="accounts__search"
+        placeholder="Search name, subdomain, or owner email…"
+      />
+      <div class="accounts__count">
+        <template v-if="data">
+          Showing {{ data.items.length }} of ~{{ data.total_count }}
+        </template>
+        <template v-else-if="loading">Loading…</template>
       </div>
     </div>
 
-    <div v-else class="empty">
-      <div class="empty__title">No clubs match.</div>
-      <div class="empty__sub">Try clearing the filters or search.</div>
-    </div>
+    <AdminEmptyState
+      v-if="error"
+      tone="error"
+      title="Could not load accounts"
+      :detail="error"
+      @retry="load"
+    />
 
-    <p class="note">Backend not wired yet — this is a static snapshot. Sport column will drive off the club's registered sport once the platform API is live.</p>
+    <AdminEmptyState
+      v-else-if="data && data.items.length === 0"
+      tone="no-results"
+      title="No accounts matched"
+      detail="Clear the search or try a wider window."
+    />
+
+    <div v-else class="accounts__table-wrap">
+      <table class="accounts__table">
+        <thead>
+          <tr>
+            <th>Account</th>
+            <th>Plan</th>
+            <th class="num">MRR</th>
+            <th class="num">Members</th>
+            <th class="num">Bookings</th>
+            <th class="num">Bookings GMV</th>
+            <th class="num">Entries</th>
+            <th class="num">Entries GMV</th>
+            <th class="num">Platform take</th>
+            <th>Flags</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in data?.items" :key="row.id">
+            <td>
+              <div class="accounts__name">{{ row.name }}</div>
+              <div class="accounts__sub-name">{{ row.subdomain }} · {{ row.owner_email ?? '—' }}</div>
+            </td>
+            <td>
+              <span class="plan" :class="`plan--${row.plan}`">{{ PLAN_LABELS[row.plan] ?? row.plan }}</span>
+            </td>
+            <td class="num"><AdminMoney :cents="row.mrr_cents" :suffix="false" /></td>
+            <td class="num">{{ row.member_count }}</td>
+            <td class="num">{{ w(row, 'bookings') }}</td>
+            <td class="num"><AdminMoney :cents="w(row, 'bookings_gmv')" :suffix="false" /></td>
+            <td class="num">{{ w(row, 'tournament_entries') }}</td>
+            <td class="num"><AdminMoney :cents="w(row, 'tournament_gmv')" :suffix="false" /></td>
+            <td class="num"><AdminMoney :cents="w(row, 'platform_take')" :suffix="false" /></td>
+            <td><AdminFlagBadges :flags="row.flags" /></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.page { padding: 32px 40px 60px; }
-.head { margin-bottom: 20px; }
-.head__eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; }
-.head__title { font-family: var(--font-display); font-size: 40px; font-weight: 600; color: var(--color-ink); letter-spacing: -0.02em; line-height: 1.05; margin: 8px 0 12px; }
-.head__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); margin: 0; max-width: 640px; line-height: 1.5; }
+.accounts { padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 24px; max-width: 1480px; }
 
-.sport-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
-.sport-summary__pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 12px; color: var(--color-graphite); }
-.sport-summary__label { font-weight: 600; color: var(--color-ink); }
-.sport-summary__count { font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); padding-left: 4px; border-left: 1px solid var(--color-hairline); margin-left: 2px; }
+.accounts__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.accounts__eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: rgba(255,255,255,0.45); }
+.accounts__title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; color: #fff; margin: 8px 0 6px; }
+.accounts__sub { font-family: var(--font-body); font-size: 14px; color: rgba(255,255,255,0.6); margin: 0; }
 
-.filters { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
-.search { flex: 1; min-width: 240px; position: relative; display: flex; align-items: center; }
-.search svg { position: absolute; left: 14px; color: var(--color-fog); pointer-events: none; }
-.search input { width: 100%; padding: 11px 14px 11px 40px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); }
-.search input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
-.segmented { display: inline-flex; padding: 4px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; }
-.segmented button { padding: 7px 12px; background: transparent; border: 0; border-radius: 6px; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-fog); cursor: pointer; }
-.segmented button.is-on { background: var(--color-ink); color: #fff; font-weight: 600; }
-.select { padding: 10px 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); cursor: pointer; }
-.select:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
-
-.table { background: #fff; border: 1px solid var(--color-hairline); border-radius: 14px; overflow: hidden; }
-.table__head, .table__row { display: grid; grid-template-columns: 2fr 120px 1fr 100px 120px 120px; gap: 16px; padding: 14px 20px; align-items: center; }
-.table__head { background: var(--color-surface); border-bottom: 1px solid var(--color-hairline); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; }
-.table__row { border-bottom: 1px solid var(--color-hairline); }
-.table__row:last-child { border-bottom: 0; }
-.table__row:hover { background: var(--color-surface); }
-
-.cell { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); }
-.cell--num { font-family: var(--font-mono); font-size: 12px; color: var(--color-graphite); }
-.cell--club { display: flex; align-items: center; gap: 12px; font-weight: 600; }
-.avatar { width: 32px; height: 32px; border-radius: 8px; background: var(--color-ink); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 11px; font-weight: 700; flex-shrink: 0; }
-
-.sport-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 5px; font-family: var(--font-body); font-size: 11px; font-weight: 600; color: var(--color-graphite); }
-
-.pill { font-family: var(--font-mono); font-size: 10px; padding: 3px 8px; border-radius: 5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
-.pill--active { background: #DCFCE7; color: #166534; }
-.pill--pending { background: #FEF3C7; color: #92400E; }
-.pill--rejected { background: #FEE2E2; color: #991B1B; }
-
-.empty { padding: 60px 20px; text-align: center; background: #fff; border: 1px dashed var(--color-hairline); border-radius: 14px; }
-.empty__title { font-family: var(--font-display); font-size: 20px; font-weight: 600; color: var(--color-ink); }
-.empty__sub { font-family: var(--font-body); font-size: 13px; color: var(--color-fog); margin-top: 4px; }
-
-.note { font-family: var(--font-body); font-size: 12px; color: var(--color-mute); margin-top: 20px; font-style: italic; }
-
-@media (max-width: 1000px) {
-  .page { padding: 20px; }
-  .head__title { font-size: 32px; }
-  .table__head, .table__row { grid-template-columns: 1fr 100px 100px 90px; gap: 12px; }
-  .table__head span:nth-child(5), .table__row .cell:nth-child(5),
-  .table__head span:nth-child(4), .table__row .cell:nth-child(4) { display: none; }
+.accounts__controls { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.accounts__search {
+  flex: 1;
+  max-width: 420px;
+  padding: 10px 16px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: #fff;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 999px;
+  outline: none;
 }
+.accounts__search::placeholder { color: rgba(255,255,255,0.4); }
+.accounts__search:focus { border-color: rgba(255,255,255,0.3); }
+.accounts__count { font-family: var(--font-mono); font-size: 11px; color: rgba(255,255,255,0.5); letter-spacing: 0.04em; }
+
+.accounts__table-wrap { overflow-x: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; }
+.accounts__table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.accounts__table th,
+.accounts__table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.accounts__table th { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.5); background: rgba(255,255,255,0.03); position: sticky; top: 0; }
+.accounts__table td { font-family: var(--font-body); font-size: 13px; color: rgba(255,255,255,0.85); }
+.accounts__table td.num,
+.accounts__table th.num { text-align: right; }
+.accounts__table tbody tr:hover { background: rgba(255,255,255,0.02); }
+.accounts__name { font-weight: 600; color: #fff; }
+.accounts__sub-name { font-size: 11px; color: rgba(255,255,255,0.5); font-family: var(--font-mono); margin-top: 2px; }
+
+.plan { display: inline-block; padding: 3px 10px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; border-radius: 999px; }
+.plan--starter { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.65); }
+.plan--pro { background: color-mix(in oklab, var(--color-accent) 22%, transparent); color: color-mix(in oklab, var(--color-accent) 85%, #fff); }
+.plan--comped { background: #2a1d3a; color: #c4a3ff; }
 </style>

@@ -3,23 +3,20 @@ import { computed } from 'vue'
 import { RouterView, RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useClubStore } from '@/stores/club'
-import { useClaimsStore } from '@/stores/claims'
-import { usePlatformUsersStore } from '@/stores/platformUsers'
 import CrmToast from '@/components/CrmToast.vue'
 
 const auth = useAuthStore()
 const club = useClubStore()
-const claims = useClaimsStore()
-const platformUsers = usePlatformUsersStore()
 const router = useRouter()
 
-interface NavItem { to: string; label: string; count?: number | string; tone?: 'danger' }
+// Brief 123 — redesigned around self-serve signup. Claims + platform-
+// level members list removed; nav is flat. Billing (Phase B) and
+// reshaped Users (backend Phase 2) added when those ship.
+interface NavItem { to: string; label: string }
 const nav = computed<NavItem[]>(() => [
-  { to: '/admin', label: 'Overview' },
-  { to: '/admin/claims', label: 'Claims', count: claims.pendingCount || undefined },
-  { to: '/admin/users', label: 'Users', count: platformUsers.flagged.length || undefined, tone: platformUsers.flagged.length ? 'danger' : undefined },
-  { to: '/admin/clubs', label: 'Clubs' },
-  { to: '/admin/members', label: 'Members' },
+  { to: '/admin/dashboard', label: 'Dashboard' },
+  { to: '/admin/accounts', label: 'Accounts' },
+  { to: '/admin/users', label: 'Users' },
 ])
 
 const initials = computed(() => {
@@ -52,14 +49,9 @@ function signOut() {
           :key="item.to"
           :to="item.to"
           class="sidebar__link"
-          :class="{ 'is-active': item.to === '/admin' ? $route.path === '/admin' : $route.path.startsWith(item.to) }"
+          :class="{ 'is-active': $route.path.startsWith(item.to) }"
         >
           <span class="sidebar__link-label">{{ item.label }}</span>
-          <span
-            v-if="item.count !== undefined"
-            class="sidebar__link-count"
-            :class="{ 'sidebar__link-count--danger': item.tone === 'danger' }"
-          >{{ item.count }}</span>
         </RouterLink>
       </nav>
       <div class="sidebar__user">

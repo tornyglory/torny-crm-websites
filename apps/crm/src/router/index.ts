@@ -26,10 +26,13 @@ const routes: RouteRecordRaw[] = [
     component: AdminShell,
     beforeEnter: requirePlatformAdmin,
     children: [
-      { path: '', name: 'admin-dashboard', component: () => import('@/views/admin/AdminDashboardView.vue') },
-      { path: 'claims', name: 'admin-claims', component: () => import('@/views/admin/AdminClaimsView.vue') },
-      { path: 'clubs', name: 'admin-clubs', component: () => import('@/views/admin/AdminClubsView.vue') },
-      { path: 'members', name: 'admin-members', component: () => import('@/views/admin/AdminMembersView.vue') },
+      // Brief 123 — redesigned around self-serve signup. /claims and
+      // /members removed; /clubs renamed to /accounts. Billing lands
+      // with Phase B of the FE plan; users surface stays as a
+      // placeholder until backend Phase 2.
+      { path: '', redirect: { name: 'admin-dashboard' } },
+      { path: 'dashboard', name: 'admin-dashboard', component: () => import('@/views/admin/AdminDashboardView.vue') },
+      { path: 'accounts', name: 'admin-accounts', component: () => import('@/views/admin/AdminClubsView.vue') },
       { path: 'users', name: 'admin-users', component: () => import('@/views/admin/AdminUsersView.vue') },
     ],
   },

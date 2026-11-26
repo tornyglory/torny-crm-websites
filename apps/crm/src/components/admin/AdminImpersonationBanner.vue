@@ -34,9 +34,9 @@ const remaining = computed(() => {
   return `${min}:${sec.toString().padStart(2, '0')}`
 })
 
-function exit() {
+async function exit() {
   const path = state.value?.return_path ?? '/admin/accounts'
-  stop()
+  await stop()
   void router.push(path)
 }
 </script>

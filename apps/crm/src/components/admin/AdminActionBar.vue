@@ -7,8 +7,9 @@
  */
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import type { AdminAccountRow } from '@torny/api-client'
-import { start as startImpersonation } from '@/composables/useImpersonation'
+import type { AdminAccountRow, AdminImpersonateResult } from '@torny/api-client'
+import { start as startImpersonation, stop as stopImpersonation } from '@/composables/useImpersonation'
+import { useToast } from '@/composables/useToast'
 import AdminImpersonateModal from './AdminImpersonateModal.vue'
 import AdminCompPlanModal from './AdminCompPlanModal.vue'
 import AdminSuspendModal from './AdminSuspendModal.vue'
@@ -18,6 +19,7 @@ const emit = defineEmits<{ (e: 'done'): void }>()
 
 const router = useRouter()
 const route = useRoute()
+const toast = useToast()
 
 const impersonateOpen = ref(false)
 const compOpen = ref(false)
@@ -25,21 +27,21 @@ const suspendOpen = ref(false)
 
 const isSuspended = computed(() => props.account.flags.suspended)
 
-function onImpersonateDone(result: { impersonation_jwt: string; expires_at: string; impersonated_user_email: string }) {
-  startImpersonation(
-    {
-      impersonation_jwt: result.impersonation_jwt,
-      expires_at: result.expires_at,
-      impersonated_user_id: 0,
-      impersonated_user_email: result.impersonated_user_email,
-    },
-    {
+async function onImpersonateDone(result: AdminImpersonateResult) {
+  try {
+    await startImpersonation(result, {
       account_id: props.account.id,
       account_name: props.account.name,
       return_path: route.fullPath,
-    },
-  )
-  void router.push('/crm')
+    })
+    await router.push('/crm')
+  } catch (err) {
+    // Session swap failed somewhere — roll back so the admin isn't
+    // left in a half-impersonated state. Surface the error so they can
+    // retry (or ping support).
+    await stopImpersonation()
+    toast.error(err instanceof Error ? err.message : 'Could not start impersonation.')
+  }
 }
 </script>
 

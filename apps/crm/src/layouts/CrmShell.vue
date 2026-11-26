@@ -23,6 +23,7 @@ import NotificationsDropdown from '@/components/NotificationsDropdown.vue'
 import NewMenu from '@/components/NewMenu.vue'
 import UserMenu from '@/components/UserMenu.vue'
 import CrmToast from '@/components/CrmToast.vue'
+import AccountSuspendedModal from '@/components/AccountSuspendedModal.vue'
 
 const auth = useAuthStore()
 const club = useClubStore()
@@ -930,6 +931,9 @@ const bottomTabs = computed<TabItem[]>(() => {
       <UserMenu v-model:open="userMenuOpen" />
       <!-- Global toast — any view can call useToast().success(...) etc. -->
       <CrmToast />
+      <!-- Brief 123 §6.3 — blocking modal when any CRM write hits a
+           suspended club. Mounted once here so every route inherits. -->
+      <AccountSuspendedModal />
 
       <div class="page">
         <RouterView />

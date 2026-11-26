@@ -27,6 +27,33 @@ export class ApiError extends Error {
   }
 }
 
+// ── Global ApiError observers ──────────────────────────────────────
+// Lets the host app (CRM, club-sites) register a handler that fires
+// on every ApiError throw — useful for cross-cutting concerns like
+// the `account_suspended` modal (brief 123 Phase 2) which has to
+// surface on any write anywhere in the CRM, not per-view.
+//
+// Observers DO NOT swallow the error — the throw still happens and
+// caller-side catch handlers still run. Treat observers as a tee.
+type ApiErrorObserver = (error: ApiError) => void
+const apiErrorObservers = new Set<ApiErrorObserver>()
+
+/** Register a handler called on every ApiError throw. Returns an
+ *  unsubscribe function. Call at app boot; observers survive hot-reload
+ *  only if the module is preserved (set is module-scoped). */
+export function registerApiErrorObserver(fn: ApiErrorObserver): () => void {
+  apiErrorObservers.add(fn)
+  return () => { apiErrorObservers.delete(fn) }
+}
+
+function notifyApiErrorObservers(err: ApiError): void {
+  // Isolate observer failures so one broken handler doesn't break
+  // the others, and doesn't swallow the original throw.
+  for (const obs of apiErrorObservers) {
+    try { obs(err) } catch { /* intentionally quiet */ }
+  }
+}
+
 function readToken(): string | null {
   if (typeof localStorage === 'undefined') return null
   return localStorage.getItem(TOKEN_STORAGE_KEY)
@@ -92,12 +119,14 @@ async function doFetch<T>(url: string, init: RequestInit): Promise<T> {
   }
 
   if (!res.ok || body.status === 'error') {
-    throw new ApiError(
+    const err = new ApiError(
       res.status,
       body.message ?? `Request failed (${res.status})`,
       body.code,
       body,
     )
+    notifyApiErrorObservers(err)
+    throw err
   }
 
   return body as T

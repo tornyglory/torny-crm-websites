@@ -345,23 +345,6 @@ export interface AdminImpersonateResult {
   impersonated_user_email: string
 }
 
-/** Decode a JWT payload without verifying. Returns `null` if the shape
- *  isn't a three-part JWT. Used by the impersonate diagnostic below —
- *  if the Bearer we're sending doesn't carry `isPlatformAdmin: true`,
- *  the error is in the token, not the backend gate. */
-function decodeJwtPayload(jwt: string): Record<string, unknown> | null {
-  const parts = jwt.split('.')
-  if (parts.length !== 3) return null
-  try {
-    // atob + URL-safe base64 fix (JWT uses URL-safe alphabet)
-    const payload = parts[1]!.replace(/-/g, '+').replace(/_/g, '/')
-    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4)
-    const raw = typeof atob === 'function' ? atob(padded) : ''
-    if (!raw) return null
-    return JSON.parse(raw) as Record<string, unknown>
-  } catch { return null }
-}
-
 /** `POST /admin/accounts/:id/impersonate` — mint a short-lived JWT
  *  that logs the caller in as the target account's owner. Carries an
  *  `impersonated_by` claim for attribution, `isPlatformAdmin: false`
@@ -376,25 +359,6 @@ export async function impersonate(
   input: AdminImpersonateInput,
   opts: { signal?: AbortSignal } = {},
 ): Promise<AdminImpersonateResult> {
-  // TEMP DIAGNOSTIC — the 403 not_platform_owner has only ever been
-  // seen on POST, never on the paired GETs. Log the Bearer claims
-  // right before the request so we can tell FE-token-side vs
-  // backend-gate-side with one failing click. Remove after resolution.
-  if (typeof localStorage !== 'undefined') {
-    const raw = localStorage.getItem('torny.token')
-    const payload = raw ? decodeJwtPayload(raw) : null
-    // eslint-disable-next-line no-console
-    console.info('[torny:admin:impersonate] POST', {
-      url: `${VENUE_BASE}/admin/accounts/${accountId}/impersonate`,
-      token_present: !!raw,
-      token_length: raw?.length,
-      token_prefix: raw?.slice(0, 20),
-      token_suffix: raw?.slice(-8),
-      jwt_claims: payload,
-      is_platform_admin_claim: payload?.isPlatformAdmin ?? payload?.is_platform_admin ?? '(absent)',
-      exp_iso: typeof payload?.exp === 'number' ? new Date(payload.exp * 1000).toISOString() : null,
-    })
-  }
   const res = await authedFetch<Envelope<AdminImpersonateResult>>(
     `${VENUE_BASE}/admin/accounts/${accountId}/impersonate`,
     { method: 'POST', body: JSON.stringify(input), signal: opts.signal, bypassImpersonation: true },

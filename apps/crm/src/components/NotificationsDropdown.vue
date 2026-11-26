@@ -18,8 +18,12 @@ import { ApiError, type Notification, type NotificationKind } from '@torny/api-c
 
 /** Local UI kind maps 1:1 to backend NotificationKind. `member_milestone`
  *  collapses to the existing `milestone` icon so we don't need to draw a
- *  new one. */
-type Kind = 'application' | 'enquiry' | 'rsvp' | 'team' | 'publish' | 'payment' | 'milestone'
+ *  new one. Brief 112 adds `venue_booking` (received, neutral) and
+ *  `venue_booking_paid` (deposit landed, highlighted — money has arrived). */
+type Kind =
+  | 'application' | 'enquiry' | 'rsvp' | 'team'
+  | 'publish' | 'payment' | 'milestone'
+  | 'venue_booking' | 'venue_booking_paid'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{
@@ -35,9 +39,19 @@ const notificationsStore = useNotificationsStore()
  *  to `milestone`; anything the local union doesn't know about (backend
  *  ships ahead of the client) falls through to `milestone` too so the
  *  `kindMeta` lookup can't return undefined. */
-const KNOWN_UI_KINDS: readonly Kind[] = ['application', 'enquiry', 'rsvp', 'team', 'publish', 'payment', 'milestone']
+const KNOWN_UI_KINDS: readonly Kind[] = [
+  'application', 'enquiry', 'rsvp', 'team',
+  'publish', 'payment', 'milestone',
+  'venue_booking', 'venue_booking_paid',
+]
 function toUiKind(kind: NotificationKind): Kind {
   if (kind === 'member_milestone') return 'milestone'
+  // Brief 112 — backend ships `venue_booking_received`; UI collapses it
+  // to `venue_booking` since the icon + chip are keyed on the family,
+  // not the sub-event. The `paid` variant gets its own highlighted tile
+  // because "money arrived" is a visibly different moment.
+  if (kind === 'venue_booking_received') return 'venue_booking'
+  if (kind === 'venue_booking_paid') return 'venue_booking_paid'
   return (KNOWN_UI_KINDS as readonly string[]).includes(kind) ? (kind as Kind) : 'milestone'
 }
 
@@ -159,6 +173,11 @@ const kindMeta: Record<Kind, { label: string; tone: 'accent' | 'mint' | 'tang' |
   publish: { label: 'Website', tone: 'violet' },
   payment: { label: 'Payment', tone: 'mint' },
   milestone: { label: 'Milestone', tone: 'ink' },
+  // Brief 112 — venue booking family. Received is neutral (accent) so
+  // it reads as an event; paid uses mint to match the `payment` tone
+  // because the admin's mental model is "money arrived".
+  venue_booking: { label: 'Venue booking', tone: 'accent' },
+  venue_booking_paid: { label: 'Deposit paid', tone: 'mint' },
 }
 
 defineExpose({ unreadCount })
@@ -240,6 +259,17 @@ defineExpose({ unreadCount })
             <svg v-else-if="n.kind === 'payment'" width="16" height="16" viewBox="0 0 20 20" fill="none">
               <rect x="2.5" y="5" width="15" height="10" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
               <path d="M2.5 9h15M6 13h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+            <!-- venue_booking_received: building / venue -->
+            <svg v-else-if="n.kind === 'venue_booking_received'" width="16" height="16" viewBox="0 0 20 20" fill="none">
+              <path d="M3 17V7l7-4 7 4v10" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M3 17h14M8 17v-5h4v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <!-- venue_booking_paid: card with check (deposit landed) -->
+            <svg v-else-if="n.kind === 'venue_booking_paid'" width="16" height="16" viewBox="0 0 20 20" fill="none">
+              <rect x="2.5" y="5" width="15" height="10" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+              <path d="M2.5 9h15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              <path d="M12 12.5l1.5 1.5 3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             <!-- milestone: trophy -->
             <svg v-else width="16" height="16" viewBox="0 0 20 20" fill="none">

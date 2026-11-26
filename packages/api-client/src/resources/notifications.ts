@@ -12,11 +12,20 @@ import { authedFetch } from '../http'
 export type NotificationKind =
   | 'application' | 'enquiry' | 'rsvp' | 'team'
   | 'publish' | 'payment' | 'member_milestone'
+  // Brief 112 Phase A — venue booking events feeding the same brief-40
+  // crm_notifications pipeline; same fanout rules + brief-104 deep-link
+  // shape. Phase A fires `received` on public submit and `paid` on the
+  // deposit_paid Stripe transition (not full `paid` — see brief).
+  | 'venue_booking_received' | 'venue_booking_paid'
 
 export type EmailDigest = 'off' | 'daily' | 'weekly'
 
 export interface NotificationTarget {
-  resource: 'application' | 'enquiry' | 'event' | 'team_round' | 'page' | 'payment_batch' | 'member'
+  resource:
+    | 'application' | 'enquiry' | 'event' | 'team_round' | 'page'
+    | 'payment_batch' | 'member'
+    // Brief 112 — both venue_booking_* kinds point to this resource.
+    | 'venue_booking'
   resource_id: number
   destination_href: string
 }

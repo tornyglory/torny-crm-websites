@@ -160,9 +160,9 @@ const PLAN_LABELS: Record<string, string> = { starter: 'Starter', pro: 'Pro', co
 .accounts { padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 24px; max-width: 1480px; }
 
 .accounts__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
-.accounts__eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: rgba(255,255,255,0.45); }
-.accounts__title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; color: #fff; margin: 8px 0 6px; }
-.accounts__sub { font-family: var(--font-body); font-size: 14px; color: rgba(255,255,255,0.6); margin: 0; }
+.accounts__eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--color-fog); }
+.accounts__title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); margin: 8px 0 6px; }
+.accounts__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); margin: 0; }
 
 .accounts__controls { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
 .accounts__search {
@@ -171,30 +171,31 @@ const PLAN_LABELS: Record<string, string> = { starter: 'Starter', pro: 'Pro', co
   padding: 10px 16px;
   font-family: var(--font-body);
   font-size: 14px;
-  color: #fff;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--color-ink);
+  background: var(--color-ground);
+  border: 1px solid var(--color-hairline);
   border-radius: 999px;
   outline: none;
 }
-.accounts__search::placeholder { color: rgba(255,255,255,0.4); }
-.accounts__search:focus { border-color: rgba(255,255,255,0.3); }
-.accounts__count { font-family: var(--font-mono); font-size: 11px; color: rgba(255,255,255,0.5); letter-spacing: 0.04em; }
+.accounts__search::placeholder { color: var(--color-fog); }
+.accounts__search:focus { border-color: var(--color-ink); }
+.accounts__count { font-family: var(--font-mono); font-size: 11px; color: var(--color-fog); letter-spacing: 0.04em; }
 
-.accounts__table-wrap { overflow-x: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; }
+.accounts__table-wrap { overflow-x: auto; background: var(--color-ground); border: 1px solid var(--color-hairline); border-radius: 12px; }
 .accounts__table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .accounts__table th,
-.accounts__table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
-.accounts__table th { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.5); background: rgba(255,255,255,0.03); position: sticky; top: 0; }
-.accounts__table td { font-family: var(--font-body); font-size: 13px; color: rgba(255,255,255,0.85); }
+.accounts__table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--color-hairline); }
+.accounts__table th { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-fog); background: var(--color-surface); position: sticky; top: 0; }
+.accounts__table td { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); }
 .accounts__table td.num,
 .accounts__table th.num { text-align: right; }
-.accounts__table tbody tr:hover { background: rgba(255,255,255,0.02); }
-.accounts__name { font-weight: 600; color: #fff; }
-.accounts__sub-name { font-size: 11px; color: rgba(255,255,255,0.5); font-family: var(--font-mono); margin-top: 2px; }
+.accounts__table tbody tr:hover { background: var(--color-surface); }
+.accounts__table tbody tr:last-child td { border-bottom: 0; }
+.accounts__name { font-weight: 600; color: var(--color-ink); }
+.accounts__sub-name { font-size: 11px; color: var(--color-fog); font-family: var(--font-mono); margin-top: 2px; }
 
 .plan { display: inline-block; padding: 3px 10px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; border-radius: 999px; }
-.plan--starter { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.65); }
-.plan--pro { background: color-mix(in oklab, var(--color-accent) 22%, transparent); color: color-mix(in oklab, var(--color-accent) 85%, #fff); }
-.plan--comped { background: #2a1d3a; color: #c4a3ff; }
+.plan--starter { background: var(--color-surface); color: var(--color-graphite); }
+.plan--pro { background: color-mix(in oklab, var(--color-accent) 15%, #fff); color: var(--color-accent); }
+.plan--comped { background: color-mix(in oklab, var(--color-feature-violet) 15%, #fff); color: var(--color-feature-violet); }
 </style>

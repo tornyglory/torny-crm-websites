@@ -155,12 +155,12 @@ const windowLabel = computed(() => {
 .dashboard { padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 32px; max-width: 1280px; }
 
 .dashboard__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
-.dashboard__eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: rgba(255,255,255,0.45); }
-.dashboard__title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; color: #fff; margin: 8px 0 6px; }
-.dashboard__sub { font-family: var(--font-body); font-size: 14px; color: rgba(255,255,255,0.6); margin: 0; }
+.dashboard__eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--color-fog); }
+.dashboard__title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); margin: 8px 0 6px; }
+.dashboard__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); margin: 0; }
 
 .dashboard__section { display: flex; flex-direction: column; gap: 14px; }
-.dashboard__section-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.85); margin: 0; }
+.dashboard__section-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--color-ink); margin: 0; }
 
 .dashboard__grid { display: grid; gap: 14px; }
 .dashboard__grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -169,8 +169,8 @@ const windowLabel = computed(() => {
 .dashboard__grid--secondary { margin-top: 6px; }
 
 .dashboard__stacked { display: flex; flex-direction: column; gap: 4px; }
-.dashboard__stacked-main { font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -0.02em; color: #fff; line-height: 1; }
-.dashboard__stacked-sub { font-family: var(--font-body); font-size: 12px; color: rgba(255,255,255,0.55); font-variant-numeric: tabular-nums; }
+.dashboard__stacked-main { font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); line-height: 1; }
+.dashboard__stacked-sub { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); font-variant-numeric: tabular-nums; }
 
 @media (max-width: 1100px) {
   .dashboard__grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }

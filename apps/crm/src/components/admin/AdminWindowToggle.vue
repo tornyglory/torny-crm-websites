@@ -40,8 +40,8 @@ const WINDOWS: ReadonlyArray<{ value: AdminWindow; label: string }> = [
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
   border-radius: 999px;
 }
 .window-toggle__btn {
@@ -52,15 +52,15 @@ const WINDOWS: ReadonlyArray<{ value: AdminWindow; label: string }> = [
   letter-spacing: 0.04em;
   text-transform: uppercase;
   background: transparent;
-  color: rgba(255,255,255,0.65);
+  color: var(--color-fog);
   border: 0;
   border-radius: 999px;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
 }
-.window-toggle__btn:hover { color: #fff; }
+.window-toggle__btn:hover { color: var(--color-ink); }
 .window-toggle__btn--active {
-  background: #fff;
-  color: var(--color-ink);
+  background: var(--color-ink);
+  color: #fff;
 }
 </style>

@@ -39,8 +39,8 @@ withDefaults(defineProps<{
   flex-direction: column;
   gap: 8px;
   padding: 20px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--color-ground);
+  border: 1px solid var(--color-hairline);
   border-radius: 14px;
   min-height: 108px;
 }
@@ -50,27 +50,27 @@ withDefaults(defineProps<{
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.55);
+  color: var(--color-fog);
 }
 .metric-card__value {
   font-family: var(--font-display);
   font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #fff;
+  color: var(--color-ink);
   line-height: 1;
 }
 .metric-card__subtitle {
   font-family: var(--font-body);
   font-size: 12px;
-  color: rgba(255,255,255,0.5);
+  color: var(--color-fog);
   line-height: 1.4;
 }
 .metric-card__skeleton {
   width: 60%;
   height: 28px;
   border-radius: 6px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.12), rgba(255,255,255,0.06));
+  background: linear-gradient(90deg, var(--color-surface), var(--color-hairline), var(--color-surface));
   background-size: 200% 100%;
   animation: shimmer 1.4s linear infinite;
 }
@@ -78,9 +78,9 @@ withDefaults(defineProps<{
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
-.metric-card--accent { border-color: color-mix(in oklab, var(--color-accent) 45%, transparent); }
-.metric-card--accent .metric-card__value { color: color-mix(in oklab, var(--color-accent) 85%, #fff); }
-.metric-card--warn { border-color: #d14e4e55; }
-.metric-card--warn .metric-card__value { color: #ff7a7a; }
-.metric-card--muted .metric-card__value { color: rgba(255,255,255,0.5); }
+.metric-card--accent { border-color: color-mix(in oklab, var(--color-accent) 35%, transparent); background: color-mix(in oklab, var(--color-accent) 4%, var(--color-ground)); }
+.metric-card--accent .metric-card__value { color: var(--color-accent); }
+.metric-card--warn { border-color: color-mix(in oklab, var(--color-danger) 35%, transparent); background: color-mix(in oklab, var(--color-danger) 4%, var(--color-ground)); }
+.metric-card--warn .metric-card__value { color: var(--color-danger); }
+.metric-card--muted .metric-card__value { color: var(--color-fog); }
 </style>

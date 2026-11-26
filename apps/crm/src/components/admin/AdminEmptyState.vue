@@ -42,8 +42,8 @@ defineEmits<{ (e: 'retry'): void }>()
   justify-content: center;
   gap: 8px;
   padding: 48px 24px;
-  background: rgba(255,255,255,0.02);
-  border: 1px dashed rgba(255,255,255,0.12);
+  background: var(--color-ground);
+  border: 1px dashed var(--color-hairline);
   border-radius: 14px;
   text-align: center;
 }
@@ -51,34 +51,34 @@ defineEmits<{ (e: 'retry'): void }>()
   font-family: var(--font-display);
   font-size: 18px;
   font-weight: 600;
-  color: #fff;
+  color: var(--color-ink);
 }
 .empty__detail {
   font-family: var(--font-body);
   font-size: 14px;
-  color: rgba(255,255,255,0.55);
+  color: var(--color-graphite);
   max-width: 44ch;
   line-height: 1.5;
 }
 .empty__waits-on {
   font-family: var(--font-body);
   font-size: 12px;
-  color: rgba(255,255,255,0.4);
+  color: var(--color-fog);
   margin-top: 4px;
 }
 .empty__waits-on code {
   font-family: var(--font-mono);
   font-size: 11px;
   padding: 2px 6px;
-  background: rgba(255,255,255,0.06);
+  background: var(--color-surface);
   border-radius: 4px;
-  color: rgba(255,255,255,0.8);
+  color: var(--color-graphite);
 }
 .empty__retry {
   margin-top: 8px;
   padding: 8px 18px;
-  background: #fff;
-  color: var(--color-ink);
+  background: var(--color-ink);
+  color: #fff;
   font-family: var(--font-body);
   font-size: 13px;
   font-weight: 600;
@@ -86,6 +86,6 @@ defineEmits<{ (e: 'retry'): void }>()
   border-radius: 999px;
   cursor: pointer;
 }
-.empty--error { border-color: #d14e4e55; }
-.empty--deferred { border-style: solid; border-color: rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); }
+.empty--error { border-color: color-mix(in oklab, var(--color-danger) 35%, transparent); border-style: solid; background: color-mix(in oklab, var(--color-danger) 3%, var(--color-ground)); }
+.empty--deferred { border-style: solid; border-color: var(--color-hairline); }
 </style>

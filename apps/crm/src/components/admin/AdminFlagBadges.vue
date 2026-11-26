@@ -50,8 +50,8 @@ const badges = computed<Badge[]>(() => {
   border-radius: 999px;
   white-space: nowrap;
 }
-.flag-badge--danger { background: #3a1313; color: #ff7a7a; }
-.flag-badge--warn { background: #3a2a13; color: #ffb366; }
-.flag-badge--accent { background: color-mix(in oklab, var(--color-accent) 22%, transparent); color: color-mix(in oklab, var(--color-accent) 85%, #fff); }
-.flag-badge--muted { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.65); }
+.flag-badge--danger { background: color-mix(in oklab, var(--color-danger) 15%, #fff); color: var(--color-danger); }
+.flag-badge--warn { background: color-mix(in oklab, var(--color-feature-tangerine) 15%, #fff); color: var(--color-feature-tangerine); }
+.flag-badge--accent { background: color-mix(in oklab, var(--color-accent) 15%, #fff); color: var(--color-accent); }
+.flag-badge--muted { background: var(--color-surface); color: var(--color-fog); }
 </style>

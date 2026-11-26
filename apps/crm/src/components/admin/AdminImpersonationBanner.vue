@@ -11,7 +11,7 @@
  * unmistakable at every page — this is a privileged state and
  * the admin should never forget they're in it.
  */
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useImpersonation } from '@/composables/useImpersonation'
 
@@ -23,6 +23,25 @@ const now = ref(Date.now())
 let tickTimer: ReturnType<typeof setInterval> | null = null
 onMounted(() => { tickTimer = setInterval(() => { now.value = Date.now() }, 1000) })
 onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
+
+// Writes a CSS custom prop onto :root while the banner is visible so
+// sticky elements in the CRM shell (sidebar, top bar) can offset by its
+// height. Cleared when impersonation ends so the shell layout snaps
+// back without stale space.
+const BANNER_HEIGHT_PX = 44
+watch(isActive, (active) => {
+  if (typeof document === 'undefined') return
+  if (active) {
+    document.documentElement.style.setProperty('--imp-banner-h', `${BANNER_HEIGHT_PX}px`)
+  } else {
+    document.documentElement.style.removeProperty('--imp-banner-h')
+  }
+}, { immediate: true })
+onBeforeUnmount(() => {
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.removeProperty('--imp-banner-h')
+  }
+})
 
 const remaining = computed(() => {
   if (!state.value) return ''
@@ -64,9 +83,14 @@ async function exit() {
   position: sticky;
   top: 0;
   z-index: 100;
+  width: 100%;
+  box-sizing: border-box;
+  height: 44px;              /* fixed so the CSS var the shell reads is accurate */
+  display: flex;
+  align-items: center;
   background: var(--color-feature-violet);
   color: #fff;
-  padding: 10px 16px;
+  padding: 0 16px;
   box-shadow: 0 2px 8px -4px rgba(0, 0, 0, 0.2);
 }
 .imp-banner__inner {

@@ -676,11 +676,11 @@ const bottomTabs = computed<TabItem[]>(() => {
 </script>
 
 <template>
+  <!-- Brief 123 §6.1 — impersonation banner outside .shell so the shell's
+       flex-row layout isn't disrupted. Banner is only visible during an
+       active impersonation session; otherwise renders nothing. -->
+  <AdminImpersonationBanner />
   <div class="shell">
-    <!-- Brief 123 §6.1 — sticky impersonation banner. Mounted at the
-         top of the shell so every CRM route in an impersonated session
-         keeps the context (and the exit button) visible. -->
-    <AdminImpersonationBanner />
     <!-- Backdrop for the mobile / tablet drawer. -->
     <div
       v-if="drawerOpen"
@@ -982,10 +982,13 @@ const bottomTabs = computed<TabItem[]>(() => {
 </template>
 
 <style scoped>
-.shell { display: flex; min-height: 100vh; }
+/* `--imp-banner-h` is set on :root by AdminImpersonationBanner while
+   an impersonation session is active (brief 123 §6.1). Unset otherwise
+   so the shell layout is untouched. */
+.shell { display: flex; min-height: calc(100vh - var(--imp-banner-h, 0px)); }
 
 /* -------- Sidebar (desktop only) -------- */
-.sidebar { width: 240px; background: #fff; border-right: 1px solid var(--color-hairline); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; z-index: 30; }
+.sidebar { width: 240px; background: #fff; border-right: 1px solid var(--color-hairline); display: flex; flex-direction: column; position: sticky; top: var(--imp-banner-h, 0px); height: calc(100vh - var(--imp-banner-h, 0px)); z-index: 30; }
 .sidebar__brand-inner { display: inline-flex; align-items: baseline; gap: 8px; }
 .sidebar__close { display: none; width: 32px; height: 32px; border-radius: 999px; border: 0; background: var(--color-surface); color: var(--color-ink); cursor: pointer; align-items: center; justify-content: center; padding: 0; }
 .sidebar__close:hover { background: var(--color-hairline); }
@@ -1114,7 +1117,7 @@ const bottomTabs = computed<TabItem[]>(() => {
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
 /* -------- Desktop topbar -------- */
-.topbar { display: flex; align-items: center; gap: 24px; padding: 14px 32px; border-bottom: 1px solid var(--color-hairline); background: #fff; position: sticky; top: 0; z-index: 5; }
+.topbar { display: flex; align-items: center; gap: 24px; padding: 14px 32px; border-bottom: 1px solid var(--color-hairline); background: #fff; position: sticky; top: var(--imp-banner-h, 0px); z-index: 5; }
 .topbar__brand { display: none; align-items: baseline; gap: 8px; flex-shrink: 0; }
 .topbar__brand-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--color-accent); align-self: center; }
 .topbar__brand-wordmark { font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); line-height: 100%; }
@@ -1140,7 +1143,7 @@ const bottomTabs = computed<TabItem[]>(() => {
 .topbar__avatar:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
 /* -------- Mobile top nav -------- */
-.mobile-top { display: none; padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--color-hairline); align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: 0; z-index: 5; }
+.mobile-top { display: none; padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--color-hairline); align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: var(--imp-banner-h, 0px); z-index: 5; }
 .mobile-top__brand { display: inline-flex; align-items: baseline; gap: 8px; }
 .mobile-top__dot { width: 10px; height: 10px; border-radius: 999px; background: var(--color-accent); align-self: center; }
 .mobile-top__wordmark { font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); line-height: 100%; }

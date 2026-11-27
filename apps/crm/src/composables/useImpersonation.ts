@@ -51,6 +51,13 @@ interface Persisted {
   account_id: number
   account_name: string
   user_email: string
+  /** Brief 124 Phase 1 — carried on the impersonation JWT as the
+   *  `impersonation_session_id` claim. Null when the token predates
+   *  brief 124's claim addition (shouldn't happen in Phase 1+ but safe
+   *  to handle). Enables the banner's live action counter to poll
+   *  `GET /admin/audit?filter[session_id]=<this>` without re-fetching
+   *  the parent audit row. */
+  session_id: number | null
   /** Where to return the admin after they exit. */
   return_path: string
 }
@@ -122,7 +129,14 @@ export async function start(
   //    that'll be the account the admin picked.
   club.syncFromUserClubs(newUser.clubs)
 
-  // 6. Persist the impersonation record so a refresh keeps the session
+  // 6. Decode the JWT to pull brief 124's impersonation_session_id
+  //    claim. The JWT isn't HttpOnly (it's a Bearer we hold), so this
+  //    is cheap and avoids an extra round-trip to GET /admin/audit
+  //    just to learn the id. Safe: we're not consuming trust, just
+  //    reading what the backend already attached.
+  const session_id = decodeSessionIdFromJwt(result.impersonation_jwt)
+
+  // 7. Persist the impersonation record so a refresh keeps the session
   //    and so the banner / exit button know what to show.
   const persisted: Persisted = {
     jwt: result.impersonation_jwt,
@@ -130,11 +144,31 @@ export async function start(
     account_id: context.account_id,
     account_name: context.account_name,
     user_email: result.impersonated_user_email,
+    session_id,
     return_path: context.return_path,
   }
   state.value = persisted
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(persisted))
   scheduleExpiry(persisted.expires_at)
+}
+
+/** Pull the `impersonation_session_id` claim out of a JWT payload. No
+ *  signature verification — we're not trusting the token, just reading
+ *  what's in it. Returns null on any parse failure. */
+function decodeSessionIdFromJwt(jwt: string): number | null {
+  const parts = jwt.split('.')
+  if (parts.length !== 3) return null
+  try {
+    const payload = parts[1]!.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4)
+    const raw = typeof atob === 'function' ? atob(padded) : ''
+    if (!raw) return null
+    const claims = JSON.parse(raw) as Record<string, unknown>
+    const id = claims.impersonation_session_id
+    return typeof id === 'number' ? id : (typeof id === 'string' ? Number(id) : null)
+  } catch {
+    return null
+  }
 }
 
 /** End the impersonation session. Idempotent — safe to call on cleanup. */

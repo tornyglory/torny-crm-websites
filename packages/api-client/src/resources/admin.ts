@@ -463,6 +463,12 @@ export type AdminAuditAction =
   | 'unsuspend'
   | 'grant_platform_owner'
   | 'revoke_platform_owner'
+  // Brief 124 Phase 1 — every mutating call during an impersonation
+  // session writes one of these. payload shape in Phase 1 is strictly
+  // { method, path, as_user_id } (authorizer-level, no request body
+  // access). Richer `response_status` / per-endpoint `body_summary`
+  // lands in Phase 2 via a handler wrapper.
+  | 'impersonated_action'
 
 export interface AdminAuditActor {
   user_id: number
@@ -486,14 +492,26 @@ export interface AdminAuditEntry {
   at: string
   action: AdminAuditAction
   actor: AdminAuditActor
-  /** Null for user-scoped actions (grant / revoke platform owner). */
+  /** Null for user-scoped actions (grant / revoke platform owner).
+   *  Brief 124 Phase 1: `impersonated_action` rows may arrive with
+   *  nullified fields (`{ id: null, name: null, subdomain: null }`)
+   *  instead of a flat null — treat anything without `target_club?.id`
+   *  as "no club context on this row". */
   target_club: AdminAuditTargetClub | null
   /** Null for club-scoped actions (comp, suspend). */
   target_user: AdminAuditTargetUser | null
-  reason: string
-  /** Full request body of the action. Sanitised server-side — no
-   *  credentials or JWT contents; verify in audit verification §10.
-   *  Shape depends on action; render raw JSON in the UI for forensic use. */
+  /** Null on `impersonated_action` rows — the reason belongs to the
+   *  session-start `impersonate` row, found via `session_id`. */
+  reason: string | null
+  /** Brief 124 Phase 1 — links `impersonated_action` rows back to their
+   *  parent `impersonate` row. Null on session-start rows and on all
+   *  non-impersonation actions. */
+  session_id: number | null
+  /** Request body of the action. Sanitised server-side — no credentials
+   *  or JWT contents. Shape depends on action; render raw JSON in the
+   *  UI for forensic use.
+   *
+   *  `impersonated_action` Phase 1 shape: `{ method, path, as_user_id }`. */
   payload: unknown
   ip: string
   user_agent: string
@@ -511,6 +529,10 @@ export interface ListAuditParams {
     target_club?: number
     target_user?: number
     action?: AdminAuditAction
+    /** Brief 124 Phase 1 — group every row from one impersonation
+     *  session, including the parent `impersonate` row + every
+     *  `impersonated_action` row that points at it. */
+    session_id?: number
   }
   limit?: number
   cursor?: string

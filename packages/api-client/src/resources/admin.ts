@@ -469,6 +469,10 @@ export type AdminAuditAction =
   // access). Richer `response_status` / per-endpoint `body_summary`
   // lands in Phase 2 via a handler wrapper.
   | 'impersonated_action'
+  // Brief 126 — platform-level user ban + unban. Both carry target_user
+  // populated with target_club: null.
+  | 'ban_user'
+  | 'unban_user'
 
 export interface AdminAuditActor {
   user_id: number
@@ -576,6 +580,16 @@ export interface AdminUser {
   last_login_at: string | null
   is_platform_owner: boolean
   club_memberships: AdminUserClubMembership[]
+  /** Brief 126 — ISO timestamp when the platform ban was applied. Null
+   *  on active users. Absent on backend responses that predate brief
+   *  126 (treat absent as null — user is active). */
+  banned_at?: string | null
+  /** Brief 126 — reason captured at ban time. Only non-null when
+   *  `banned_at` is set. */
+  banned_reason?: string | null
+  /** Brief 126 — admin who applied the ban. Only non-null when
+   *  `banned_at` is set. */
+  banned_by_user_id?: number | null
 }
 
 export interface AdminUsersList {
@@ -591,6 +605,8 @@ export interface ListUsersParams {
     /** Users with ≥2 active club memberships. Useful for support
      *  triage ("which humans touch multiple clubs"). */
     multi_club?: true
+    /** Brief 126 — scope to banned (true) or active (false) users. */
+    banned?: boolean
   }
   limit?: number
   cursor?: string
@@ -937,6 +953,57 @@ export async function metricsCommunications(
   const res = await authedFetch<Envelope<AdminMetricsCommunications>>(
     `${VENUE_BASE}/admin/metrics/communications${toQuery({ window: params.window })}`,
     { method: 'GET', signal: params.signal, bypassImpersonation: true },
+  )
+  return res.data
+}
+
+// ════════════════════════════════════════════════════════════════
+// Brief 126 — platform user ban / unban
+// ════════════════════════════════════════════════════════════════
+
+export interface AdminBanUserInput {
+  reason: string
+}
+
+export interface AdminBanUserResult {
+  ok: true
+  banned_at: string
+}
+
+/** `POST /admin/users/:id/ban` — brief 126. Platform-wide ban. User
+ *  can't sign in; existing JWTs 403 on next authorizer pass.
+ *
+ *  Guards (returned as ApiError with `.code`):
+ *    - `409 already_banned` — user is already banned
+ *    - `409 cannot_ban_platform_owner` — revoke their platform_owner flag first
+ *    - `409 cannot_ban_self` — admin can't ban themselves
+ *    - `400 reason_required` / `reason_too_long` */
+export async function banUser(
+  userId: number,
+  input: AdminBanUserInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<AdminBanUserResult> {
+  const res = await authedFetch<Envelope<AdminBanUserResult>>(
+    `${VENUE_BASE}/admin/users/${userId}/ban`,
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal, bypassImpersonation: true },
+  )
+  return res.data
+}
+
+export interface AdminUnbanUserInput {
+  reason: string
+}
+
+/** `POST /admin/users/:id/unban` — brief 126. Lifts the platform ban.
+ *  Guard: `409 not_banned` if the user isn't currently banned. */
+export async function unbanUser(
+  userId: number,
+  input: AdminUnbanUserInput,
+  opts: { signal?: AbortSignal } = {},
+): Promise<{ ok: true }> {
+  const res = await authedFetch<Envelope<{ ok: true }>>(
+    `${VENUE_BASE}/admin/users/${userId}/unban`,
+    { method: 'POST', body: JSON.stringify(input), signal: opts.signal, bypassImpersonation: true },
   )
   return res.data
 }

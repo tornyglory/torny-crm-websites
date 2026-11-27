@@ -272,6 +272,10 @@ export type {
   ListCommunicationsParams as AdminListCommunicationsParams,
   AdminHighBounceAccount,
   AdminMetricsCommunications,
+  // Brief 126 — user ban / unban
+  AdminBanUserInput,
+  AdminBanUserResult,
+  AdminUnbanUserInput,
 } from './resources/admin'
 export * as notifications from './resources/notifications'
 export type {

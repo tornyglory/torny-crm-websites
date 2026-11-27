@@ -1,60 +1,99 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+/**
+ * Platform users — brief 123 §6.6 (list) + §6.7 (platform_owner toggle)
+ * + brief 126 (ban / unban).
+ *
+ * Wires the real `admin.listUsers` endpoint. Every human on Torny,
+ * across every club. Each row surfaces their role per-club via the
+ * `club_memberships` array, their platform_owner flag, their ban
+ * state, and (on expand) the actions bar.
+ *
+ * Note: brief 126's ban endpoints aren't shipped yet (backend-proposed
+ * only). The Ban button fires `admin.banUser` which 404s until the
+ * endpoint lands — error surfaces inline in the modal. Users with
+ * `banned_at` set show the Unban variant.
+ */
+import { ref, computed, watch } from 'vue'
+import {
+  admin,
+  ApiError,
+  type AdminUser,
+  type AdminUsersList,
+  type AdminListUsersParams,
+} from '@torny/api-client'
 import { useAuthStore } from '@/stores/auth'
-import { usePlatformUsersStore, type PlatformUser, type UserStatus, type UserPlatformRole } from '@/stores/platformUsers'
-import { SPORTS, SPORT_CODES, sportShort, type SportCode } from '@/stores/sports'
 import { useToast } from '@/composables/useToast'
-import CrmModal from '@/components/modals/CrmModal.vue'
+import AdminEmptyState from '@/components/admin/AdminEmptyState.vue'
+import AdminBanUserModal from '@/components/admin/AdminBanUserModal.vue'
 
 const auth = useAuthStore()
-const users = usePlatformUsersStore()
 const toast = useToast()
 
 const query = ref('')
-const statusFilter = ref<'all' | UserStatus>('all')
-const roleFilter = ref<'all' | UserPlatformRole>('all')
-const sportFilter = ref<'all' | SportCode>('all')
-const expandedId = ref<string | null>(null)
+const filter = ref<'all' | 'banned' | 'active' | 'platform_owners' | 'multi_club'>('all')
+const expandedId = ref<number | null>(null)
 
-type ActionKind = 'suspend' | 'ban' | 'restore'
-const pending = ref<{ kind: ActionKind; user: PlatformUser } | null>(null)
-const reason = ref('')
-const suspendDays = ref(7)
+const data = ref<AdminUsersList | null>(null)
+const loading = ref(false)
+const error = ref<string | null>(null)
+let inFlight: AbortController | null = null
 
-const decidedBy = computed(() => {
-  if (!auth.user) return 'Platform admin'
-  return `${auth.user.firstName ?? ''} ${auth.user.lastName ?? ''}`.trim() || auth.user.email
-})
+const banModal = ref<{ userId: number; userLabel: string; mode: 'ban' | 'unban' } | null>(null)
 
-const filtered = computed<PlatformUser[]>(() => {
-  const q = query.value.trim().toLowerCase()
-  return users.users.filter(u => {
-    if (statusFilter.value !== 'all' && u.status !== statusFilter.value) return false
-    if (roleFilter.value !== 'all' && u.role !== roleFilter.value) return false
-    if (sportFilter.value !== 'all' && !u.memberships.some(m => m.sport === sportFilter.value)) return false
-    if (q) {
-      const hay = `${u.firstName} ${u.lastName} ${u.email} ${u.memberships.map(m => `${m.clubName} ${m.sport}`).join(' ')}`.toLowerCase()
-      if (!hay.includes(q)) return false
+async function load() {
+  inFlight?.abort()
+  const ctrl = new AbortController()
+  inFlight = ctrl
+  loading.value = true
+  error.value = null
+  try {
+    const params: AdminListUsersParams = {
+      q: query.value.trim() || undefined,
+      signal: ctrl.signal,
     }
-    return true
-  }).sort((a, b) => {
-    // Flagged/reported first, then banned, then suspended, then active
-    const weight = (u: PlatformUser) => {
-      if (u.reportsCount > 0 && u.status === 'active') return 0
-      if (u.status === 'suspended') return 1
-      if (u.status === 'banned') return 2
-      if (u.status === 'pending') return 3
-      return 4
-    }
-    return weight(a) - weight(b)
-  })
-})
-
-function initials(u: PlatformUser): string {
-  return `${u.firstName?.[0] ?? ''}${u.lastName?.[0] ?? ''}`.toUpperCase() || '?'
+    const f: NonNullable<AdminListUsersParams['filter']> = {}
+    if (filter.value === 'platform_owners') f.is_platform_owner = true
+    else if (filter.value === 'multi_club') f.multi_club = true
+    else if (filter.value === 'banned') f.banned = true
+    else if (filter.value === 'active') f.banned = false
+    if (Object.keys(f).length > 0) params.filter = f
+    const res = await admin.listUsers(params)
+    if (ctrl.signal.aborted) return
+    data.value = res
+  } catch (err) {
+    if (ctrl.signal.aborted) return
+    error.value = err instanceof ApiError ? err.message : 'Could not load users.'
+  } finally {
+    if (!ctrl.signal.aborted) loading.value = false
+  }
 }
 
-function timeAgo(iso: string): string {
+let searchDebounce: ReturnType<typeof setTimeout> | null = null
+watch(query, () => {
+  if (searchDebounce) clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(() => void load(), 300)
+})
+watch(filter, () => void load(), { immediate: true })
+
+// ── Derived stats (from loaded rows — not platform-wide totals) ──
+const tiles = computed(() => {
+  const items = data.value?.items ?? []
+  return {
+    total: data.value?.total_count ?? items.length,
+    platformOwners: items.filter((u) => u.is_platform_owner).length,
+    banned: items.filter((u) => u.banned_at).length,
+    multiClub: items.filter((u) => u.club_memberships.length > 1).length,
+  }
+})
+
+function initials(u: AdminUser): string {
+  const source = u.name ?? u.email
+  const parts = source.split(/[\s@._-]+/).filter(Boolean)
+  return (parts.slice(0, 2).map((p) => p[0]!.toUpperCase()).join('') || '?').slice(0, 2)
+}
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return 'never'
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 1) return 'just now'
@@ -67,372 +106,344 @@ function timeAgo(iso: string): string {
   return `${months}mo ago`
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | null): string {
+  if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function openAction(kind: ActionKind, user: PlatformUser) {
-  pending.value = { kind, user }
-  reason.value = ''
-  suspendDays.value = 7
-}
-function cancelAction() {
-  pending.value = null
-  reason.value = ''
-}
-function confirmAction() {
-  if (!pending.value) return
-  const { kind, user } = pending.value
-  const name = `${user.firstName} ${user.lastName}`
-
-  if (kind === 'suspend') {
-    if (!reason.value.trim()) return
-    users.suspend(user.id, decidedBy.value, reason.value.trim(), suspendDays.value)
-    toast.info(`Suspended ${name} for ${suspendDays.value} day${suspendDays.value === 1 ? '' : 's'}`)
-  } else if (kind === 'ban') {
-    if (!reason.value.trim()) return
-    users.ban(user.id, decidedBy.value, reason.value.trim())
-    toast.error(`Banned ${name}`)
-  } else {
-    users.restore(user.id, decidedBy.value)
-    toast.success(`Restored ${name}`)
-  }
-  cancelAction()
+function toggleExpand(id: number) {
+  expandedId.value = expandedId.value === id ? null : id
 }
 
-const modalConfig = computed(() => {
-  if (!pending.value) return null
-  const name = `${pending.value.user.firstName} ${pending.value.user.lastName}`
-  const map = {
-    suspend: { eyebrow: 'Suspend user', title: `Suspend ${name}?`, cta: 'Suspend account', tone: 'warn' as const },
-    ban: { eyebrow: 'Permanent ban', title: `Ban ${name}?`, cta: 'Ban permanently', tone: 'danger' as const },
-    restore: { eyebrow: 'Restore access', title: `Restore ${name}?`, cta: 'Restore access', tone: 'ok' as const },
+async function togglePlatformOwner(u: AdminUser) {
+  if (u.id === auth.user?.id && u.is_platform_owner) {
+    toast.error("You can't revoke your own platform-owner flag.")
+    return
   }
-  return map[pending.value.kind]
-})
+  const next = !u.is_platform_owner
+  try {
+    await admin.updateUser(u.id, { is_platform_owner: next })
+    toast.success(next ? `${u.email} granted platform-owner access.` : `${u.email} removed from platform owners.`)
+    void load()
+  } catch (err) {
+    toast.error(err instanceof ApiError ? err.message : 'Could not update user.')
+  }
+}
+
+function openBan(u: AdminUser) {
+  banModal.value = {
+    userId: u.id,
+    userLabel: u.name ?? u.email,
+    mode: u.banned_at ? 'unban' : 'ban',
+  }
+}
 </script>
 
 <template>
-  <div class="page">
-    <header class="head">
+  <div class="users">
+    <header class="users__head">
       <div>
-        <div class="head__eyebrow">Platform · Users &amp; moderation</div>
-        <h1 class="head__title">Users</h1>
-        <p class="head__sub">
-          Every account on Torny — club owners, admins, committee, and players.
-          Suspend or ban for repeated abuse or spam. Flagged accounts sort to the top.
-        </p>
+        <div class="users__eyebrow">PLATFORM · USERS &amp; MODERATION</div>
+        <h1 class="users__title">Users</h1>
+        <p class="users__sub">Every account on Torny — club owners, admins, committee, and players. Platform-owner grant + ban actions are audit-logged.</p>
       </div>
     </header>
 
-    <section class="stats">
-      <div class="stat"><div class="stat__label">Active</div><div class="stat__value">{{ users.active }}</div></div>
-      <div class="stat stat--warn"><div class="stat__label">Suspended</div><div class="stat__value">{{ users.suspended }}</div></div>
-      <div class="stat stat--danger"><div class="stat__label">Banned</div><div class="stat__value">{{ users.banned }}</div></div>
-      <div class="stat stat--flag"><div class="stat__label">Flagged (reported)</div><div class="stat__value">{{ users.flagged.length }}</div></div>
+    <!-- Summary tiles -->
+    <section class="users__tiles">
+      <div class="users__tile users__tile--active">
+        <div class="users__tile-label">Total (window)</div>
+        <div class="users__tile-value">{{ tiles.total }}</div>
+      </div>
+      <div class="users__tile users__tile--owner">
+        <div class="users__tile-label">Platform owners</div>
+        <div class="users__tile-value">{{ tiles.platformOwners }}</div>
+      </div>
+      <div class="users__tile users__tile--banned">
+        <div class="users__tile-label">Banned</div>
+        <div class="users__tile-value">{{ tiles.banned }}</div>
+      </div>
+      <div class="users__tile users__tile--multi">
+        <div class="users__tile-label">Multi-club</div>
+        <div class="users__tile-value">{{ tiles.multiClub }}</div>
+      </div>
     </section>
 
-    <div class="filters">
-      <div class="search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-        <input v-model="query" type="search" placeholder="Search by name, email, or club…" />
+    <!-- Controls -->
+    <section class="users__controls">
+      <input
+        v-model="query"
+        type="search"
+        class="users__search"
+        placeholder="Search by name, email, or club…"
+      />
+      <div class="users__filters">
+        <button
+          v-for="f in [
+            { value: 'all',             label: 'All' },
+            { value: 'active',          label: 'Active' },
+            { value: 'banned',          label: 'Banned' },
+            { value: 'platform_owners', label: 'Platform owners' },
+            { value: 'multi_club',      label: 'Multi-club' },
+          ]"
+          :key="f.value"
+          type="button"
+          class="users__filter"
+          :class="{ 'users__filter--active': filter === f.value }"
+          @click="filter = f.value as typeof filter"
+        >{{ f.label }}</button>
       </div>
-      <div class="segmented">
-        <button :class="{ 'is-on': statusFilter === 'all' }" @click="statusFilter = 'all'">All</button>
-        <button :class="{ 'is-on': statusFilter === 'active' }" @click="statusFilter = 'active'">Active</button>
-        <button :class="{ 'is-on': statusFilter === 'suspended' }" @click="statusFilter = 'suspended'">Suspended</button>
-        <button :class="{ 'is-on': statusFilter === 'banned' }" @click="statusFilter = 'banned'">Banned</button>
-        <button :class="{ 'is-on': statusFilter === 'pending' }" @click="statusFilter = 'pending'">Pending</button>
-      </div>
-      <select v-model="roleFilter" class="select">
-        <option value="all">All roles</option>
-        <option value="platform">Platform</option>
-        <option value="owner">Owner</option>
-        <option value="admin">Admin</option>
-        <option value="member">Team member</option>
-        <option value="player">Player</option>
-      </select>
-      <select v-model="sportFilter" class="select">
-        <option value="all">All sports</option>
-        <option v-for="code in SPORT_CODES" :key="code" :value="code">{{ SPORTS[code].label }}</option>
-      </select>
-    </div>
+    </section>
 
-    <ul v-if="filtered.length" class="rows">
-      <li v-for="u in filtered" :key="u.id" class="row" :class="{ 'is-open': expandedId === u.id }">
-        <div class="row__head" @click="expandedId = expandedId === u.id ? null : u.id">
-          <div class="row__avatar" :class="`row__avatar--${u.status}`">
-            {{ initials(u) }}
-            <span v-if="u.reportsCount > 0 && u.status === 'active'" class="row__flag" :title="`${u.reportsCount} reports`">{{ u.reportsCount }}</span>
-          </div>
-          <div class="row__body">
-            <div class="row__name">
-              {{ u.firstName }} {{ u.lastName }}
-              <span class="role role" :class="`role--${u.role}`">{{ u.role }}</span>
-            </div>
-            <div class="row__meta">
-              <span>{{ u.email }}</span>
-              <template v-if="u.memberships[0]">
-                <span class="row__sep">·</span>
-                <span class="sport-chip">{{ sportShort(u.memberships[0].sport) }}</span>
-                <span>{{ u.memberships[0].clubName }}{{ u.memberships.length > 1 ? ` +${u.memberships.length - 1}` : '' }}</span>
-              </template>
-              <span class="row__sep">·</span>
-              <span>Active {{ timeAgo(u.lastActiveAt) }}</span>
-            </div>
-          </div>
-          <div class="row__status" :class="`row__status--${u.status}`">{{ u.status }}</div>
-          <button class="row__chevron" :class="{ 'is-open': expandedId === u.id }" aria-label="Toggle details">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="m7 10 5 5 5-5" /></svg>
-          </button>
-        </div>
+    <AdminEmptyState
+      v-if="error"
+      tone="error"
+      title="Could not load users"
+      :detail="error"
+      @retry="load"
+    />
 
-        <div v-if="expandedId === u.id" class="row__detail">
-          <div class="detail-grid">
-            <div>
-              <div class="detail__label">Account</div>
-              <div class="detail__val">{{ u.email }}</div>
-              <div class="detail__val detail__val--muted">Joined {{ formatDate(u.joinedAt) }}</div>
-              <div class="detail__val detail__val--muted">Last active {{ timeAgo(u.lastActiveAt) }}</div>
+    <AdminEmptyState
+      v-else-if="data && data.items.length === 0"
+      tone="no-results"
+      title="No users matched"
+      detail="Clear the search or widen the filter."
+    />
+
+    <ul v-else class="users__list">
+      <li
+        v-for="u in data?.items"
+        :key="u.id"
+        class="user-row"
+        :class="{ 'user-row--expanded': expandedId === u.id, 'user-row--banned': !!u.banned_at }"
+      >
+        <button type="button" class="user-row__head" @click="toggleExpand(u.id)">
+          <div class="user-row__avatar">{{ initials(u) }}</div>
+          <div class="user-row__who">
+            <div class="user-row__name-row">
+              <span class="user-row__name">{{ u.name ?? u.email.split('@')[0] }}</span>
+              <span v-if="u.is_platform_owner" class="chip chip--owner">PLATFORM OWNER</span>
+              <span v-if="u.banned_at" class="chip chip--banned">BANNED</span>
+              <span v-else-if="u.club_memberships.length === 0" class="chip chip--muted">NO CLUBS</span>
             </div>
-            <div>
-              <div class="detail__label">Club memberships</div>
-              <template v-if="u.memberships.length">
-                <div v-for="m in u.memberships" :key="m.clubName" class="detail__val">
-                  <span class="sport-chip sport-chip--detail">{{ sportShort(m.sport) }}</span>
-                  {{ m.clubName }} <span class="detail__val--muted">· {{ m.role }}</span>
-                </div>
+            <div class="user-row__meta">
+              <span class="user-row__email">{{ u.email }}</span>
+              <template v-if="u.club_memberships.length > 0">
+                <span class="user-row__dot">·</span>
+                <span class="user-row__club">{{ u.club_memberships[0]?.club_name }}<span v-if="u.club_memberships.length > 1"> +{{ u.club_memberships.length - 1 }}</span></span>
               </template>
-              <div v-else class="detail__val detail__val--muted">No club memberships</div>
+              <span class="user-row__dot">·</span>
+              <span class="user-row__last-login">Active {{ timeAgo(u.last_login_at) }}</span>
             </div>
+          </div>
+          <div class="user-row__chevron" :class="{ 'user-row__chevron--open': expandedId === u.id }">⌄</div>
+        </button>
+
+        <div v-if="expandedId === u.id" class="user-row__detail">
+          <div class="user-row__cols">
             <div>
-              <div class="detail__label">Signals</div>
-              <div class="detail__val" v-if="u.reportsCount > 0" :style="{ color: 'var(--color-danger)' }">
-                {{ u.reportsCount }} unresolved report{{ u.reportsCount === 1 ? '' : 's' }}
-              </div>
-              <div v-else class="detail__val detail__val--muted">No reports on file</div>
-              <div v-if="u.suspendedUntil" class="detail__val" :style="{ color: '#92400E' }">
-                Suspended until {{ formatDate(u.suspendedUntil) }}
+              <div class="user-row__col-label">Account</div>
+              <div class="user-row__col-body">
+                <div>{{ u.email }}</div>
+                <div class="user-row__muted">Joined {{ formatDate(u.signup_at) }}</div>
+                <div class="user-row__muted">Last active {{ timeAgo(u.last_login_at) }}</div>
               </div>
             </div>
-          </div>
-
-          <div v-if="u.moderation.length" class="log">
-            <div class="detail__label">Moderation log</div>
-            <ul class="log__list">
-              <li v-for="(m, i) in u.moderation" :key="i" class="log__item">
-                <span class="log__badge" :class="`log__badge--${m.action}`">{{ m.action }}</span>
-                <div class="log__body">
-                  <div v-if="m.reason" class="log__reason">{{ m.reason }}</div>
-                  <div class="log__meta">
-                    {{ timeAgo(m.ts) }} · by {{ m.by }}
-                    <template v-if="m.until"> · until {{ formatDate(m.until) }}</template>
+            <div>
+              <div class="user-row__col-label">Club memberships</div>
+              <div class="user-row__col-body">
+                <template v-if="u.club_memberships.length > 0">
+                  <div v-for="m in u.club_memberships" :key="m.club_id" class="user-row__club-row">
+                    <span class="chip chip--role">{{ m.role }}</span>
+                    {{ m.club_name }}
                   </div>
+                </template>
+                <div v-else class="user-row__muted">No clubs</div>
+              </div>
+            </div>
+            <div>
+              <div class="user-row__col-label">Moderation</div>
+              <div class="user-row__col-body">
+                <div v-if="u.banned_at" class="user-row__ban-detail">
+                  <div class="user-row__danger">Banned {{ timeAgo(u.banned_at) }}</div>
+                  <div v-if="u.banned_reason" class="user-row__muted">Reason: {{ u.banned_reason }}</div>
                 </div>
-              </li>
-            </ul>
+                <div v-else class="user-row__muted">No active moderation actions.</div>
+              </div>
+            </div>
           </div>
 
-          <div class="detail__actions">
-            <template v-if="u.status === 'active'">
-              <button class="btn-warn" @click.stop="openAction('suspend', u)">Suspend</button>
-              <button class="btn-danger" @click.stop="openAction('ban', u)">Ban permanently</button>
-            </template>
-            <template v-else-if="u.status === 'suspended'">
-              <button class="btn-ghost" @click.stop="openAction('restore', u)">Restore access</button>
-              <button class="btn-danger" @click.stop="openAction('ban', u)">Escalate to ban</button>
-            </template>
-            <template v-else-if="u.status === 'banned'">
-              <button class="btn-ghost" @click.stop="openAction('restore', u)">Unban</button>
-            </template>
-            <template v-else-if="u.status === 'pending'">
-              <span class="detail__val detail__val--muted">Waiting on claim review — action from the Claims tab.</span>
-            </template>
+          <div class="user-row__actions">
+            <button
+              type="button"
+              class="action-btn"
+              :disabled="u.id === auth.user?.id && u.is_platform_owner"
+              :title="u.id === auth.user?.id && u.is_platform_owner ? 'You can\'t revoke your own platform-owner flag' : undefined"
+              @click="togglePlatformOwner(u)"
+            >
+              {{ u.is_platform_owner ? 'Revoke platform owner' : 'Make platform owner' }}
+            </button>
+            <button
+              type="button"
+              class="action-btn"
+              :class="u.banned_at ? 'action-btn--primary' : 'action-btn--danger'"
+              :disabled="u.id === auth.user?.id"
+              :title="u.id === auth.user?.id ? 'You can\'t ban yourself' : undefined"
+              @click="openBan(u)"
+            >
+              {{ u.banned_at ? 'Unban user' : 'Ban user' }}
+            </button>
           </div>
         </div>
       </li>
     </ul>
 
-    <div v-else class="empty">
-      <div class="empty__title">No users match.</div>
-      <div class="empty__sub">Try clearing filters or search.</div>
-    </div>
-
-    <CrmModal
-      :open="!!pending"
-      :eyebrow="modalConfig?.eyebrow"
-      :title="modalConfig?.title ?? ''"
-      width="sm"
-      @close="cancelAction"
-    >
-      <template v-if="pending?.kind === 'suspend'">
-        <p class="modal-body">
-          This blocks <strong>{{ pending.user.firstName }} {{ pending.user.lastName }}</strong> from posting or reacting.
-          They can still read. Suspension lifts automatically on the end date.
-        </p>
-        <div class="modal-row">
-          <label class="modal-field">
-            <span>Duration</span>
-            <select v-model.number="suspendDays" class="select">
-              <option :value="1">1 day</option>
-              <option :value="3">3 days</option>
-              <option :value="7">7 days</option>
-              <option :value="14">14 days</option>
-              <option :value="30">30 days</option>
-            </select>
-          </label>
-        </div>
-        <label class="modal-field">
-          <span>Reason (visible to user)</span>
-          <textarea v-model="reason" rows="3" class="modal-textarea" placeholder="e.g. Repeated abusive comments on match reports." />
-        </label>
-      </template>
-      <template v-else-if="pending?.kind === 'ban'">
-        <p class="modal-body modal-body--danger">
-          <strong>Permanent.</strong> Bans <strong>{{ pending.user.firstName }} {{ pending.user.lastName }}</strong>
-          from every part of Torny and revokes their sessions. They can appeal via support.
-        </p>
-        <label class="modal-field">
-          <span>Reason (internal + user notice)</span>
-          <textarea v-model="reason" rows="3" class="modal-textarea" placeholder="e.g. Coordinated spam across multiple clubs." />
-        </label>
-      </template>
-      <template v-else-if="pending?.kind === 'restore'">
-        <p class="modal-body">
-          Reactivates <strong>{{ pending.user.firstName }} {{ pending.user.lastName }}</strong> immediately and clears
-          <template v-if="pending.user.reportsCount > 0">their {{ pending.user.reportsCount }} pending report{{ pending.user.reportsCount === 1 ? '' : 's' }}</template>
-          <template v-else>the suspension</template>.
-        </p>
-      </template>
-      <template #footer>
-        <button class="btn-ghost" @click="cancelAction">Cancel</button>
-        <button
-          class="btn-confirm"
-          :class="{ 'btn-confirm--danger': modalConfig?.tone === 'danger', 'btn-confirm--warn': modalConfig?.tone === 'warn', 'btn-confirm--ok': modalConfig?.tone === 'ok' }"
-          :disabled="pending?.kind !== 'restore' && !reason.trim()"
-          @click="confirmAction"
-        >{{ modalConfig?.cta }}</button>
-      </template>
-    </CrmModal>
+    <!-- Ban / unban modal -->
+    <AdminBanUserModal
+      v-if="banModal"
+      :open="!!banModal"
+      :user-id="banModal.userId"
+      :user-label="banModal.userLabel"
+      :mode="banModal.mode"
+      @close="banModal = null"
+      @done="load"
+    />
   </div>
 </template>
 
 <style scoped>
-.page { padding: 32px 40px 60px; }
+.users { padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 24px; max-width: 1280px; }
 
-.head { margin-bottom: 24px; }
-.head__eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; }
-.head__title { font-family: var(--font-display); font-size: 40px; font-weight: 600; color: var(--color-ink); letter-spacing: -0.02em; line-height: 1.05; margin: 8px 0 12px; }
-.head__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); margin: 0; max-width: 640px; line-height: 1.5; }
+.users__eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--color-fog); }
+.users__title { font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); margin: 8px 0 6px; }
+.users__sub { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); margin: 0; max-width: 60ch; }
 
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
-.stat { padding: 16px 20px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; }
-.stat--warn { background: #FFFBEB; border-color: #FDE68A; }
-.stat--danger { background: #FEF2F2; border-color: #FECACA; }
-.stat--flag { background: #EFF6FF; border-color: #BFDBFE; }
-.stat__label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; }
-.stat__value { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.02em; margin-top: 6px; }
+.users__tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.users__tile { padding: 20px; background: var(--color-ground); border: 1px solid var(--color-hairline); border-radius: 14px; }
+.users__tile-label { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-fog); }
+.users__tile-value { font-family: var(--font-display); font-size: 36px; font-weight: 700; letter-spacing: -0.02em; color: var(--color-ink); margin-top: 6px; line-height: 1; }
+.users__tile--active { background: color-mix(in oklab, var(--color-feature-mint) 6%, var(--color-ground)); }
+.users__tile--owner { background: color-mix(in oklab, var(--color-accent) 6%, var(--color-ground)); }
+.users__tile--banned { background: color-mix(in oklab, var(--color-danger) 6%, var(--color-ground)); }
+.users__tile--multi { background: color-mix(in oklab, var(--color-feature-violet) 6%, var(--color-ground)); }
+@media (max-width: 900px) { .users__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-.filters { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
-.search { flex: 1; min-width: 240px; position: relative; display: flex; align-items: center; }
-.search svg { position: absolute; left: 14px; color: var(--color-fog); pointer-events: none; }
-.search input { width: 100%; padding: 11px 14px 11px 40px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); }
-.search input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
-.segmented { display: inline-flex; padding: 4px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; }
-.segmented button { padding: 7px 12px; background: transparent; border: 0; border-radius: 6px; font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--color-fog); cursor: pointer; }
-.segmented button.is-on { background: var(--color-ink); color: #fff; font-weight: 600; }
-.select { padding: 10px 12px; background: #fff; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 13px; color: var(--color-ink); cursor: pointer; }
-.select:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
-
-.sport-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 4px; font-family: var(--font-body); font-size: 10px; font-weight: 600; color: var(--color-graphite); letter-spacing: 0.02em; }
-.sport-chip--detail { padding: 2px 8px; font-size: 11px; margin-right: 4px; }
-
-.rows { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
-.row { background: #fff; border: 1px solid var(--color-hairline); border-radius: 12px; overflow: hidden; }
-.row.is-open { border-color: var(--color-ink); box-shadow: 0 12px 30px -12px rgba(15,23,42,0.15); }
-.row__head { display: flex; align-items: center; gap: 14px; padding: 14px 18px; cursor: pointer; }
-.row__head:hover { background: var(--color-surface); }
-.row.is-open .row__head { background: var(--color-surface); }
-
-.row__avatar { width: 40px; height: 40px; border-radius: 999px; background: var(--color-ink); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-body); font-size: 12px; font-weight: 700; flex-shrink: 0; position: relative; }
-.row__avatar--suspended { background: #F59E0B; }
-.row__avatar--banned { background: var(--color-danger); }
-.row__avatar--pending { background: var(--color-fog); }
-.row__flag { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--color-danger); color: #fff; font-family: var(--font-mono); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; border: 2px solid #fff; }
-
-.row__body { flex: 1; min-width: 0; }
-.row__name { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); }
-.role { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: var(--color-surface); color: var(--color-graphite); }
-.role--platform { background: var(--color-ink); color: #fff; }
-.role--owner { background: var(--color-accent-soft); color: var(--color-accent-strong); }
-.role--admin { background: #EDE9FE; color: #5B21B6; }
-.role--committee { background: #DCFCE7; color: #166534; }
-.role--player { background: var(--color-surface); color: var(--color-fog); }
-.row__meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 4px; }
-.row__sep { opacity: 0.5; }
-
-.row__status { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; padding: 4px 10px; border-radius: 6px; flex-shrink: 0; }
-.row__status--active { background: #DCFCE7; color: #166534; }
-.row__status--suspended { background: #FEF3C7; color: #92400E; }
-.row__status--banned { background: #FEE2E2; color: #991B1B; }
-.row__status--pending { background: var(--color-surface); color: var(--color-fog); }
-
-.row__chevron { background: transparent; border: 0; padding: 6px; color: var(--color-fog); cursor: pointer; transition: transform 0.15s ease; }
-.row__chevron.is-open { transform: rotate(180deg); color: var(--color-ink); }
-
-.row__detail { padding: 8px 20px 24px; border-top: 1px solid var(--color-hairline); }
-.detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin: 20px 0; }
-.detail__label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); font-weight: 700; margin-bottom: 8px; }
-.detail__val { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); font-weight: 500; margin-bottom: 4px; }
-.detail__val--muted { color: var(--color-fog); font-size: 12px; font-weight: 400; }
-
-.log { margin-top: 16px; padding: 16px; background: var(--color-surface); border-radius: 12px; }
-.log__list { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-direction: column; gap: 12px; }
-.log__item { display: flex; gap: 12px; align-items: flex-start; }
-.log__badge { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; padding: 3px 8px; border-radius: 4px; flex-shrink: 0; margin-top: 2px; }
-.log__badge--suspend { background: #FEF3C7; color: #92400E; }
-.log__badge--ban { background: #FEE2E2; color: #991B1B; }
-.log__badge--restore, .log__badge--unban { background: #DCFCE7; color: #166534; }
-.log__badge--warn { background: #EFF6FF; color: #1E40AF; }
-.log__body { flex: 1; }
-.log__reason { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); }
-.log__meta { font-family: var(--font-mono); font-size: 10px; color: var(--color-fog); margin-top: 4px; letter-spacing: 0.06em; text-transform: uppercase; }
-
-.detail__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
-.btn-warn { padding: 10px 18px; background: transparent; color: #92400E; border: 1px solid #FDE68A; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
-.btn-warn:hover { background: #FFFBEB; }
-.btn-danger { padding: 10px 18px; background: var(--color-danger); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
-.btn-danger:hover { background: #B91C1C; }
-.btn-ghost { padding: 10px 18px; background: #fff; color: var(--color-ink); border: 1px solid var(--color-hairline); border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 500; cursor: pointer; }
-.btn-ghost:hover { border-color: var(--color-ink); }
-
-.empty { padding: 60px 20px; text-align: center; background: #fff; border: 1px dashed var(--color-hairline); border-radius: 14px; }
-.empty__title { font-family: var(--font-display); font-size: 20px; font-weight: 600; color: var(--color-ink); }
-.empty__sub { font-family: var(--font-body); font-size: 13px; color: var(--color-fog); margin-top: 4px; }
-
-/* Modal internals */
-.modal-body { font-family: var(--font-body); font-size: 14px; color: var(--color-graphite); line-height: 1.55; margin: 0 0 16px; }
-.modal-body strong { color: var(--color-ink); font-weight: 700; }
-.modal-body--danger { padding: 12px; background: #FEF2F2; border-left: 3px solid var(--color-danger); border-radius: 4px 10px 10px 4px; }
-.modal-row { margin-bottom: 12px; }
-.modal-field { display: flex; flex-direction: column; gap: 8px; }
-.modal-field span { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-fog); }
-.modal-textarea { padding: 12px; border: 1px solid var(--color-hairline); border-radius: 10px; font-family: var(--font-body); font-size: 14px; resize: vertical; color: var(--color-ink); line-height: 1.5; }
-.modal-textarea:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
-
-.btn-confirm { padding: 10px 20px; background: var(--color-ink); color: #fff; border: 0; border-radius: 999px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
-.btn-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn-confirm--warn { background: #F59E0B; }
-.btn-confirm--warn:hover:not(:disabled) { background: #D97706; }
-.btn-confirm--danger { background: var(--color-danger); }
-.btn-confirm--danger:hover:not(:disabled) { background: #B91C1C; }
-.btn-confirm--ok { background: #16A34A; }
-.btn-confirm--ok:hover:not(:disabled) { background: #15803D; }
-
-@media (max-width: 900px) {
-  .page { padding: 20px; }
-  .head__title { font-size: 32px; }
-  .stats { grid-template-columns: 1fr 1fr; }
-  .detail-grid { grid-template-columns: 1fr; }
+.users__controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.users__search {
+  flex: 1;
+  min-width: 240px;
+  max-width: 420px;
+  padding: 10px 16px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-ink);
+  background: var(--color-ground);
+  border: 1px solid var(--color-hairline);
+  border-radius: 999px;
+  outline: none;
 }
+.users__search:focus { border-color: var(--color-ink); }
+.users__search::placeholder { color: var(--color-fog); }
+.users__filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.users__filter {
+  padding: 8px 16px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--color-ground);
+  color: var(--color-graphite);
+  border: 1px solid var(--color-hairline);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.users__filter:hover { border-color: var(--color-ink); color: var(--color-ink); }
+.users__filter--active { background: var(--color-ink); color: #fff; border-color: var(--color-ink); }
+
+.users__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.user-row { background: var(--color-ground); border: 1px solid var(--color-hairline); border-radius: 14px; overflow: hidden; }
+.user-row--expanded { border-color: var(--color-ink); }
+.user-row--banned { background: color-mix(in oklab, var(--color-danger) 3%, var(--color-ground)); }
+
+.user-row__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  width: 100%;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.user-row__head:hover { background: var(--color-surface); }
+
+.user-row__avatar {
+  width: 40px; height: 40px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-accent) 15%, #fff);
+  color: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.user-row--banned .user-row__avatar { background: color-mix(in oklab, var(--color-danger) 15%, #fff); color: var(--color-danger); }
+
+.user-row__who { flex: 1; min-width: 0; }
+.user-row__name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.user-row__name { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-ink); }
+.user-row__meta { font-family: var(--font-body); font-size: 12px; color: var(--color-fog); margin-top: 2px; display: flex; gap: 6px; flex-wrap: wrap; }
+.user-row__email { font-family: var(--font-mono); font-size: 11px; color: var(--color-graphite); }
+.user-row__dot { color: var(--color-hairline); }
+
+.user-row__chevron {
+  font-size: 18px;
+  color: var(--color-fog);
+  width: 24px;
+  text-align: center;
+  transition: transform 200ms ease;
+}
+.user-row__chevron--open { transform: rotate(180deg); }
+
+.user-row__detail { padding: 0 18px 18px; display: flex; flex-direction: column; gap: 16px; border-top: 1px solid var(--color-hairline); margin-top: 0; padding-top: 16px; }
+.user-row__cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+@media (max-width: 900px) { .user-row__cols { grid-template-columns: 1fr; gap: 16px; } }
+
+.user-row__col-label { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-fog); margin-bottom: 8px; }
+.user-row__col-body { font-family: var(--font-body); font-size: 13px; color: var(--color-ink); display: flex; flex-direction: column; gap: 4px; }
+.user-row__muted { color: var(--color-fog); font-size: 12px; }
+.user-row__danger { color: var(--color-danger); font-weight: 600; }
+.user-row__ban-detail { display: flex; flex-direction: column; gap: 4px; }
+.user-row__club-row { display: flex; align-items: center; gap: 8px; }
+
+.user-row__actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+
+.action-btn {
+  padding: 8px 16px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--color-ground);
+  color: var(--color-ink);
+  border: 1px solid var(--color-hairline);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.action-btn:hover:not(:disabled) { background: var(--color-surface); border-color: var(--color-ink); }
+.action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.action-btn--primary { background: var(--color-ink); color: #fff; border-color: var(--color-ink); }
+.action-btn--primary:hover:not(:disabled) { background: #000; }
+.action-btn--danger { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }
+.action-btn--danger:hover:not(:disabled) { background: color-mix(in oklab, var(--color-danger) 85%, #000); }
+
+.chip { display: inline-flex; align-items: center; padding: 2px 8px; font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; border-radius: 999px; }
+.chip--owner { background: color-mix(in oklab, var(--color-accent) 15%, #fff); color: var(--color-accent); }
+.chip--banned { background: color-mix(in oklab, var(--color-danger) 15%, #fff); color: var(--color-danger); }
+.chip--role { background: var(--color-surface); color: var(--color-graphite); font-size: 9px; padding: 1px 7px; }
+.chip--muted { background: var(--color-surface); color: var(--color-fog); }
 </style>

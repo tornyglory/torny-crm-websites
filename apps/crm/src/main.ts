@@ -6,6 +6,7 @@ import { router } from './router'
 import { initSentry } from './utils/sentry'
 import { installPreloadErrorRecovery } from './utils/preloadErrorRecovery'
 import { onApiError as onApiErrorSuspension } from './composables/useAccountSuspendedModal'
+import { onApiError as onApiErrorBan } from './composables/useAccountBannedModal'
 import { restore as restoreImpersonation } from './composables/useImpersonation'
 
 import '@torny/design-tokens/fonts.css'
@@ -21,6 +22,10 @@ installPreloadErrorRecovery()
 // at the api-client level and trigger the blocking modal; no per-view
 // catch wiring required.
 registerApiErrorObserver(onApiErrorSuspension)
+// Brief 126 §6.3 — mirror the account_suspended observer for the
+// platform-level ban. Separate modal + copy so admins debugging don't
+// confuse club-level suspension with user-level ban.
+registerApiErrorObserver(onApiErrorBan)
 
 // Brief 123 §6.1 — rehydrate impersonation session from sessionStorage
 // so a mid-session refresh doesn't drop the admin's short-lived Bearer

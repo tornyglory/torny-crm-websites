@@ -24,6 +24,7 @@ import NewMenu from '@/components/NewMenu.vue'
 import UserMenu from '@/components/UserMenu.vue'
 import CrmToast from '@/components/CrmToast.vue'
 import AccountSuspendedModal from '@/components/AccountSuspendedModal.vue'
+import AccountBannedModal from '@/components/AccountBannedModal.vue'
 import AdminImpersonationBanner from '@/components/admin/AdminImpersonationBanner.vue'
 
 const auth = useAuthStore()
@@ -939,6 +940,8 @@ const bottomTabs = computed<TabItem[]>(() => {
       <!-- Brief 123 §6.3 — blocking modal when any CRM write hits a
            suspended club. Mounted once here so every route inherits. -->
       <AccountSuspendedModal />
+      <!-- Brief 126 §6.3 — same shape but for a platform-level user ban. -->
+      <AccountBannedModal />
 
       <div class="page">
         <RouterView />

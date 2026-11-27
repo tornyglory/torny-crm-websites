@@ -261,6 +261,11 @@ export type {
   AdminTransactionRow,
   AdminTransactionsList,
   ListTransactionsParams as AdminListTransactionsParams,
+  // Brief 125 — platform-wide transactions
+  AdminPlatformTransactionRow,
+  AdminTopClubByGmv,
+  AdminPlatformTransactionsList,
+  ListAllTransactionsParams as AdminListAllTransactionsParams,
   // Phase 3 — communications
   AdminCommunicationBatch,
   AdminCommunicationsList,

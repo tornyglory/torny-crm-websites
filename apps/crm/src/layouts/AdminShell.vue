@@ -16,6 +16,7 @@ interface NavItem { to: string; label: string }
 const nav = computed<NavItem[]>(() => [
   { to: '/admin/dashboard', label: 'Dashboard' },
   { to: '/admin/accounts', label: 'Accounts' },
+  { to: '/admin/transactions', label: 'Transactions' },
   { to: '/admin/users', label: 'Users' },
 ])
 

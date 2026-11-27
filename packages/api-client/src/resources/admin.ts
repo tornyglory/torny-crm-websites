@@ -707,6 +707,91 @@ export interface ListTransactionsParams {
   signal?: AbortSignal
 }
 
+// ── Platform-wide transactions (brief 125) ──────────────────────
+
+/** Row shape for the platform-wide ledger — same as AdminTransactionRow
+ *  plus a `club` identifier so the FE can render which account each
+ *  row belongs to without a secondary lookup. */
+export interface AdminPlatformTransactionRow extends AdminTransactionRow {
+  club: {
+    id: number
+    name: string
+    subdomain: string
+  }
+}
+
+/** Top-clubs-by-GMV summary surfaced in `aggregates.top_clubs_by_gmv`.
+ *  Capped at 5 rows server-side; render only what fits. NOT a general
+ *  facet — do not use for filter UI. */
+export interface AdminTopClubByGmv {
+  club_id: number
+  name: string
+  gross_cents: number
+  platform_take_cents: number
+}
+
+export interface AdminPlatformTransactionsList {
+  items: AdminPlatformTransactionRow[]
+  next_cursor: string | null
+  total_count: number
+  aggregates: {
+    gross_cents: number
+    platform_take_cents: number
+    /** Platform take / gross. Informational only. */
+    effective_take_rate: number
+    count_by_kind: Partial<Record<AdminTransactionKind, number>>
+    top_clubs_by_gmv: AdminTopClubByGmv[]
+  }
+}
+
+export interface ListAllTransactionsParams {
+  window?: AdminWindow
+  filter?: {
+    kind?: AdminTransactionKind | AdminTransactionKind[]
+    status?: AdminTransactionStatus
+    /** Scope to one club — equivalent to the per-account endpoint but
+     *  keeps the FE on the platform list view. */
+    club_id?: number
+  }
+  /** Default `-at`. Platform-wide ledger also supports `-platform_fee_cents`
+   *  so admins can find the highest-fee rows across every club. */
+  sort?: '-at' | '-amount_cents' | '-platform_fee_cents'
+  q?: string
+  limit?: number
+  cursor?: string
+  signal?: AbortSignal
+}
+
+/** `GET /admin/transactions` — brief 125. Platform-wide ledger with
+ *  per-row club identity + aggregates (incl. top-clubs-by-GMV).
+ *
+ *  Reconciliation guarantee: `aggregates.gross_cents` here with no
+ *  filters at `window=30d` MUST equal
+ *  `admin.metricsBilling({ window: '30d' }).transactional.gmv_cents` —
+ *  same for `platform_take_cents`. If these ever drift, it's a bug. */
+export async function listAllTransactions(
+  params: ListAllTransactionsParams = {},
+): Promise<AdminPlatformTransactionsList> {
+  const query: Record<string, string | number | boolean | undefined> = {
+    window: params.window,
+    sort: params.sort,
+    q: params.q,
+    limit: params.limit,
+    cursor: params.cursor,
+  }
+  if (params.filter) {
+    for (const [k, v] of Object.entries(params.filter)) {
+      if (v === undefined) continue
+      query[`filter[${k}]`] = Array.isArray(v) ? v.join(',') : (v as string | number | boolean)
+    }
+  }
+  const res = await authedFetch<Envelope<AdminPlatformTransactionsList>>(
+    `${VENUE_BASE}/admin/transactions${toQuery(query)}`,
+    { method: 'GET', signal: params.signal, bypassImpersonation: true },
+  )
+  return res.data
+}
+
 /** `GET /admin/accounts/:id/transactions` — polymorphic stream of
  *  bookings + entries + (future) charges for the Transactions tab. */
 export async function listTransactions(
